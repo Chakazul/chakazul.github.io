@@ -1,0 +1,47 @@
+var molecules = 
+{
+	// triose
+	"GA": {"name": "Glyceraldehyde", "formula": "C=O COH COH"},
+	"DHA": {"name": "Dihydroxyacetone (Glycerone)", "formula": "COH C=O COH"},
+	// tetrose
+	"Ery": {"name": "Erythrose", "formula": "C=O COH COH COH"},
+	"Tho": {"name": "Threose", "formula": "C=O COH~ COH COH"},
+	"Eul": {"name": "Erythrulose", "formula": "COH C=O COH COH"},
+	// pentose
+	"Rib": {"name": "Ribose", "formula": "C=O COH COH COH COH"},
+	"Ara": {"name": "Arabinose", "formula": "C=O COH~ COH COH COH"},
+	"Xyl": {"name": "Xylose", "formula": "C=O COH COH~ COH COH"},
+	"Lyx": {"name": "Lyxose", "formula": "C=O COH~ COH~ COH COH"},
+	"Rul": {"name": "Ribulose", "formula": "COH C=O COH COH COH"},
+	"Xul": {"name": "Xylulose", "formula": "COH C=O COH~ COH COH"},
+	// hexose
+	"All": {"name": "Allose", "formula": "C=O COH COH COH COH COH"},
+	"Alt": {"name": "Altrose", "formula": "C=O COH~ COH COH COH COH"},
+	"Glc": {"name": "Glucose", "formula": "C=O COH COH~ COH COH COH"},
+	"Man": {"name": "Mannose", "formula": "C=O COH~ COH~ COH COH COH"},
+	"Gul": {"name": "Gulose", "formula": "C=O COH COH COH~ COH COH"},
+	"Ido": {"name": "Idose", "formula": "C=O COH~ COH COH~ COH COH"},
+	"Gal": {"name": "Galactose", "formula": "C=O COH COH~ COH~ COH COH"},
+	"Tal": {"name": "Talose", "formula": "C=O COH~ COH~ COH~ COH COH"},
+	"Psi": {"name": "Psicose", "formula": "COH C=O COH COH COH COH"},
+	"Fru": {"name": "Fructose", "formula": "COH C=O COH~ COH COH COH"},
+	"Sor": {"name": "Sorbose", "formula": "COH C=O COH COH~ COH COH"},
+	"Tag": {"name": "Tagatose", "formula": "COH C=O COH~ COH~ COH COH"},
+
+	"G6P": {"name": "Glucose-6-Phosphate", "formula": "C=O COH COH~ COH COH CPi"},
+	"ATP": {"name": "Adenosine Triphophate", "formula": "CNH CNH CNH^CNH CNH C COH COH COH CPPPi"},
+	"SDMA": {"name": "Symmetric Dimethylarginine", "formula": "C=OOH alpha:CNH beta:C gamma:C delta:C epsilon:CNH/omega:CNH`+/omega':CNH`+ C2"},
+
+	"test-func": {"name": "", "formula": "C CCH C=CH C=O C=OOH COH COH~"},
+	"test-func2": {"name": "", "formula": "CNH CNH~ C=NH CPi CSO3H CSH CSeH CI"},
+	"test-numbers": {"name": "", "formula": "1:COH 2:COH 1':COH sigma:COH omega':COH"},
+	"test-composite": {"name": "", "formula": "CPPi CPPPi C=O|NH CO|OH C=O|Pi CPi|SO3H"},
+	"test-multiple": {"name": "", "formula": "COH/NH CNH/NH CNH/NH/=NH CNH/NH/O CNH/Pi/O"},
+	//"test-bond": {"name": "", "formula": "COH COH COH`-`+`^`_`-2`+2,-2,+2 COH COH"},
+	"test-triple": {"name": "", "formula": "CN+`+`+`+ C3 CNH`-`+/NH@Pi/=NH CNH`-/NH`+/=NH C CNH`-/NH`+/=NH`+ C2 CNH`-/NH`+`+/=NH C2"},
+	"test-decks": {"name": "", "formula": "COH^CNH_C=O"},
+	"test-rows": {"name": "", "formula": "COH ; COH COH ; . COH"},
+
+	"": {"name": "", "formula": ""}
+};
+

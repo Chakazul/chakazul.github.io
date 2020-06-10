@@ -1,0 +1,270 @@
+<html>
+<head>
+	<title>Metro Metabolism Map</title>
+	<!--<script src="https://cdn.jsdelivr.net/npm/@svgdotjs/svg.js@3.0/dist/svg.min.js"></script>-->
+	<script type="text/javascript" src="svg.js/svg.min.js"></script>
+	<script type="text/javascript" src="molecules.json"></script>
+<script>
+/*
+function loadJSON(callback) {   
+	var xobj = new XMLHttpRequest();
+	xobj.overrideMimeType("application/json");
+	xobj.open('GET', 'molecules.json', true);
+	xobj.onreadystatechange = function () {
+		if (xobj.readyState == 4 && xobj.status == "200") {
+			callback(xobj.responseText);
+		}
+	};
+	xobj.send(null);  
+}
+function init() {
+	loadJSON(function(JSONText) {
+		var molecules = JSON.parse(JSONText);
+		var draw = SVG().addTo('body').size('100%', '100%');
+		var rect = draw.rect(100, 100).attr({ fill: '#f06' });
+	});
+}
+*/
+
+var draw;
+
+function resizeSVG() {
+	var bbox = draw.bbox();
+	draw.size(bbox.x + bbox.width + bbox.x, bbox.y + bbox.height + bbox.y);
+}
+
+var greekList = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi',
+	'omicron', 'pi', 'rho', 'sigma2', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega'];
+
+function getColor(code) {
+	switch (code) {
+		case 'C':     return '#ccc'; break;
+		case 'CCH':   return '#999'; break;
+		case 'C=CH':  return '#555'; break;
+		case 'C=O':   return '#f60'; break;
+		case 'C=OOH': return '#c00'; break;
+		case 'COH':   return '#07f'; break;
+		case 'COH~':  return '#04a'; break;
+		case 'CNH':   return '#0c0'; break;
+		case 'CNH~':  return '#5e5'; break;
+		case 'C=NH':  return '#080'; break;
+		case 'CPi':   return '#a0a'; break;
+		case 'CSO3H': return '#990'; break;
+		case 'CSH':   return '#fc0'; break;
+		case 'CSeH':  return '#953'; break;
+		case 'CI':    return '#96f'; break;
+		default:      return '#fff';
+	}
+}
+
+function drawMolecule(id, x, y, style=[], size=25, halo=4, padding=5, margin=7, liney=8) {
+	style = style.concat(['ball','label','number']);
+	//style = style.concat(['ball']);
+	if (!(id in molecules))
+		return;
+	var formula = molecules[id].formula.split(" ");
+	var name = molecules[id].name;
+	var sugar_fp = style.includes('furanose') ? 'furanose' : style.includes('pyranose') ? 'pyranose' : '';
+	var sugar_ab = style.includes('alpha') ? 'alpha': style.includes('beta') ? 'beta' : '';
+	var sugar_ak = formula[0] == 'C=O' ? 'aldose' : 'ketose';
+	var sugar_no = formula.length;
+	var sugar_co_i = 999;
+	var sugar_co_dx = 999;
+
+	var obj = draw.group()
+	var bg = obj.group()
+	var tx2 = obj.group()
+	var ln2 = obj.group()
+	var fg2 = obj.group()
+	var ln3 = obj.group()
+	var fg1 = obj.group()
+	var ln1 = obj.group()
+	var tx1 = obj.group()
+
+	dx = 0;
+	dy = 0;
+	r = size/2;
+	for (var i = 0; i < formula.length; i++) {
+		var isBridge = (sugar_fp == 'furanose' && i == sugar_co_i + 3) || (sugar_fp == 'pyranose' && i == sugar_co_i + 4);
+		var sts = formula[i].split(':');
+		var code = (sts.length >=2) ? sts[1] : sts[0];
+		var pos = (sts.length >=2) ? sts[0] : (i+1).toString();
+		var prime = pos.endsWith('\'');
+		if (prime) pos = pos.slice(0, -1);
+		if (greekList.includes(pos))
+			pos = String.fromCharCode(945 + greekList.indexOf(pos));
+		if (prime) pos += '\'';
+
+		var codeUpper = '';
+		var codeLower = '';
+		if (code.includes('_')) {
+			sts = code.split('_');
+			code = sts[0];
+			codeLower = sts[1];
+		}
+		if (code.includes('^')) {
+			sts = code.split('^');
+			code = sts[0];
+			codeUpper = sts[1];
+		}
+
+		var e = null;
+		if (sugar_fp != '' && code == 'C=O') {
+			code = (sugar_ab == 'alpha') ? 'COH' : 'COH~';
+			sugar_co_i = i;
+			sugar_co_dx = dx;
+		}
+
+		e = fg1.circle(size).move(x+dx, y+dy).fill(getColor(code));
+		if (codeUpper) fg1.path('M '+(x+dx+r-r*4/5)+' '+(y+dy+r-r*3/5)+' a '+r+' '+r+' 0 1 1 '+(r*8/5)+' 0 z').fill(getColor(codeUpper)).stroke('#aaa');
+		if (codeLower) fg1.path('M '+(x+dx+r-r*4/5)+' '+(y+dy+r+r*3/5)+' a '+r+' '+r+' 0 1 0 '+(r*8/5)+' 0 z').fill(getColor(codeLower)).stroke('#aaa'); 
+		if (e) {
+			//e.stroke('#aaa');
+			fg2.circle(size+halo).fill('#f5f5f5').move(x+dx-halo/2, y+dy-halo/2); 
+		}
+
+		if (i > 0) {
+			ln3.line(x+dx+size/2-size-padding, y+dy+size/2, x+dx+size/2, y+dy+size/2)
+				.stroke({color:'#ccc', width:6, linecap:'round'});
+		}
+
+		switch (code) {
+			case 'COH':
+			case 'COH~':
+				if (isBridge) {
+					color = (code == 'COH') ? '#07f' : '#04a';
+					x0 = x+dx+size/2;
+					y0 = y+dy+size/2;
+					x1 = x+sugar_co_dx+size/2;
+					y1 = y+dy-liney;
+					e = ln1.line(x0, y0, x0-2, y1+1).stroke({color:color, width:5, linecap:'round'});
+					e = ln2.line(x0-3, y1, x1+3, y1).stroke({color:color, width:4, linecap:'round'});
+					e = ln2.line(x1+2, y1+1, x1, y0).stroke({color:color, width:5, linecap:'round'});
+				}
+				break;
+		}
+
+		if (style.includes('label')) {
+			var e = null;
+			switch (code) {
+				case 'C':     text = ""; break;
+				case 'CCH':   text = "CH"; break;
+				case 'C=CH':  text = "=CH"; break;
+				case 'C=O':   text = "=O"; break;
+				case 'C=OOH': text = "=OOH"; break;
+				case 'COH':   text = isBridge ? "O" : "OH"; break;
+				case 'COH~':  text = isBridge ? "O" : "OH"; break;
+				case 'CNH':   text = "NH"; break;
+				case 'CNH~':  text = "NH"; break;
+				case 'C=NH':  text = "=NH"; break;
+				case 'CPi':   text = "Pi"; break;
+				case 'CSO3H': text = "SO2"; break;
+				case 'CSH':   text = "SH"; break;
+				case 'CSeH':  text = "SeH"; break;
+				case 'CI':    text = "I"; break;
+			}
+			l = text.length;
+			fontsize = l==1 ? 16 : l==2 ? 12 : l==3 ? 10 : l==4 ? 9 : 8;
+			fontbase = l==1 ? 4 : l==2 ? 2 : l==3 ? 1.5 : l==4 ? 1 : 0.5;
+			x0 = x+dx+size/2-1;
+			y0 = isBridge ? y+dy+9-size/2 : y+dy+fontbase;
+			e = tx1.plain(text).move(x0, y0).fill('#eee').font({family:'serif', size:fontsize+'px', anchor:'middle'});
+		}
+
+		if (style.includes('number')) {
+			var e = tx1.plain(pos).fill('#555');
+			e.move(x+dx+size-2, y+dy+size/2-2).font({family:'sans-serif', size:'9.5px', weight:'bold'});
+		}
+
+		dx += size + padding;
+	}
+
+	e = bg.rect(dx+margin*2-padding, size+margin*2).rx(size/2+margin).move(x-margin, y-margin).fill('#f5f5f5').stroke('#bbb').attr({'stroke-width':2});
+
+	name1 = name;
+	id1 = id;
+	id2 = '';
+	if (sugar_ab == 'alpha') { name1 = '\u03B1-D-'+name1; id1 = '\u03B1-D-'+id1; }
+	if (sugar_ab == 'beta')  { name1 = '\u03B2-D-'+name1; id1 = '\u03B2-D-'+id1; }
+	if (sugar_fp == 'furanose') { name1 = name1.replace('ose', 'ofuranose'); id2 = 'f'; }
+	if (sugar_fp == 'pyranose') { name1 = name1.replace('ose', 'opyranose'); id2 = 'p'; }
+	e = tx2.text(function(add) {
+		add.tspan(name1);
+		add.tspan(" (");
+		add.tspan(id1).font({weight:'bold'});
+		add.tspan(id2).font({weight:'bold', style:'italic'});
+		add.tspan(")");
+	}).move(x+dx+margin*2, y+2).font({family:'sans-serif', size:'15px'});
+}
+
+function init() {
+	draw = SVG().attr({overflow:'auto'}).addTo('body').size('100%', '100%');
+
+	var test = 3;
+	if (test == 1) {
+		drawMolecule("Glc",  50, 50+80*0,  []);
+		drawMolecule("Glc",  50, 50+80*1,  ['furanose', 'alpha']);
+		drawMolecule("Glc",  50, 50+80*2,  ['furanose', 'beta']);
+		drawMolecule("Glc",  50, 50+80*3,  ['pyranose', 'alpha']);
+		drawMolecule("Glc",  50, 50+80*4,  ['pyranose', 'beta']);
+		drawMolecule("G6P",  50, 50+80*5,  []);
+		drawMolecule("Fru", 550, 50+80*0,  []);
+		drawMolecule("Fru", 550, 50+80*1,  ['furanose', 'alpha']);
+		drawMolecule("Fru", 550, 50+80*2,  ['furanose', 'beta']);
+		drawMolecule("Fru", 550, 50+80*3,  ['pyranose', 'alpha']);
+		drawMolecule("Fru", 550, 50+80*4,  ['pyranose', 'beta']);
+	}
+
+	if (test == 2) {
+		//http://www.glycopedia.eu/e-chapters/symbolic-representation-of-monosaccharides-in-the-age-of-glycobiology/article/beyond-the-symbols
+		//https://en.wikipedia.org/wiki/Symbol_Nomenclature_For_Glycans
+
+		drawMolecule("GA",   50, 50+60*0);
+		drawMolecule("Ery",  50, 50+60*1);
+		drawMolecule("Tho",  50, 50+60*2);
+		drawMolecule("Rib",  50, 50+60*3);
+		drawMolecule("Ara",  50, 50+60*4);
+		drawMolecule("Xyl",  50, 50+60*5);
+		drawMolecule("Lyx",  50, 50+60*6);
+
+		drawMolecule("All", 450, 50+60*0);
+		drawMolecule("Alt", 450, 50+60*1);
+		drawMolecule("Glc", 450, 50+60*2);
+		drawMolecule("Man", 450, 50+60*3);
+		drawMolecule("Gul", 450, 50+60*4);
+		drawMolecule("Ido", 450, 50+60*5);
+		drawMolecule("Gal", 450, 50+60*6);
+		drawMolecule("Tal", 450, 50+60*7);
+
+		drawMolecule("DHA", 850, 50+60*0);
+		drawMolecule("Eul", 850, 50+60*1);
+		drawMolecule("Rul", 850, 50+60*2);
+		drawMolecule("Xul", 850, 50+60*3);
+		drawMolecule("Psi", 850, 50+60*4);
+		drawMolecule("Fru", 850, 50+60*5);
+		drawMolecule("Sor", 850, 50+60*6);
+		drawMolecule("Tag", 850, 50+60*7);
+	}
+
+	if (test == 3) {
+		drawMolecule("test-func"     ,  50, 50+80*0);
+		drawMolecule("test-func2"    ,  50, 50+80*1);
+		drawMolecule("test-numbers"  ,  50, 50+80*2);
+		drawMolecule("test-composite",  50, 50+80*3);
+		drawMolecule("test-multiple" ,  50, 50+80*4);
+		drawMolecule("test-bond"     ,  50, 50+80*5);
+		drawMolecule("test-triple"   ,  50, 50+80*6);
+		drawMolecule("test-decks"    ,  50, 50+80*7);
+		drawMolecule("test-rows"     ,  50, 50+80*8);
+		drawMolecule("ATP", 550, 50+80*0);
+		drawMolecule("SDMA", 550, 50+80*1);
+	}
+	
+	resizeSVG();
+}
+</script>
+</head>
+<body onload="init()">
+
+</body>
+</html>
