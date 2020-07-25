@@ -93,18 +93,15 @@ BSc Computer Science @ CUHK<br>
 <ul>
 	<li>⌨️ <strong>Lenia &mdash; Python source</strong>
         [<a target=_blank href="https://github.com/Chakazul/Lenia">GitHub<img src="icons/icon-github.png" class="smallicon"></a>]
-        <ul>
-            <li>(<em>upcoming</em>) v2.2 Python multi-kernel & multi-channel
-            <li>(<em>current</em>) v2.1 Python higher dimensions
-            <li>v2.0 Python original
-        </ul>
+        <ul><li>Current version: v3.3 LeniaND.py (<em>see Timeline below</em>)</ul>
     <li>🎮 <strong>Lenia &mdash; Web demo</strong>
         [<a target=_blank href="https://chakazul.github.io/Lenia/JavaScript/Lenia.html">Play now!<img src="icons/icon-site.png" class="smallicon"></a>]
         [<a target=_blank href="https://github.com/Chakazul/Lenia/tree/master/JavaScript">GitHub<img src="icons/icon-github.png" class="smallicon"></a>]
-        <ul><li>v1.0 JavaScript original</li></ul>
-	<li>🎮 Primordia &mdash; Web demo 
+        <ul><li>Version: v1.3 Lenia.html</li></ul>
+	<li>🎮 Primordia (precursor of Lenia) &mdash; Web demo 
         [<a target=_blank href="https://chakazul.github.io/Primordia/Primordia.html">Play now!<img src="icons/icon-site.png" class="smallicon"></a>]
         [<a target=_blank href="https://github.com/Chakazul/Primordia">GitHub<img src="icons/icon-github.png" class="smallicon"></a>]
+        <ul><li>Version: v1.0 Primordia.html</li></ul>
 </ul>
 
 <div class="sectiontitle"><i>Video</i><br></div>
@@ -203,16 +200,51 @@ BSc Computer Science @ CUHK<br>
         [<a target=_blank href="https://www.microsiervos.com/archivo/juegos-y-diversion/lenia-automatas-celulares-bert-chan.html">Site<img src="icons/icon-site.png" class="smallicon"></a>]
 </ul>
 
+<div class="sectiontitle"><i>Timeline</i><br></div>
+<hr class="section">
+<ul>
+    <li>🐜 ca. 1990 - wrote Conway's Game of Life in Pascal + Assembly
+    <li>🐝 2015-03 - wrote <strong>Primordia</strong> (v1.0 Primordia.html)
+    <li>🐛 2015-04 - started using real numbers (v1.1 PrimordiaReal.html)
+    <ul>
+    <li>🐛 2015-04-15 - discovered <strong><em>Orbium</em></strong>
+        [<a target=_blank href="first-real-life.png">Photo<img src="icons/icon-image.png" class="smallicon"></a>]
+        [<a target=_blank href="R39g126gt5.png">Photo<img src="icons/icon-image.png" class="smallicon"></a>]
+    <li>🐛 2015-05 - started automatic data collection (v1.2 PrimordiaPetri.cs)
+    <li>🐛 2015-07 - started using convolution with FFT (v1.3 PrimordiaFFT.html = Lenia.html)
+    <li>📄 2015-07 - started drafting "Zoology of Smooth Cellular Automata"
+    </ul>
+    <li>🦋 2017-12 - wrote <strong>Lenia</strong> in MATLAB and Jupyter (v2.0 Lenia.m, v2.1 Lenia.ipynb)
+    <ul>
+    <li>🦋 2018-05 - wrote Lenia in Python (v3.0 Lenia.py)
+    <li>📄 2018-12 - published "Lenia - Biology of Artificial Life" in arXiv
+    </ul>
+    <li>🐟 2019-12 - started <strong>Lenia extensions</strong>
+    <ul>
+    <li>🐟 2019-12 - discovered 3D/4D lifeforms (v3.1 Lenia3D.py, v3.2 Lenia4D.py)
+        [<a target=_blank href="https://twitter.com/BertChakovsky/status/1209177017096163328">Tweet<img src="icons/icon-twitter.png" class="smallicon"></a>]
+        [<a target=_blank href="https://twitter.com/BertChakovsky/status/1211010576631005184">Tweet<img src="icons/icon-twitter.png" class="smallicon"></a>]
+    <li>🐠 2020-01 - generalized dimensions (v3.3 LeniaND.py - multi-dimensional)
+    <li>🐠 2020-01 - discovered self-replicators (v3.4 LeniaNDK.py - multi-kernel)
+        [<a target=_blank href="https://twitter.com/BertChakovsky/status/1219308616643047424">Tweet<img src="icons/icon-twitter.png" class="smallicon"></a>]
+    <li>🐙 2020-03 - discovered aggregated lifeforms (v3.5 LeniaNDKC.py - multi-channel)
+        [<a target=_blank href="https://twitter.com/BertChakovsky/status/1249606228138840065">Tweet<img src="icons/icon-twitter.png" class="smallicon"></a>]
+        [<a target=_blank href="https://twitter.com/BertChakovsky/status/1265861527829004288">Tweet<img src="icons/icon-twitter.png" class="smallicon"></a>]
+    <li>🐙 2020-07 - discovered immune system like colony (v3.6 LeniaNDKC.py - multi-channel network)
+        [<a target=_blank href="https://twitter.com/BertChakovsky/status/1282055458690195457">Tweet<img src="icons/icon-twitter.png" class="smallicon"></a>]
+    </ul>
+    <!-- 🐞 -->
+</ul>
+
 <div class="sectiontitle"><i>Research Directions</i><br></div>
 <hr class="section">
-<div class="tab">
 Lenia has evolved from a personal coding exercise into an art and science research project, spawning collaborations with universities and commercial labs.<br>
 It has been linked to various research topics (<em class="topic1">orange</em>). Potential connections (<em class="topic2">blue</em>) have been suggested.<br>
 <br>
 <ul class="topics">
     <li><strong>Artificial Life</strong><br>
 		<ul>
-        <li>Lenia is an example of <em class="topic1">continuous cellular automata</em> (CCA), a new branch in "wet" artificial life.
+        <li>Lenia is an example of <em class="topic1">continuous cellular automata</em> (CCA), a new branch in "soft" artificial life.
 		<li>As an ALife system, it is a useful tool in studying <em class="topic1">emergence, complexity, self-organization, morphogenesis, autopoiesis</em>, etc.
 		<li>Its exploding complexity may provide insights on how to achieve <em class="topic2">open-ended evolution</em> (OEE) 
             on the road to <em class="topic2">artificial general intelligence</em> (AGI).
@@ -234,8 +266,8 @@ It has been linked to various research topics (<em class="topic1">orange</em>). 
         </ul>
 	<li><strong>Computer Science</strong>
 		<ul>
-		<li>Implementation of Lenia is accelerated by <em class="topic1">fast Fourier transform</em> and <em class="topic1">parallel computing</em> (e.g. GPGPU), 
-            and potentially more advanced hardware like <em class="topic2">field-programmable gate array</em> (FPGA) 
+		<li>Implementation of Lenia is accelerated by <em class="topic1">fast Fourier transform</em> (FFT) and <em class="topic1">parallel computing</em> (e.g. GPGPU), 
+            and potentially using more advanced hardware like <em class="topic2">field-programmable gate array</em> (FPGA) 
             and software frameworks like <em class="topic2">web assembly</em> (WASM) and <em class="topic2">OpenGL shading language</em> (GLSL).
 		<li>It is an open question whether Lenia is <em class="topic2">Turing complete</em> and thus able to construct <em class="topic2">universal Turing machines</em> (UTM).
         <li>Lenia as a dynamical system could be studied using <em class="topic2">arithmetic information dynamics</em> (AID).
@@ -249,12 +281,12 @@ It has been linked to various research topics (<em class="topic1">orange</em>). 
 		</ul>
 	<li><strong>Digital Art</strong>
 		<ul>
-		<li>Lenia is a source of cool <em class="topic1">computer graphics art</em>. Its software is a good exercise in <em class="topic1">user interface and experience</em> (UI/UX), 
+		<li>Lenia is a source of cool art in <em class="topic1">computer graphics</em>.
+        <li>Its software is a good exercise in <em class="topic1">user interface and experience</em> (UI/UX), 
             <em class="topic1">high-dimensional data visualization</em>, and <em class="topic1">aesthetics</em> e.g. color schemes.
 		<li>Lenia may also be implemented in <em class="topic2">virtual reality</em> (VR) or <em class="topic2">interactive mechanical displays</em>.
 		</ul>
 </ul>
-</div>
 <br>
 
 </td>
