@@ -19,6 +19,12 @@ var displayN = "CN";
 var pattern = null;
 var patternID = 0;
 
+var global_m = 0.15;
+var global_s = 0.015;
+var global_Z = 10;
+var global_T = 10;
+var global_P = 50;
+
 var prevColor = 0;
 var prevDisplay = 0;
 var colormap = d3.interpolateRdYlGn;
@@ -46,15 +52,16 @@ var controls = d3.selectAll("#cxpbox_lenia_controls").append("svg")
 
 var g = widget.grid(controlboxWidth, controlboxHeight, controlGridWidth, controlGridHeight);
 
-var playBlock = g.block({x0:5,y0:21,width:0,height:0});
-var buttonBlock = g.block({x0:3,y0:16.5,width:4,height:0}).Nx(2);
-var radioBlock = g.block({x0:2.5,y0:-0.5,width:0,height:14});
-var sliderBlock = g.block({x0:11,y0:14,width:12,height:8}).Ny(4);
-var plotBlock = g.block({x0:11,y0:11,width:12,height:1});
-var plotBlock2 = g.block({x0:11,y0:11.6,width:12,height:1});
-var plotBlock3 = g.block({x0:11,y0:12.2,width:12,height:1});
-var toggleBlock = g.block({x0:11,y0:8,width:8,height:0}).Nx(2);
-var radioBlock2 = g.block({x0:12,y0:-0.5,width:0,height:6});
+var playBlock = g.block({x0:5, y0:21, width:0, height:0});
+var buttonBlock = g.block({x0:3, y0:16.5, width:4, height:0}).Nx(2);
+var radioBlock = g.block({x0:2.5, y0:-0.5, width:0, height:14});
+var sliderBlock = g.block({x0:11, y0:12, width:12, height:10}).Ny(5);
+var plotBlock = g.block({x0:11, y0:10, width:12, height:1});
+var plotBlock2 = g.block({x0:11, y0:10.6, width:12, height:1});
+var plotBlock3 = g.block({x0:11, y0:11.2, width:12, height:1});
+var radioBlock2 = g.block({x0:11, y0:-0.5, width:0, height:7});
+var toggleBlock = g.block({x0:17.5, y0:6.5, width:4, height:3}).Nx(2);
+var legendBlock = g.block({x0:17, y0:1, width:4, height:2}).Ny(3);
 
 //actions: play back pause reload record capture rewind stop
 var playButton = { id:"b1", name:"", actions: ["play","stop"], value: 0};
@@ -82,22 +89,23 @@ var toggles = [
 	{id:"t2", name: "hi-res",  value: false}
 ];
 var toggleWidgets = [
-	widget.toggle(toggles[0]).update(switchColor).label("right").size(10),
-	widget.toggle(toggles[1]).update(switchRes).label("right").size(10)
+	widget.toggle(toggles[0]).update(switchColor).label("bottom").size(10),
+	widget.toggle(toggles[1]).update(switchRes).label("bottom").size(10)
 ];
 
 var slider_m = {id:"m", name: "mu", range: [0.01, 0.7], value: 0};
 var slider_s = {id:"s", name: "sigma", range: [0.001, 0.07], value: 0};
-var slider_Z = {id:"Z", name: "space scale", range: [20, 1], value: 10};
-var slider_T = {id:"T", name: "time scale", range: [20, 1], value: 10};
+var slider_Z = {id:"Z", name: "space resolution", range: [1, 20], value: 10};
+var slider_T = {id:"T", name: "time resolution", range: [1, 20], value: 10};
+var slider_P = {id:"P", name: "number of states", range: [1, 30], value: 30};
 ww = sliderBlock.w();
-vv = true;
-var sliderWidget_m = widget.slider(slider_m).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(vv);
-var sliderWidget_s = widget.slider(slider_s).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(vv);
-var sliderWidget_Z = widget.slider(slider_Z).width(ww).trackSize(8).handleSize(10).update(setZoom).showValue(vv);
-var sliderWidget_T = widget.slider(slider_T).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(vv);
+var sliderWidget_m = widget.slider(slider_m).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
+var sliderWidget_s = widget.slider(slider_s).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
+var sliderWidget_Z = widget.slider(slider_Z).width(ww).trackSize(8).handleSize(10).update(setZoom);
+var sliderWidget_T = widget.slider(slider_T).width(ww).trackSize(8).handleSize(10).update(setParams);
+var sliderWidget_P = widget.slider(slider_P).width(ww).trackSize(8).handleSize(10).update(setParams);
 var sliderWidgets1 = [sliderWidget_s, sliderWidget_m];
-var sliderWidgets2 = [sliderWidget_T, sliderWidget_Z];
+var sliderWidgets2 = [sliderWidget_P, sliderWidget_T, sliderWidget_Z];
 
 var pb = controls.selectAll(".button .play").data(playWidget).enter().append(widget.buttonElement)
 	.attr("transform",(d,i) => "translate("+playBlock.x(0)+","+playBlock.y(0)+")");	
@@ -119,6 +127,10 @@ var sl = controls.selectAll(".slider").data(sliderWidgets1).enter().append(widge
 
 var sl2 = controls.selectAll(".slider .two").data(sliderWidgets2).enter().append(widget.sliderElement)
 	.attr("transform",(d,i) => "translate("+sliderBlock.x(0)+","+sliderBlock.y(i+2)+")");
+
+var legend = controls.selectAll(".legend").data([0,0,0]).enter().append("text")
+	.attr("transform",(d,i) => "translate("+legendBlock.x(0)+","+legendBlock.y(i)+")")
+    .attr("class","plot label");
 
 var colors1 = controls.append("g").attr("class","bars")
 	.attr("transform",(d,i) => "translate("+plotBlock.x(0)+","+plotBlock.y(0)+")");
@@ -166,6 +178,7 @@ var lh = colors1.selectAll(".plot").data(["low","high"]).enter().append("text")
 // maths
 
 const PRECISION = 1000000;
+const EPSILON = 1 / PRECISION;
 function round(x) { return Math.round(x * PRECISION) / PRECISION; }
 function mod(x, n) { return ((x % n) + n) % n; }
 
@@ -300,7 +313,7 @@ function calcKernel(zoom) {
     }
 }
 
-function update() {
+function update(isUpdate) {
     for (var c=0; c<CN; c++)
     	for (var y=0; y<N; y++)
     		for (var x=0; x<N; x++)
@@ -333,19 +346,31 @@ function update() {
     	}
     }
 
+    var dt = 1/global_T;
+    var mass = 0;
     for (var c=0; c<CN; c++) {
     	for (var y=0; y<N; y++) {
     		for (var x=0; x<N; x++) {
                 var g = G[c][y][x];
-        		var v = Ao[c][y][x] + g / global_T * updateDelay;
+        		var v = Ao[c][y][x] + g * dt * updateDelay;
+                if (global_P != Math.POSITIVE_INFINITY)
+                    v = Math.round(v * global_P) / global_P;
         		if (v<0) v = 0; else if (v>1) v = 1;
-        		Ar[c][y][x] = v;
+                mass += v;
+        		Ar[c][y][x] = isUpdate ? v : Ao[c][y][x];
             }
         }
     }
+    var R = pattern.R * global_Z/10 * worldZoom;
+    mass = mass / R / R;
 
-	gen++;
-	time = round(time + round(1/global_T));
+    if (isUpdate && mass > EPSILON) {
+    	gen++;
+    	time = round(time + round(dt));
+    }
+    var format = d3.format(".3f")
+    legend.data([dt, time, mass])
+        .text((d,i) => i==0 ? "step = "+format(d)+" ms" : i==1 ? "time = "+format(d)+" ms" : "mass = "+format(d)+" mg");
 }
 
 // functions
@@ -460,6 +485,9 @@ function setParams(d) {
     	global_s = slider_s.value;
     }
 	global_T = slider_T.value;
+	global_P = Math.floor(slider_P.value);
+    if (global_P == slider_P.range[1])
+        global_P = Math.POSITIVE_INFINITY;
 }
 function setZoom(d) {
 	global_Z = slider_Z.value;
@@ -468,7 +496,7 @@ function setZoom(d) {
 
 function run() {
     for (var i=0; i<updatesPerFrame; i++)
-        update();
+        update(true);
     draw();
 }
 
@@ -610,6 +638,7 @@ function initPattern(id, isInit=false) {
         showSliders(false);
     }
 	sliderWidget_T.click(pattern.T);
+	sliderWidget_P.click(slider_P.range[1]);
 
     clearWorld();
 	if (isInit) {
@@ -621,7 +650,7 @@ function initPattern(id, isInit=false) {
         randomPlacePattern(pattern);
     }
     
-	update();
+	update(false);
     draw();
     gen = 0;
     time = 0.0;
@@ -629,4 +658,4 @@ function initPattern(id, isInit=false) {
 
 initWorld(64, 1, 0.5, 1);
 initPattern(0, isInit=true);
-
+//console.log(Object.getOwnPropertyNames(sliderWidget_Z));
