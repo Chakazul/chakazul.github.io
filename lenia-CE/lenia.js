@@ -97,12 +97,13 @@ var slider_m = {id:"m", name: "mu", range: [0.01, 0.7], value: 0};
 var slider_s = {id:"s", name: "sigma", range: [0.001, 0.07], value: 0};
 var slider_Z = {id:"Z", name: "space", range: [1, 20], value: 10};
 var slider_T = {id:"T", name: "time", range: [1, 20], value: 10};
-var slider_P = {id:"P", name: "states", range: [1, 30], value: 30};
+var slider_P = {id:"P", name: "", range: [1, 30], value: 30};
 ww = sliderBlock.w();
+// width, handleSize, showValue, trackSize, trackBorder, label, fontSize, parameter, name, id, range, value, update, click, X
 var sliderWidget_m = widget.slider(slider_m).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
 var sliderWidget_s = widget.slider(slider_s).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
-var sliderWidget_Z = widget.slider(slider_Z).width(ww).trackSize(8).handleSize(10).update(setZoom);
-var sliderWidget_T = widget.slider(slider_T).width(ww).trackSize(8).handleSize(10).update(setParams);
+var sliderWidget_Z = widget.slider(slider_Z).width(ww).trackSize(8).handleSize(10).update(setZoom).showValue(true);
+var sliderWidget_T = widget.slider(slider_T).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
 var sliderWidget_P = widget.slider(slider_P).width(ww).trackSize(8).handleSize(10).update(setParams);
 var sliderWidgets1 = [sliderWidget_s, sliderWidget_m];
 var sliderWidgets2 = [sliderWidget_P, sliderWidget_T, sliderWidget_Z];
@@ -127,6 +128,8 @@ var sl = controls.selectAll(".slider").data(sliderWidgets1).enter().append(widge
 
 var sl2 = controls.selectAll(".slider .two").data(sliderWidgets2).enter().append(widget.sliderElement)
 	.attr("transform",(d,i) => "translate("+sliderBlock.x(0)+","+sliderBlock.y(i+2)+")");
+
+sl2.append("text").attr("id","statesLabel").style("font-size",12).attr("transform","translate(0,-16.5)");
 
 var legend = controls.selectAll(".legend").data([0,0,0]).enter().append("text")
 	.attr("transform",(d,i) => "translate("+legendBlock.x(0)+","+legendBlock.y(i)+")")
@@ -486,12 +489,17 @@ function setParams(d) {
     }
 	global_T = slider_T.value;
 	global_P = Math.floor(slider_P.value);
-    if (global_P == slider_P.range[1])
+    if (global_P == slider_P.range[1]) {
         global_P = Math.POSITIVE_INFINITY;
+		controls.select("#statesLabel").text(d => "states = unlimited");
+	} else {
+		controls.select("#statesLabel").text(d => "states = "+global_P);
+	}
 }
 function setZoom(d) {
 	global_Z = slider_Z.value;
     calcKernel(global_Z/10);
+	draw();
 }
 
 function run() {
