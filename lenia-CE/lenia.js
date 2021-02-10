@@ -61,7 +61,7 @@ var plotBlock2 = g.block({x0:11, y0:10.6, width:12, height:1});
 var plotBlock3 = g.block({x0:11, y0:11.2, width:12, height:1});
 var radioBlock2 = g.block({x0:11, y0:-0.5, width:0, height:7});
 var toggleBlock = g.block({x0:17.5, y0:6.5, width:4, height:3}).Nx(2);
-var legendBlock = g.block({x0:17, y0:1, width:4, height:2}).Ny(3);
+var legendBlock = g.block({x0:16, y0:1, width:4, height:2}).Ny(3);
 
 //actions: play back pause reload record capture rewind stop
 var playButton = { id:"b1", name:"", actions: ["play","stop"], value: 0};
@@ -95,9 +95,9 @@ var toggleWidgets = [
 
 var slider_m = {id:"m", name: "mu", range: [0.01, 0.7], value: 0};
 var slider_s = {id:"s", name: "sigma", range: [0.001, 0.07], value: 0};
-var slider_Z = {id:"Z", name: "space resolution", range: [1, 20], value: 10};
-var slider_T = {id:"T", name: "time resolution", range: [1, 20], value: 10};
-var slider_P = {id:"P", name: "number of states", range: [1, 30], value: 30};
+var slider_Z = {id:"Z", name: "space", range: [1, 20], value: 10};
+var slider_T = {id:"T", name: "time", range: [1, 20], value: 10};
+var slider_P = {id:"P", name: "states", range: [1, 30], value: 30};
 ww = sliderBlock.w();
 var sliderWidget_m = widget.slider(slider_m).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
 var sliderWidget_s = widget.slider(slider_s).width(ww).trackSize(8).handleSize(10).update(setParams).showValue(true);
@@ -130,7 +130,7 @@ var sl2 = controls.selectAll(".slider .two").data(sliderWidgets2).enter().append
 
 var legend = controls.selectAll(".legend").data([0,0,0]).enter().append("text")
 	.attr("transform",(d,i) => "translate("+legendBlock.x(0)+","+legendBlock.y(i)+")")
-    .attr("class","plot label");
+    .style("font-size",13);
 
 var colors1 = controls.append("g").attr("class","bars")
 	.attr("transform",(d,i) => "translate("+plotBlock.x(0)+","+plotBlock.y(0)+")");
@@ -172,7 +172,7 @@ var bar3 = colors3.selectAll(".bars")
 var lh = colors1.selectAll(".plot").data(["low","high"]).enter().append("text")
 	.text(d => d)
 	.attr("transform", (d,i) => "translate("+(i*plotBlock.w())+",25)")
-	.attr("class","plot")
+    .style("font-size",12)
 	.style("text-anchor","middle");
 
 // maths
@@ -272,7 +272,7 @@ function matrixMult(ar, ai, br, bi, cr, ci) {
 
 function deltaFunc(n, m, s) {
 	var r = n - m;
-    return Math.exp(-r*r/ (2*s*s) ) * 2 - 1;
+    return Math.exp(-r*r / (2*s*s) ) * 2 - 1;
 }
 
 function kernelCoreFunc(r) {
@@ -293,7 +293,7 @@ function calcKernel(zoom) {
     		for (var x=0; x<N; x++) {
     			var yy = ((y + N/2) % N) - N/2;
     			var xx = ((x + N/2) % N) - N/2;
-    			var r = Math.sqrt(xx*xx + yy*yy) / pattern.defaultR / zoom / worldZoom / kernel.r;
+    			var r = Math.sqrt(xx*xx + yy*yy) / pattern.displayR / zoom / worldZoom / kernel.r;
     			var v = kernelFunc(r, kernel.b);
     			weight += v;
     			Kr[k][y][x] = v;
@@ -341,7 +341,7 @@ function update(isUpdate) {
     	for (var y=0; y<N; y++) {
     		for (var x=0; x<N; x++) {
     			var u = Ur[k][y][x];
-    			G[kernel.c1][y][x] += deltaFunc(u, m, s) * kernel.h;
+    			G[kernel.c1][y][x] += deltaFunc(u, m, s) * kernel.h * pattern.hScale;
     		}
     	}
     }
@@ -368,7 +368,7 @@ function update(isUpdate) {
     	gen++;
     	time = round(time + round(dt));
     }
-    var format = d3.format(".3f")
+    var format = d3.format(".2f")
     legend.data([dt, time, mass])
         .text((d,i) => i==0 ? "step = "+format(d)+" ms" : i==1 ? "time = "+format(d)+" ms" : "mass = "+format(d)+" mg");
 }
@@ -568,7 +568,7 @@ function clearWorld() {
 }
 
 function placePattern(p, shifty, shiftx, angle, zoom) {
-    var scale = p.defaultR / p.R * zoom * worldZoom;
+    var scale = p.displayR / p.R * zoom * worldZoom;
 	var sin = Math.sin(angle / 180 * Math.PI);
 	var cos = Math.cos(angle / 180 * Math.PI);
     var ch = p.cells[0].length;
@@ -592,12 +592,12 @@ function placePattern(p, shifty, shiftx, angle, zoom) {
 function randomPlacePattern(p) {
 	var chance = Math.random();
     var zoom = 1;
-	if (pattern.name.includes("(s)") && chance>0.7) {
+	if (p.name.includes("(s)") && chance>0.7) {
 		zoom = 0.7;
 		placePattern(p, -N/4, 0, Math.random()*360, zoom);
 		placePattern(p, +N/4, +N/4, Math.random()*360, zoom);
 		placePattern(p, +N/4, -N/4, Math.random()*360, zoom);
-	} else if (pattern.name.includes("(s)") && chance>0.3) {
+	} else if (p.name.includes("(s)") && chance>0.3) {
 		zoom = 0.8;
 		placePattern(p, +N/4, +N/4, Math.random()*360, zoom);
 		placePattern(p, -N/4, -N/4, Math.random()*360, zoom);
