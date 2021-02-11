@@ -18,7 +18,10 @@ var displayMax = 1;
 var displayN = "CN";
 var pattern = null;
 var patternID = 0;
+var isDiscrete = false;
 
+var growthCore;
+var kernelCore;
 var global_m = 0.15;
 var global_s = 0.015;
 var global_Z = 10;
@@ -187,18 +190,18 @@ function mod(x, n) { return ((x % n) + n) % n; }
 
 function fft1d(dir, re1, im1) {
 	/* Do the bit reversal */
-	var n = re1.length, m = round(Math.log2(n)), n2 = n >> 1, j1 = 0;
-	for (var j=0; j<n-1; j++) {
-		if (j < j1) {
-			var tmp = re1[j]; re1[j] = re1[j1]; re1[j1] = tmp;
-			tmp = im1[j]; im1[j] = im1[j1]; im1[j1] = tmp;
+	var n = re1.length, m = round(Math.log2(n)), n2 = n >> 1, x1 = 0;
+	for (var x=0; x<n-1; x++) {
+		if (x < x1) {
+			var tmp = re1[x]; re1[x] = re1[x1]; re1[x1] = tmp;
+			tmp = im1[x]; im1[x] = im1[x1]; im1[x1] = tmp;
 		}
-		var j2 = n2;
-		while (j2 <= j1) {
-			j1 -= j2;
-			j2 >>= 1;
+		var x2 = n2;
+		while (x2 <= x1) {
+			x1 -= x2;
+			x2 >>= 1;
 		}
-		j1 += j2;
+		x1 += x2;
 	}
 	
 	/* Compute the FFT */
@@ -207,15 +210,15 @@ function fft1d(dir, re1, im1) {
 		var l1 = l2;
 		l2 <<= 1;
 		var u1 = 1.0, u2 = 0.0;
-		for (var i=0; i<l1; i++) {
-			for (var j=i; j<n; j+=l2) {
-				var j2 = j + l1;
-				var t1 = u1 * re1[j2] - u2 * im1[j2];
-				var t2 = u1 * im1[j2] + u2 * re1[j2];
-				re1[j2] = re1[j] - t1;
-				im1[j2] = im1[j] - t2;
-				re1[j] += t1;
-				im1[j] += t2;
+		for (var y=0; y<l1; y++) {
+			for (var x=y; x<n; x+=l2) {
+				var x2 = x + l1;
+				var t1 = u1 * re1[x2] - u2 * im1[x2];
+				var t2 = u1 * im1[x2] + u2 * re1[x2];
+				re1[x2] = re1[x] - t1;
+				im1[x2] = im1[x] - t2;
+				re1[x] += t1;
+				im1[x] += t2;
 			}
 			var z = u1 * c1 - u2 * c2;
 			u2 = u1 * c2 + u2 * c1;
@@ -230,65 +233,62 @@ function fft1d(dir, re1, im1) {
 	/* Scaling for forward transform */
 	if (dir == -1) {
 		var scale_f = 1.0 / n;		
-		for (var j=0; j<n; j++) {
-			re1[j] *= scale_f;
-			im1[j] *= scale_f;
+		for (var x=0; x<n; x++) {
+			re1[x] *= scale_f;
+			im1[x] *= scale_f;
 		}
 	}
 }
 
 function fft2d(dir, re2, im2) {
 	var n = re2.length;
-	for (var i=0; i<n; i++)
-		fft1d(dir, re2[i], im2[i]);
-    for (var i=0; i<n; i++) {
-        for (var j=0; j<i; j++) {
-    		var tmp = re2[i][j]; re2[i][j] = re2[j][i]; re2[j][i] = tmp;
-    	}
-    }
-	for (var i=0; i<n; i++) {
-        for (var j=0; j<i; j++) {
-    		var tmp = im2[i][j]; im2[i][j] = im2[j][i]; im2[j][i] = tmp;
-    	}
-    }
-	for (var i=0; i<n; i++)
-		fft1d(dir, re2[i], im2[i]);
+	for (var y=0; y<n; y++)
+		fft1d(dir, re2[y], im2[y]);
+    for (var y=0; y<n; y++)
+        for (var x=0; x<y; x++) {
+    		[ re2[y][x], re2[x][y] ] = [ re2[x][y], re2[y][x] ];
+    		[ im2[y][x], im2[x][y] ] = [ im2[x][y], im2[y][x] ];
+        }
+	for (var y=0; y<n; y++)
+		fft1d(dir, re2[y], im2[y]);
 }
 
 function matrixMult(ar, ai, br, bi, cr, ci) {
 	var n = ar.length;
-	for (var i=0; i<n; i++) {
-		var ar_i = ar[i], ai_i = ai[i];
-		var br_i = br[i], bi_i = bi[i];
-		var cr_i = cr[i], ci_i = ci[i];
-		for (var j=0; j<n; j++) {
-			var a = ar_i[j]; var b = ai_i[j];
-			var c = br_i[j]; var d = bi_i[j];
+	for (var y=0; y<n; y++) {
+		var ar_i = ar[y], ai_i = ai[y];
+		var br_i = br[y], bi_i = bi[y];
+		var cr_i = cr[y], ci_i = ci[y];
+		for (var x=0; x<n; x++) {
+			var a = ar_i[x]; var b = ai_i[x];
+			var c = br_i[x]; var d = bi_i[x];
 			var t = a * (c + d);
-			cr_i[j] = t - d*(a+b);
-			ci_i[j] = t + c*(b-a);
+			cr_i[x] = t - d*(a+b);
+			ci_i[x] = t + c*(b-a);
 		}
 	}
 }
 
 // core functions
 
-function deltaFunc(n, m, s) {
-	var r = n - m;
-    return Math.exp(-r*r / (2*s*s) ) * 2 - 1;
-}
+const growthCoreExp  = (n, m, s, r) => Math.exp( -r*r / (2*s*s) ) * 2 - 1;
+const growthCoreStep = (n, m, s, r) => Math.abs(r-s)<0.01 ? 0 : r<s ? 1 : -1;
 
-function kernelCoreFunc(r) {
-	return Math.exp(4 - 1/r/(1-r));
+const kernelCoreExp  = r => Math.exp(4 - 1/r/(1-r));
+const kernelCoreStep = r => (r>=1/4 && r<=3/4) ? 1 : 0;
+
+function growthFunc(n, m, s) {
+	return growthCore(n, m, s, Math.abs(n-m));
 }
 
 function kernelFunc(r, b) {
 	if (r>=1) return 0;
 	var R = r * b.length;
-	return kernelCoreFunc(R % 1) * b[Math.floor(R)];
+	return kernelCore(R % 1) * b[Math.floor(R)];
 }
 
-function calcKernel(zoom) {
+function calcKernel() {
+    var scale = pattern.displayR * global_Z/10 * worldZoom;
     for (var k=0; k<KN; k++) {
     	var weight = 0.0;
     	var kernel = pattern.kernels[k];
@@ -296,7 +296,7 @@ function calcKernel(zoom) {
     		for (var x=0; x<N; x++) {
     			var yy = ((y + N/2) % N) - N/2;
     			var xx = ((x + N/2) % N) - N/2;
-    			var r = Math.sqrt(xx*xx + yy*yy) / pattern.displayR / zoom / worldZoom / kernel.r;
+    			var r = Math.sqrt(xx*xx + yy*yy) / scale / kernel.r;
     			var v = kernelFunc(r, kernel.b);
     			weight += v;
     			Kr[k][y][x] = v;
@@ -344,18 +344,18 @@ function update(isUpdate) {
     	for (var y=0; y<N; y++) {
     		for (var x=0; x<N; x++) {
     			var u = Ur[k][y][x];
-    			G[kernel.c1][y][x] += deltaFunc(u, m, s) * kernel.h * pattern.hScale;
+    			G[kernel.c1][y][x] += growthFunc(u, m, s) * kernel.h * pattern.hScale;
     		}
     	}
     }
 
-    var dt = 1/global_T;
+    var dt = 1/global_T * (isDiscrete ? 1 : updateDelay);
     var mass = 0;
     for (var c=0; c<CN; c++) {
     	for (var y=0; y<N; y++) {
     		for (var x=0; x<N; x++) {
                 var g = G[c][y][x];
-        		var v = Ao[c][y][x] + g * dt * updateDelay;
+        		var v = Ao[c][y][x] + g * dt;
                 if (global_P != Math.POSITIVE_INFINITY)
                     v = Math.round(v * global_P) / global_P;
         		if (v<0) v = 0; else if (v>1) v = 1;
@@ -364,8 +364,8 @@ function update(isUpdate) {
             }
         }
     }
-    var R = pattern.R * global_Z/10 * worldZoom;
-    mass = mass / R / R;
+    var scale = pattern.R * global_Z/10 * worldZoom;
+    mass = mass / scale / scale;
 
     if (isUpdate && mass > EPSILON) {
     	gen++;
@@ -437,7 +437,7 @@ function switchRes(d) {
 function switchColor(d) {
     var i = d ? d.value : prevColor;
 	if (i == 0) {
-		colormap = d3.interpolateRdYlGn;
+		colormap = isDiscrete ? d3.interpolateViridis : d3.interpolateRdYlGn;
         var gamma = 0.8;
         colormapRGB = [
             d3.interpolateRgb.gamma(gamma)("black","rgb(100%,0%,0%)"), 
@@ -495,11 +495,18 @@ function setParams(d) {
 	} else {
 		controls.select("#statesLabel").text(d => "states = "+global_P);
 	}
+    if (playButton.value == 0) {
+        update(false);
+        draw();
+    }
 }
 function setZoom(d) {
 	global_Z = slider_Z.value;
-    calcKernel(global_Z/10);
-	draw();
+    calcKernel();
+    if (playButton.value == 0) {
+        update(false);
+    	draw();
+    }
 }
 
 function run() {
@@ -512,7 +519,7 @@ function runPause(d) {
     d.value == 1 ? timer = d3.timer(run, 1) : timer.stop();
 }
 
-function oneStep() {
+function oneStep(d) {
 	if (playButton.value == 1)
 		playWidget[0].click();
 	run();
@@ -613,7 +620,6 @@ function randomPlacePattern(p) {
 		placePattern(p, 0, 0, Math.random()*360, zoom);
 	}
 
-	calcKernel(zoom);
     sliderWidget_Z.click(zoom*10);
 }
 
@@ -636,7 +642,16 @@ function initPattern(id, isInit=false) {
         CN = pattern.cells.length;
         KN = pattern.kernels.length;
         switchColor();
-	}
+    }
+    isDiscrete = pattern.R <= 2;
+    if (!isDiscrete) {
+        growthCore = growthCoreExp;
+        kernelCore = kernelCoreExp;
+    } else {
+        growthCore = growthCoreStep;
+        kernelCore = kernelCoreStep;
+    }
+
     if (KN == 1) {
 	    var kernel = pattern.kernels[0];
     	sliderWidget_m.click(kernel.m);
@@ -646,13 +661,14 @@ function initPattern(id, isInit=false) {
         showSliders(false);
     }
 	sliderWidget_T.click(pattern.T);
-	sliderWidget_P.click(slider_P.range[1]);
+	sliderWidget_P.click(isDiscrete ? 1 : slider_P.range[1]);
 
+    switchColor();
     clearWorld();
-	if (isInit) {
+	if (isInit || isDiscrete) {
         var zoom = 1;
+        worldZoom = 1;
         placePattern(pattern, 0, 0, 0, zoom);
-    	calcKernel(zoom);
         sliderWidget_Z.click(zoom*10);
     } else {
         randomPlacePattern(pattern);
