@@ -137,7 +137,7 @@ var sl = controls.selectAll(".slider").data(sliderWidgets1).enter().append(widge
 var sl2 = controls.selectAll(".slider .two").data(sliderWidgets2).enter().append(widget.sliderElement)
 	.attr("transform",function(d,i){return "translate("+sliderBlock.x(0)+","+sliderBlock.y(i+2)+")"});
 
-sl2.append("text").attr("id","statesLabel").style("font-size",12).attr("transform","translate(0,-16.5)");
+sl2.append("text").attr("id","statesLabel").attr("class","tag").style("font-size",12).attr("transform","translate(0,-16.5)");
 
 //var legend = controls.selectAll(".legend").data([0,0,0]).enter().append("text")
 //	.attr("transform",function(d,i){return "translate("+legendBlock.x(0)+","+legendBlock.y(i)+")"})
@@ -166,7 +166,7 @@ var bar3 = colors3.selectAll(".bars").data(d3.range(plotBlock.w()), function(d){
 
 var lh = colors1.selectAll(".plot").data(["low","high"]).enter().append("text")
 	.text(function(d){return d}).attr("transform", function(d,i){return "translate("+(i*plotBlock.w())+",25)"})
-    .style("font-size",12).style("text-anchor","middle");
+    .attr("class","tag").style("font-size",12).style("text-anchor","middle");
 
 // maths
 
