@@ -185,7 +185,7 @@
  	 </section>
 	 
 	  <section class="center mv2 mb5 pb5 w-80-l w-100 pa0 tj nested-copy-line-height f5-l f7 nested-img black">
-<p>This explorable illustrates a type of <strong>continuous cellular automata</strong> called <em>Lenia</em>. It was derived from the famous discrete cellular automata, <a href="https://www.complexity-explorables.org/explorables/nah-dah-dah-nah-nah-opus-1984/"><strong>Conway's Game of Life</strong></a>, by changing its rule in a couple of ways. The cells are no longer just dead or alive, but can take one of an infinite number of states. The local rule involves a much larger neighborhood, and the states are updated differentially.</p>
+<p>This explorable illustrates a type of <strong>continuous cellular automata</strong> called <em>Lenia</em>. It was derived from the famous discrete cellular automata, <a href="https://www.complexity-explorables.org/explorables/nah-dah-dah-nah-nah-opus-1984/"><strong>Conway's Game of Life</strong></a>, by changing its rules in a couple of ways. The cells are no longer just dead or alive, but can take one of an infinite number of states. The local rule involves a much larger neighborhood, and the states are updated differentially.</p>
 
 <p>Unlike the patterns found in the Game of Life, the emergent patterns or "creatures" discovered in <em>Lenia</em> look and behave more like microorganisms as observed under a microscope. This may be due to the intrinsic <strong>statistical, stochastic, fuzzy-logic-like</strong> nature of continuous cellular automata that shares with biological systems. These continuous patterns exhibit <strong>self-organization</strong> and <strong>self-repair</strong>, as well as more advanced phenomena like structural symmetry, self-replication, polymorphism, and colony formation.</p>
 
@@ -211,31 +211,31 @@
 
 <h2 id="this-is-how-it-works">This is how it works</h2>
 
-<p>Cellular automata can become continuous in terms of states, space or time, in <em>Lenia</em> we do them all. Inside an n-dimensional lattice, each site has a continuous state variable with <strong>real value</strong> between 0 and 1, representing the level of activity. The states are visualized using a color gradient as seen in the display panel.</p>
+<p>Cellular automata can become continuous in terms of states, space or time, in <em>Lenia</em> we make them all. Inside an n-dimensional lattice, each site has a continuous state variable with <strong>real value</strong> between 0 and 1, representing the level of activity. The states are visualized using a color gradient as seen in the display panel.</p>
 
 <p>Each site <span class="math">\(a_{ij}\)</span> in the grid <span class="math">\(\mathbf{A}\)</span> interacts with an arbitrary large circular area of neighbors, and updates in a differential fashion akin to the <a href="https://en.wikipedia.org/wiki/Euler_method">Euler method</a>, making space and time continuous. The local rule goes like this:</p>
 
 <ol>
 <li>First take a <strong>weighted sum</strong> of neighbor sites with a weight distribution <span class="math">\(\mathbf{K}\)</span> (called kernel),</li>
-<li>then get the growth value from a function <span class="math">\(G\)</span> (called growth mapping),</li>
-<li>finally add a small portion <span class="math">\(dt\)</span> of the growth to the site <span class="math">\(a_{ij}\)</span> itself,</li>
+<li>then get the growth value using a function <span class="math">\(G\)</span> (called growth mapping),</li>
+<li>finally add a small portion <span class="math">\(dt\)</span> of the growth to the state <span class="math">\(a_{ij}\)</span> itself,</li>
 <li>don't forget to clip the value back to the interval <span class="math">\([0, 1]\)</span>.</li>
 </ol>
 </p>
 
-<p>Update the whole grid synchronously and repeatedly. The algorithm can be written as below (<span class="math">\([\;]_0^1\)</span> is the clip function):</p>
+<p>Update the whole grid synchronously and repeatedly. The algorithm can be written in formula (<span class="math">\([\;]_0^1\)</span> is the clip function):</p>
 
 <p><span class="math">\[
 \mathbf{A}^{t+dt} = \big[ \mathbf{A}^t + dt \cdot G(\mathbf{K} * \mathbf{A}^t) \big]_0^1
 \]</span></p>
 
-<p>In more advanced rules called <em>extended Lenia</em>, there can be multiple channels of the lattice <span class="math">\(\mathbf{A}_c\)</span> and multiple kernels <span class="math">\(\mathbf{K}_k\)</span>. The algorithm is similar, but the results are more surprising.</p>
+<p>In more advanced rules called <em>extended Lenia</em>, there can be multiple channels <span class="math">\(\mathbf{A}_c\)</span> and multiple kernels <span class="math">\(\mathbf{K}_k\)</span>. The algorithm is similar, but the results are more surprising.</p>
 
 <h2 id="try-this">Try this</h2>
 
 <p><em><strong>Select a pattern</strong></em> from the list, and observe its dynamic structure and behavior. Select again to randomly spawn 1-3 creatures. <em><strong>Gently move the space, time, and states sliders</strong></em> to control the degree of smoothness of the system: to the left more discrete and coarse-grained, to the right more continuous and fine-grained. <em><strong>Move the mu and sigma sliders</strong></em> to adjust parameters of the growth mapping. You may discover a new species with the right parameter values!</p>
 
-<p>While you are playing with the sliders, <em><strong>switch to different views</strong></em> to observe the effects of parameters changing. The <em><strong>world, weighted sum, and growth views</strong></em> visualize each stage of cellular automata calculation, the <em><strong>kernel view</strong></em> displays the kernel and the growth mapping.</p>
+<p>While playing with the sliders, <em><strong>switch to different views</strong></em> to observe the effects of parameter changes. The <em><strong>world, weighted sum, and growth views</strong></em> visualize each stage of cellular automata calculation, the <em><strong>kernel view</strong></em> shows the kernel and the growth mapping.</p>
 
 <h2 id="model-species">Model species</h2>
 
@@ -256,11 +256,11 @@
 
 <li><em><strong>Mother ship</strong></em> - This pattern <strong>emits smaller patterns</strong>, analogous to "glider guns" or "rakes" in the Game of Life.</li>
 
-<li><em><strong>Amazing cells</strong></em> - Some cell-like creatures are <strong>polymorphic</strong> - able to switch among various phenotypes, while engaging in <strong>complex interactions</strong>. How many phenotypes and stable combos can you find?</li>
+<li><em><strong>Amazing cells</strong></em> - Some cell-like creatures are <strong>polymorphic</strong> - able to switch among various phenotypes, while engaging in <strong>complex interactions</strong>. How many phenotypes and combos can you find?</li>
 
 <li><em><strong>Bizarre cells</strong></em> - They exhibit a kind of strange behavior that looks like communication (?), and they sometimes <strong>form colonies</strong>.</li>
 
-<li>The last pattern is <em><strong>Gosper's glider gun</strong></em> in the Game of Life. It is used to demonstrate that discrete cellular automata is a special case of continuous cellular automata, and thus can be simulated inside <em>Lenia</em> (using a step kernel).</li>
+<li>The last pattern is <em><strong>Gosper's glider gun</strong></em> in the Game of Life. This is to demonstrate that discrete cellular automata is a special case of continuous cellular automata, and thus can be simulated inside <em>Lenia</em> (using a step kernel).</li>
 </ul>
 
 <h2 id="what-does-it-mean">What does it mean</h2>
@@ -271,7 +271,7 @@
 
 <p>From an <a href="https://en.wikipedia.org/wiki/Artificial_life">artificial life</a> perspective, if we treat the pattern as an autonomous "<strong>agent</strong>" like an animal or a robot, the weighted sum can be interpreted as the "perception" of the world as being perceived by the "sensors" (kernels) of the agent. After a decision making process (growth mappings), the agent takes the appropriate "actions" (growth values) back to the world. This process mimics a <strong>sensori-motor feedback loop</strong> that may contribute to the self-organization of patterns.</p>
 
-<p>In an alternative formulation where the clip function is not needed (e.g. replace <span class="math">\(G(\;)\)</span> by <span class="math">\(G(\;) - \mathbf{A}\)</span>), the continuous cellular automata algorithm can be written in the below equation that is strikingly similar to <a href="https://www.complexity-explorables.org/explorables/hopfed-turingles/"><strong>reaction diffusion systems</strong></a>. These two categories of complex dynamical systems are perhaps closely related afterall.</p>
+<p>In an alternative formulation where the clip function is not needed (e.g. replace <span class="math">\(G(\;)\)</span> by <span class="math">\(G(\;) - \mathbf{A}\)</span>), the algorithm of continuous cellular automata can be rewritten as the below equation that is strikingly similar to <a href="https://www.complexity-explorables.org/explorables/hopfed-turingles/"><strong>reaction diffusion systems</strong></a>. These two categories of complex dynamical systems are perhaps closely related afterall.</p>
 
 <p><span class="math">\[
 \partial_t \mathbf{A} =  - \mathbf{A} + G(\mathbf{K} * \mathbf{A})
