@@ -5,7 +5,7 @@
 
 ![title image](lenia3.png)
 
-by [Bert Chan](https://chakazul.github.io/)
+by [Bert Chan](https://chakazul.github.io/), [Dirk Brockmann](http://rocs.hu-berlin.de/)
 
 16 February, 2021
 
