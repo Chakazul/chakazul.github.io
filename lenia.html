@@ -7,20 +7,18 @@
 <meta name="twitter:image" content="https://chakazul.github.io/rainbow.png" />
 <style>
 BODY, TD { font:18px Georgia; text-align:center; }
+KBD { /*font-size:20px;*/ }
 H1 { margin-top:25px; }
-HR { width:90%; height:3px; border:0px; background:#def; }
-HR.section { width:800px;; height:3px; border:0px; background:#def; margin-left:0px; }
+HR { width:100%; height:3px; border:0px; background:#def; }
+HR.section { min-width:600px; height:3px; border:0px; background:#def; margin-left:0px; }
 A { color:#369; }
 TABLE { border:0px; margin:auto; }
 TABLE.main TD { vertical-align:center; padding:4px; }
 .title { font:24px Georgia; }
-.sectiontitle { font:16px Georgia; margin-top:20px; }
-.notes { font:15px Georgia; line-height:1.5em; }
+.sectiontitle { font:18px Georgia; margin-top:30px; }
+.notes { font:15px Georgia; line-height:1.5em; text-align:left; }
 .notes2 { font:13px Verdana; }
 .thumb { width:380px; height:160px; border:solid 1px #369; margin:8px; }
-.liked { margin-top:10px; margin-bottom:20px; }
-.liked LI { text-align:left; font:11px Verdana; list-style:none; padding-left:1rem; text-indent:-1.2rem; }
-.liked LI:before { content:"🗨️ "; }
 .smallicon { display:none; height:20px; vertical-align:middle; }
 .ref { margin-left:150px; font:12px Arial; margin-top:0px; margin-bottom:5px; }
 .photocredit { font:10px Arial; }
@@ -28,7 +26,6 @@ UL { padding-left:30px; margin-top:0px; }
 UL UL { padding-left:50px; margin-top:0px; }
 EM.topic1 { color:#C30; }
 EM.topic2 { color:#03C; }
-/*.liked TD { border:solid 1px lightgrey; padding:5px 20px; }*/
 IMG { margin:4px; }
 /* https://www.bestcssbuttongenerator.com/ */
 .myButton {
@@ -62,214 +59,236 @@ IMG { margin:4px; }
 </head>
 
 <body>
-<h1 align=center>Bert Chan</h1>
+<h1 align=center>Lenia</h1>
 <p align=center>
-Independent Researcher on Artificial Life &nbsp; | &nbsp;
-External Collaborator @ Inria Flowers &nbsp; | &nbsp;
-Big Data Consultant @ Hong Kong<br><br>
-MSc Cognitive Science @ Lund U &nbsp; | &nbsp; 
-BSc Computer Science @ CUHK<br>
-
-<p align=center>
-<a target=_blank href="https://www.youtube.com/channel/UChvhpLkX0j5Hn50vfhud9aQ"><img src="icons/icon-youtube.png"></a>
-<a target=_blank href="https://vimeo.com/user86703904"><img src="icons/icon-vimeo.png"></a>
-<a target=_blank href="https://github.com/Chakazul/"><img src="icons/icon-github.png"></a>
-<a target=_blank href="https://www.behance.net/bertchan"><img src="icons/icon-behance.png"></a>
-<a target=_blank href="https://twitter.com/BertChakovsky"><img src="icons/icon-twitter.png"></a>
-<a target=_blank href="https://www.linkedin.com/in/bertchan/"><img src="icons/icon-linkedin.png"></a>
+<a href="#Synopsis">Synopsis</a> &nbsp; | &nbsp;
+<a href="#Collaborations">Collaborations</a> &nbsp; | &nbsp;
+<a href="#Media">Media</a> &nbsp; | &nbsp;
+<a href="#Papers">Papers</a> &nbsp; | &nbsp;
+<a href="#Code">Code & Web Demo</a> &nbsp; | &nbsp;
+<a href="#Talks">Talks</a> &nbsp; | &nbsp;
+<a href="#Mentions">Mentions</a> &nbsp; | &nbsp;
+<a href="#Timeline">Timeline</a> &nbsp; | &nbsp;
+<a href="#Directions">Directions</a>
 
 <hr>
-
-<p align=center>
-<a target=_blank href="https://www.youtube.com/watch?v=HT49wpyux-k"><img src="Lenia Expanded cover small.png"></a>
-<br><br>
 
 <table width=90% class="main">
 <tr>
 <td colspan=3>
-<div align=left class="main">
+<div align=left class="notes">
 
-<div class="title"> <b>Lenia Project</b></div>
-</div><div align=left class="notes">
-
+<a name="Synopsis"></a>
 <div class="sectiontitle"><i>Synopsis</i><br></div>
 <hr class="section">
-Lenia is a continuous cellular automata, a form of artificial life.<br>
-It was evolved from Conway's Game of Life by making everything smooth, continuous and generalized.<br>
+<table><tr valign=top><td>
+<img src="OSLenia-logo2.png" width=250>
+</td><td width=20></td><td>
+<div class="notes">
+Lenia is a system of <strong>continuous cellular automata</strong>, a form of artificial life.<br>
+It was derived from Conway's Game of Life by making everything smooth, continuous and generalized.<br>
 <br>
-The project started in 2015 by experimenting with Game of Life variations, led to the discovery of continuous glider <em>Orbium</em>, and 400+ more species.<br>
+The project started in 2015 by experimenting with Game of Life variations, led to the <a target=_blank href="R39g126gt5.png">discovery of continuous glider</a> <em>Orbium</em>, and 400+ more species.<br>
 These digital creatures show lifelike features like self-organization, self-repair, bilateral and radial symmetries, locomotive dynamics, and sometimes chaotic nature.<br>
 In 2018, investigations on Lenia accumulated into a video and a paper, attracted some attention on the internet and academia.<br>
 Once a coding exercise, Lenia has now evolved into an art and science research project, sparking international collaborations with universities and research labs.<br>
 <br>
 In 2020, further extentions of Lenia led to more emergent phenomena, 
-like interesting 3D/4D patterns, self-replication, self-boundary/individuality, aggregated patterns, polymorphism, intercommunicating colonies, etc.<br>
-Is there a limit on this digital universe? What kind of new pattern or emergent property will appear next? And what kind of questions and answers can we get from it?<br>
-<br>
+like interesting 3D/4D patterns, self-replication, pattern emission, self-boundary/individuality, aggregated patterns, polymorphism, intercommunicating colonies, etc.<br>
+Is there a limit on this digital universe? What kind of new pattern or emergent property will appear next? And what kind of questions or answers can we get from it?<br>
+</div>
+</td></tr></table>
 
+<a name="Collaborations"></a>
+<div class="sectiontitle"><i>Collaborations & Related Works</i><br></div>
+<hr class="section">
+<ul>
+    <li><kbd>🔬</kbd> <em>Initiative</em>: Open Science Lenia (tutorial @ ALIFE 2021)
+        [<a target=_blank href="https://www.robot100.cz/workshops">Website</a>] 
+    <li><kbd>🔬</kbd> <em>Research</em>: machine learning & automatic discovery in Lenia (with Flowers team @ Inria)
+        [<a target=_blank href="http://www.pyoudeyer.com/internshipLeniaMasterLevel2021.pdf">PDF</a>]
+    <li><kbd>🔬</kbd> <em>Research</em>: alternative formulation of Lenia (work by T Kawaguchi, R Suzuki, T Arita @ Nagoya U)
+        [<a target=_blank href="https://isarob.org/symposium/index.php?main_page=timetable#GS3">Symposium</a>] [<a target=_blank href="https://jglobal.jst.go.jp/detail?JGLOBAL_ID=202002232027246626">Paper (Japanese)</a>] 
+    <li><kbd>🎮</kbd> <em>Demo</em>: Complexity Explorables (with Dirk Brockmann @ HU Berlin)
+        [<a target=_blank href="https://www.complexity-explorables.org/bucketlist/">Website</a>]
+    <li><kbd>🎬</kbd> <em>Film</em>: "Thoughts on Life" (with Will Cavendish & John Conway)
+        [<a target=_blank href="https://www.thoughtsonlifefilm.com/">Website</a>]
+    <li><em>etc.</em>
+</ul>
+
+<a name="Media"></a>
 <div class="sectiontitle"><i>Media</i><br></div>
 <hr class="section">
 <ul>
-    <li>📰 List of tweets (project progress)
+    <a target=_blank href="https://www.youtube.com/watch?v=HT49wpyux-k"><img src="rainbow.png" height=150 align=right></a>
+    <li><kbd>📰</kbd> List of tweets (project progress)
         [<a target=_blank href="https://twitter.com/i/events/1275490076592504833">Twitter</a>] 
-    <li>🎬 List of videos (movies, talks)
+    <li><kbd>🎬</kbd> List of videos (movies, talks)
         [<a target=_blank href="https://www.youtube.com/playlist?list=PLxls5YhYdJ0xYabkHAP63cMhPq2mJVSe-">YouTube</a>] 
-    <li>🎬 <strong>Lenia: Expanded Universe</strong> (2020-07)
+    <li><kbd>🎬</kbd> <strong>Lenia: Expanded Universe</strong> (2020-07)
         [<a target=_blank href="https://www.youtube.com/watch?v=HT49wpyux-k">YouTube</a>] 
         [<a target=_blank href="https://vimeo.com/440386996">Vimeo</a>]
-    <li>🎬 <strong>Lenia: Mathematical Life Forms</strong> (2018-07)
+    <li><kbd>🎬</kbd> <strong>Lenia: Mathematical Life Forms</strong> (2018-07)
         [<a target=_blank href="https://www.youtube.com/watch?v=iE46jKYcI4Y">YouTube</a>] 
         [<a target=_blank href="https://vimeo.com/277328815">Vimeo</a>]
     <ul type="circle">
-    <li>🏅 Winner, Virtual Creature Contest @ GECCO 2018 Kyoto (2018-07)
+    <li><kbd>🏅</kbd> Winner, Virtual Creature Contest @ GECCO 2018 Kyoto (2018-07)
         [<a target=_blank href="https://virtualcreatures.github.io/">Website</a>]
-    <li>🏅 Honorable Mention, ALife Art Award @ ALIFE 2018 Tokyo (2018-07)
+    <li><kbd>🏅</kbd> Honorable Mention, ALife Art Award @ ALIFE 2018 Tokyo (2018-07)
         [<a target=_blank href="http://artaward2018.alifelab.org/">Website</a>]
         [<a target=_blank href="photos/IMG_20181119_160644.jpg">Photo</a> <span class="photocredit">@kyrre2000</span>]
     </ul>
 </ul>
 
+<a name="Papers"></a>
 <div class="sectiontitle"><i>Papers</i><br></div>
 <hr class="section">
 <ul>
-    <li>📄 <strong>Lenia and Expanded Universe</strong> (2020-07)
+    <li><kbd>📄</kbd> <strong>Lenia and Expanded Universe</strong> (2020-07)
         [<a target=_blank href="https://arxiv.org/abs/2005.03742">arXiv</a>] 
         [<a target=_blank href="https://doi.org/10.1162/isal_a_00297">Proceedings</a>]
         <div class="ref">Chan, B. W.-C. (2020). Lenia and Expanded Universe. <em>Artificial Life Conference Proceedings</em>, (32), 221&ndash;229.</div>
-    <li>📄 <strong>Lenia: Biology of Artificial Life</strong> (2019-10)
+    <li><kbd>📄</kbd> <strong>Lenia: Biology of Artificial Life</strong> (2019-10)
         [<a target=_blank href="https://arxiv.org/abs/1812.05433">arXiv</a>] 
         [<a target=_blank href="https://doi.org/10.25088/ComplexSystems.28.3.251">Journal</a>
             (<a target=_blank href="https://wpmedia.wolfram.com/uploads/sites/13/2019/10/28-3-1-Appendix.pdf">appendix</a>)]
         <div class="ref">Chan, B. W.-C. (2019). Lenia: Biology of Artificial Life. <em>Complex Systems, 28</em>(3), 251&ndash;286.</div>
     <ul type="circle">
-    <li>🏅 Outstanding Publication of 2019, by the International Society for Artificial Life (ISAL) (2020-07)
+    <li><kbd>🏅</kbd> Outstanding Publication of 2019, by the International Society for Artificial Life (ISAL) (2020-07)
     [<a target=_blank href="ISALOutstandingPublication2020.pdf">Cert</a>]
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1284913682074353664">Tweet</a>]
         <!-- [<a target=_blank href="photos/tw-EdIZZLYXkAAiY_5.png">Photo</a> <span class="photocredit">@HirokiSayama</span>] -->
-    <li>🔥 Front page @ Hacker News,
+    <li><kbd>🔥</kbd> Front page @ Hacker News,
         <!-- [<a target=_blank href="https://news.ycombinator.com/item?id=18754433">Website</a>] -->
-        🔥 Top hype #1 @ Arxiv Sanity,
+        <kbd>🔥</kbd> Top hype #1 @ Arxiv Sanity,
         <!-- [<a target=_blank href="arxiv-sanity.png">Cap</a>] -->
-        🔥 Top trending #1 @ Papers With Code
+        <kbd>🔥</kbd> Top trending #1 @ Papers With Code
         <!-- [<a target=_blank href="paperswithcode.jpg">Cap</a>] -->
     </ul>
 </ul>
 
+<a name="Code"></a>
 <div class="sectiontitle"><i>Code & Web Demo</i><br></div>
 <hr class="section">
 <ul>
-    <li>⌨️ <strong>Lenia &mdash; Python source</strong>
+    <li><kbd>🎮</kbd> <em>(Upcoming)</em> Lenia @ Complexity Explorables
+        [<a target=_blank href="https://www.complexity-explorables.org/bucketlist/">Website</a>]
+    <li><kbd>⌨️</kbd> <strong>Lenia &mdash; Python source</strong>
         [<a target=_blank href="https://github.com/Chakazul/Lenia">GitHub</a>]
         <ul><li>Current version: v3.5 LeniaNDKC.py (<em>see Timeline below</em>)</ul>
-    <li>🎮 <strong>Lenia &mdash; Web demo</strong>
+    <li><kbd>🎮</kbd> <strong>Lenia &mdash; Web demo</strong>
         [<a target=_blank href="https://chakazul.github.io/Lenia/JavaScript/Lenia.html">Play now!</a>]
         [<a target=_blank href="https://github.com/Chakazul/Lenia/tree/master/JavaScript">GitHub</a>]
         <ul><li>Version: v1.3 Lenia.html</li></ul>
-    <li>🎮 Primordia (precursor of Lenia) &mdash; Web demo 
+    <li><kbd>🎮</kbd> Primordia (precursor of Lenia) &mdash; Web demo 
         [<a target=_blank href="https://chakazul.github.io/Primordia/Primordia.html">Play now!</a>]
         [<a target=_blank href="https://github.com/Chakazul/Primordia">GitHub</a>]
         <ul><li>Version: v1.0 Primordia.html</li></ul>
 </ul>
 
+<a name="Talks"></a>
 <div class="sectiontitle"><i>Talks</i><br></div>
 <hr class="section">
 <ul>
-    <li>(<em>To be confirmed</em>) 🗣 Tutorial session @ ALIFE 2021 Prague/cyberspace (2021-07)
-        [<a target=_blank href="https://www.robot100.cz/alife2021">Website</a>] 
-    <li>📢 <strong>Plenary speech @ AROB 2021 Beppu/cyberspace</strong> (2021-01-23)
+    <li><kbd>🗣</kbd> <em>(Upcoming)</em> Tutorial session @ ALIFE 2021 Prague/cyberspace (2021-07)
+        [<a target=_blank href="https://www.robot100.cz/workshops">Website</a>] 
+    <li><kbd>📢</kbd> <strong>Plenary speech @ AROB 2021 Beppu/cyberspace</strong> (2021-01-23)
         [<a target=_blank href="https://isarob.org/symposium/index.php?main_page=plenary_speech">Website</a>]
-    <li>📢 <strong>Invited live @ Cross Labs Tokyo</strong> (2020-08-21)
+    <li><kbd>📢</kbd> <strong>Invited live @ Cross Labs Tokyo</strong> (2020-08-21)
         [<a target=_blank href="https://www.youtube.com/watch?v=Qh5ZoJodQPE">YouTube</a>]
         [<a target=_blank href="https://www.crosslabs.org/events">Website</a>]
         [<a target=_blank href="Lenia Life Intelligence.pdf">Slides</a>] 
-    <li>🗣 Presentation @ ALIFE 2020 Montréal/cyberspace (2020-07-16)
+    <li><kbd>🗣</kbd> Presentation @ ALIFE 2020 Montréal/cyberspace (2020-07-16)
         [<a target=_blank href="https://www.youtube.com/watch?v=HK6Bix2qOpM">YouTube</a>]
         [<a target=_blank href="http://2020.alife.org/">Website</a>] 
         [<a target=_blank href="Lenia Expanded.pdf">Slides</a>] 
         [<a target=_blank href="photos/tw-EdFzP9jWkAEV3av.png">Photo</a> <span class="photocredit">@HirokiSayama</span>]
-    <li>📢 <strong>Invited seminar @ Stanford University</strong> (2020-01-15)
+    <li><kbd>📢</kbd> <strong>Invited seminar @ Stanford University</strong> (2020-01-15)
         [<a target=_blank href="https://www.youtube.com/watch?v=G5P8eu6gUSo">YouTube</a>]
         [<a target=_blank href="https://ee.stanford.edu/event/seminar/ee380-computer-systems-colloquium-presents-lenia-biology-artificial-life">Website</a>] 
         [<a target=_blank href="Lenia Stanford EE380 b.pdf">Slides</a>] 
         [<a target=_blank href="photos/img-stanford-5.png">Photo</a>]
         <!--[<a target=_blank href="photos/img-stanford-4.jpg">Photo</a>]-->
-    <li>🗣 Presentation @ Hong Kong Code Conf (2018-11-24)
+    <li><kbd>🗣</kbd> Presentation @ Hong Kong Code Conf (2018-11-24)
         [<a target=_blank href="https://ti.to/codeaholics/hong-kong-code-conf-2018/en">Website</a>] 
         [<a target=_blank href="How to Evolve Life.pdf">Slides</a>] 
         [<a target=_blank href="photos/tw-DswbKThVYAUWnPp.jpg">Photo</a> <span class="photocredit">@hkcodeconf</span>]
-    <li>🗣 Presentation @ PyCon Hong Kong (2018-11-24)
+    <li><kbd>🗣</kbd> Presentation @ PyCon Hong Kong (2018-11-24)
         [<a target=_blank href="https://www.youtube.com/watch?v=66KecN9yypU">YouTube</a>]
         [<a target=_blank href="http://pycon.hk/sessions-2018/how-to-evolve-life-using-python/">Website</a>] 
         [<a target=_blank href="How to Evolve Life.pdf">Slides</a>] 
         [<a target=_blank href="photos/tw-DsvJgHzU8AE-UF-.jpg">Photo</a> <span class="photocredit">@jolliffe</span>]
-    <li>🗣 Presentation @ GECCO 2018 Kyoto (2018-07-15)
+    <li><kbd>🗣</kbd> Presentation @ GECCO 2018 Kyoto (2018-07-15)
         [<a target=_blank href="photos/tw-DiHLS4OVQAAd6-q.jpg">Photo</a> <span class="photocredit">@kyrre2000</span>]
 </ul>
 
+<a name="Mentions"></a>
 <div class="sectiontitle"><i>Mentions</i><br></div>
 <hr class="section">
 <ul>
-    <li>📝 <strong>The Lasting Lessons of John Conway’s Game of Life - Siobhan Roberts @ New York Times</strong> (2020-12)
+    <li><kbd>📰</kbd> <strong>The Lasting Lessons of John Conway’s Game of Life - Siobhan Roberts @ New York Times</strong> (2020-12)
         [<a target=_blank href="https://www.nytimes.com/2020/12/28/science/math-conway-game-of-life.html">Website</a>]
-    <li>📝 Hierarchically-Organized Latent Modules for Exploratory Search in Morphogenetic Systems - Mayalen Etcheverry (2020-06)
+    <li><kbd>📝</kbd> Hierarchically-Organized Latent Modules for Exploratory Search in Morphogenetic Systems - Mayalen Etcheverry (2020-06)
         [<a target=_blank href="https://mayalene.github.io/holmes/">Website</a>]
-    <li>📝 The Recursive Universe - Amanda Ghassaei blog (2020-05)
+    <li><kbd>📝</kbd> The Recursive Universe - Amanda Ghassaei blog (2020-05)
         [<a target=_blank href="https://blog.amandaghassaei.com/2020/05/01/the-recursive-universe/">Website</a>]
-    <li>📝 <strong>Intrinsically Motivated Discovery of Diverse Patterns in Self-Organizing Systems - The developmental systems blog</strong> (2020-03)
+    <li><kbd>📝</kbd> <strong>Intrinsically Motivated Discovery of Diverse Patterns in Self-Organizing Systems - The developmental systems blog</strong> (2020-03)
         [<a target=_blank href="http://developmentalsystems.org/intrinsically_motivated_discovery_of_diverse_patterns">Website</a>]
-    <li>📝 <strong>Introduction to Artificial Life for People who Like AI - Lana Sinapayen @ The Gradient</strong> (2019-11)
+    <li><kbd>📰</kbd> <strong>Introduction to Artificial Life for People who Like AI - Lana Sinapayen @ The Gradient</strong> (2019-11)
         [<a target=_blank href="https://thegradient.pub/an-introduction-to-artificial-life-for-people-who-like-ai/">Website</a>]
-    <li>📝 Artificial Life, Constraint-Closure and Deep Learning - Carlos E. Perez @ Intuition Machine (2018-07)
+    <li><kbd>📝</kbd> Artificial Life, Constraint-Closure and Deep Learning - Carlos E. Perez @ Intuition Machine (2018-07)
         [<a target=_blank href="https://medium.com/intuitionmachine/learnable-constraints-constraint-closure-and-deep-learning-b9b8aafc1de7">Website</a>]
-    <li>📝 (<em>Japanese</em>) 人工生命をつくりたい - 思うところとアプローチのメモ | ALife - BioErrorLog (2020-01)
+    <li><kbd>📝</kbd> (<em>Japanese</em>) 人工生命をつくりたい - 思うところとアプローチのメモ | ALife - BioErrorLog (2020-01)
         [<a target=_blank href="https://www.bioerrorlog.work/entry/wanna-create-alife">Website</a>]
-    <li>📝 (<em>Japanese</em>) 人工生命　～生命を使わない生命の研究～ - kuromunori’s diary (2019-12)
+    <li><kbd>📝</kbd> (<em>Japanese</em>) 人工生命　～生命を使わない生命の研究～ - kuromunori’s diary (2019-12)
         [<a target=_blank href="https://kuromunori.hatenablog.com/entry/2019/12/06/214923">Website</a>]
-    <li>📝 (<em>Chinese</em>) 算法描绘的“人造生命”，运动流畅自然，如同显微镜下的实景 | Demo·代码 - 量子位 @ 微博 (2019-01)
+    <li><kbd>📝</kbd> (<em>Chinese</em>) 算法描绘的“人造生命”，运动流畅自然，如同显微镜下的实景 | Demo·代码 - 量子位 @ 微博 (2019-01)
         [<a target=_blank href="https://mp.weixin.qq.com/s/SweWM-s0NTTkDYUQ0BMoQw">Website</a>]
-    <li>📝 (<em>Russian</em>) Время в клеточном автомате - Closius @ Habr (2020-02)
+    <li><kbd>📝</kbd> (<em>Russian</em>) Время в клеточном автомате - Closius @ Habr (2020-02)
         [<a target=_blank href="https://habr.com/ru/post/488950/">Website</a>]
-    <li>📝 (<em>Spanish</em>) Lenia: los coloridos automátas celulares de Bert Chan - ALVY @ Microsiervos (2018-07)
+    <li><kbd>📝</kbd> (<em>Spanish</em>) Lenia: los coloridos automátas celulares de Bert Chan - ALVY @ Microsiervos (2018-07)
         [<a target=_blank href="https://www.microsiervos.com/archivo/juegos-y-diversion/lenia-automatas-celulares-bert-chan.html">Website</a>]
 </ul>
 
-<div class="sectiontitle"><i>Timeline</i><br></div>
+<a name="Timeline"></a>
+<div class="sectiontitle"><i>Timeline (chronological)</i><br></div>
 <hr class="section">
 <ul>
-    <li>🐜 ca. 1990 - Conway's Game of Life in Pascal + Assembly
-    <li>🐝 2015-03 - <strong>Primordia</strong> in JavaScript (v1.0 JSLife.html → Primordia.html)
-    <li>🐛 2015-04 - Using real numbers and large neighborhoods (v1.1 PrimordiaReal.html)
+    <li><kbd>🐜</kbd> ca. 1990 - Conway's Game of Life in Pascal + Assembly
+    <li><kbd>🐝</kbd> 2015-03 - <strong>Primordia</strong> in JavaScript (v1.0 JSLife.html → Primordia.html)
+    <li><kbd>🐛</kbd> 2015-04 - Using real numbers and large neighborhoods (v1.1 PrimordiaReal.html)
     <ul>
-    <li>🐛 2015-04-15 - Discovered <em>Orbium</em>
+    <li><kbd>🐛</kbd> 2015-04-15 - Discovered <em>Orbium</em>
         [<a target=_blank href="first-real-life.png">Photo</a>]
         [<a target=_blank href="R39g126gt5.png">Photo</a>]
-    <li>🐛 2015-05 - Automatic data collection (v1.2 PrimordiaPetri.cs)
-    <li>🐛 2015-07 - Using convolution with FFT (v1.3 PrimordiaFFT.html → Lenia.html)
-    <li>📄 2015-07 - First draft "Zoology of Smooth Cellular Automata"
+    <li><kbd>🐛</kbd> 2015-05 - Automatic data collection (v1.2 PrimordiaPetri.cs)
+    <li><kbd>🐛</kbd> 2015-07 - Using convolution with FFT (v1.3 PrimordiaFFT.html → Lenia.html)
+    <li><kbd>📄</kbd> 2015-07 - First draft "Zoology of Smooth Cellular Automata"
     </ul>
-    <li>🦋 2017-12 - <strong>Lenia</strong> in MATLAB (v2.0 Lenia.m)
+    <li><kbd>🦋</kbd> 2017-12 - <strong>Lenia</strong> in MATLAB (v2.0 Lenia.m)
     <ul>
-    <li>🦋 2018-05 - Lenia in Python (v3.0 Lenia.py)
-    <li>📄 2018-12 - Preprint "Lenia - Biology of Artificial Life" in arXiv
+    <li><kbd>🦋</kbd> 2018-05 - Lenia in Python (v3.0 Lenia.py)
+    <li><kbd>📄</kbd> 2018-12 - Preprint "Lenia - Biology of Artificial Life" in arXiv
     </ul>
-    <li>🐟 2019-12 - <strong>Lenia extensions</strong>
+    <li><kbd>🐟</kbd> 2019-12 - <strong>Lenia extensions</strong>
     <ul>
-    <li>🐟 2019-12 - Discovered 3D/4D patterns in multi-dimensional extension (v3.1 Lenia3D.py, v3.2 Lenia4D.py)
+    <li><kbd>🐟</kbd> 2019-12 - Discovered 3D/4D patterns in multi-dimensional extension (v3.1 Lenia3D.py, v3.2 Lenia4D.py)
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1209177017096163328">Tweet</a>]
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1211010576631005184">Tweet</a>]
-    <li>🐟 2020-01 - Generalized dimensions (v3.3 LeniaND.py)
-    <li>🐠 2020-01 - Discovered self-replicators in multi-kernel extension (v3.4 LeniaNDK.py)
+    <li><kbd>🐟</kbd> 2020-01 - Generalized dimensions (v3.3 LeniaND.py)
+    <li><kbd>🐠</kbd> 2020-01 - Discovered self-replicators in multi-kernel extension (v3.4 LeniaNDK.py)
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1219308616643047424">Tweet</a>]
-    <li>🐠 2020-02 - Discovered aggregated patterns in multi-channel extension (v3.5 LeniaNDKC.py)
+    <li><kbd>🐠</kbd> 2020-02 - Discovered aggregated patterns in multi-channel extension (v3.5 LeniaNDKC.py)
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1249606228138840065">Tweet</a>]
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1265861527829004288">Tweet</a>]
-    <li>🐠 2020-07 - Discovered bizarre cells
+    <li><kbd>🐠</kbd> 2020-07 - Discovered bizarre cells
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1282055458690195457">Tweet</a>]
-    <li>🦈 2020-11 - Discovered smooth glider gun
+    <li><kbd>🦈</kbd> 2020-11 - Discovered smooth glider gun
         [<a target=_blank href="https://twitter.com/BertChakovsky/status/1325458229778771969">Tweet</a>]
     </ul>
 </ul>
 
+<a name="Directions"></a>
 <div class="sectiontitle"><i>Research Directions</i><br></div>
 <hr class="section">
 A list of topics that are <em class="topic1">currently</em> or <em class="topic2">potentially</em> related to Lenia.<br>
@@ -331,7 +350,7 @@ If you are interested in exploring these ideas, feel free to chat on Twitter <a 
 <hr><br>
 
 <div align=center>
-<a href="index.html"><span class="mybutton">Home</span></a>
+<a href="index.html"><span class="mybutton">Bert Chan's Home</span></a>
 </div>
 <br>
 
