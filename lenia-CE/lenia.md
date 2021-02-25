@@ -34,7 +34,9 @@ Update the whole grid synchronously and repeatedly. The algorithm can be written
 
 $$ \mathbf{A}^{t+dt} = \big[ \mathbf{A}^t + dt \cdot G(\mathbf{K} * \mathbf{A}^t) \big]_0^1 $$
 
-In more advanced rules called _extended Lenia_, there can be multiple channels $\mathbf{A}_c$ and multiple kernels $\mathbf{K}_k$. The algorithm is similar, but the results are more surprising.
+The weighted sum is mathematically a **convolution**. It can be interpreted as the "perception" of the world as being perceived by the "sensors" (kernel) of the creature. After a decision making process (growth mapping), the creature takes the appropriate "actions" (growth values) back to the world. This process mimics a **sensori-motor feedback loop** that may contribute to the self-organization of patterns.
+
+In more advanced rules called _extended Lenia_, there can be multiple channels $\mathbf{A}_c$, multiple kernels and growth mappings $\mathbf{K}_k, \mathbf{G}_k$. The algorithm is similar, but the results are more surprising.
 
 ## Try this
 
@@ -56,18 +58,6 @@ Like in biology, we can investigate how self-organizing patterns behave through 
 *   _**Amazing cells**_ - Some cell-like creatures are **polymorphic** - able to switch among various phenotypes, while engaging in **complex interactions**. How many phenotypes and combos can you find?
 *   _**Bizarre cells**_ - They exhibit a kind of strange behavior that looks like communication (?), and they sometimes **form colonies**.
 *   The last pattern is _**Gosper's glider gun**_ in the Game of Life. This is to demonstrate that discrete cellular automata is a special case of continuous cellular automata, and thus can be simulated inside _Lenia_ (using a step kernel).
-
-## What does it mean
-
-The exact mechanism of how self-organization in _Lenia_ works is still a mystery, but we may get a few hints by interpreting the local rule in various ways.
-
-The weighted sum and growth function are generalizations of the neighbor sum and conditional rules in the Game of Life, respectively. The weighted sum is mathematically a **convolution** $\mathbf{K} * \mathbf{A}$ (which can be calculated efficiently using the [convolution theorem](https://en.wikipedia.org/wiki/Convolution_theorem) and [fast Fourier transform](https://en.wikipedia.org/wiki/Fast_Fourier_transform)). It can be said as a blurred version of the world, a potential of some [morphogenetic field](https://en.wikipedia.org/wiki/Morphogenetic_field), or comparable to a [convolutional neural network (CNN)](https://en.wikipedia.org/wiki/Convolutional_neural_network) that is used in machine learning.
-
-From an [artificial life](https://en.wikipedia.org/wiki/Artificial_life) perspective, if we treat the pattern as an autonomous "**agent**" like an animal or a robot, the weighted sum can be interpreted as the "perception" of the world as being perceived by the "sensors" (kernels) of the agent. After a decision making process (growth mappings), the agent takes the appropriate "actions" (growth values) back to the world. This process mimics a **sensori-motor feedback loop** that may contribute to the self-organization of patterns.
-
-In an alternative formulation where the clip function is not needed (e.g. replace $G(\;)$ by $G(\;) - \mathbf{A}$), the algorithm of continuous cellular automata can be rewritten as the below equation that is strikingly similar to [**reaction diffusion systems**](https://www.complexity-explorables.org/explorables/hopfed-turingles/). These two categories of complex dynamical systems are perhaps closely related afterall.
-
-$$ \partial_t \mathbf{A} = - \mathbf{A} + G(\mathbf{K} * \mathbf{A}) $$
 
 ## References
 
