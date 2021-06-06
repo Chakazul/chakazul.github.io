@@ -30,7 +30,7 @@ HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
 <script type="text/javascript">
 "use strict";
 
-const shadertoyFilename = 'shadertoy/lenia4.glsl';  // error line number - 31
+const shadertoyFilename = './shadertoy/lenia4.glsl';  // error line number - 31
 //const targetFPS = 60;
 const stepsPerFrame = 1;
 const useWindowSize = true;
@@ -80,7 +80,7 @@ function init() {
         window.onresize = onResize;
     window.onkeypress = onKeyPress;
 
-    loadShaderFiles(['vertex.glsl', 'fragment_sim.glsl', 'fragment_draw.glsl', shadertoyFilename],
+    loadShaderFiles(['./vertex.glsl', './fragment_sim.glsl', './fragment_draw.glsl', shadertoyFilename],
         initWebGL);
 }
 
