@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lenia in WebGL</title>
+<!--
+code borrowed from 
+basic code template:
+    github.com/tmngo/smoothlife-shader/
+    github.com/rreusser/regl-smooth-life/
+optimization:
+    github.com/benpm/webgl-cellular-automata/
+shadertoy emulation:
+    github.com/alexjc/shadertoy-render/
+    github.com/xbmc/visualization.shadertoy/
+    shadertoyunofficial.wordpress.com/2016/07/20/special-shadertoy-features/
+-->
+<style>
+HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
+#glCanvas { width:100%; height:100%; overflow:hidden; }
+#showText { position:absolute; left:10px; top:10px; padding:5px; opacity:0.75; background-color:#668; color:#eef; font:0.7em Courier New; }
+</style>
+</head>
+
+<body>
+<canvas id="glCanvas" width="840" height="472"></canvas>
+<div id="showText" onclick="this.style.display='none';">initializing...</div>
+
+<script type="text/javascript" src="utils.js"></script>
+<script type="text/javascript">
+"use strict";
+
+const shadertoyFilename = 'shadertoy/lenia4.glsl';  // error line number - 31
+//const targetFPS = 60;
+const stepsPerFrame = 1;
+const useWindowSize = true;
+const useRetinaDisplay = true;
+const devicePixelRatio = useRetinaDisplay ? (window.devicePixelRatio || 1) : 1;  // retina display: devicePixelRatio=2
+// https://www.khronos.org/webgl/wiki/HandlingHighDPI
+
+const canvas = document.getElementById("glCanvas");
+const textbox = document.getElementById("showText");
+const gl = canvas.getContext("webgl2", { antialias:false });
+const glNotFoundRedirect = "https://caniuse.com/webgl2";
+
+var width, height;
+var simProgram, drawProgram;
+var uniforms;
+var framebufferA, framebufferB, textureA, textureB;
+var frameFlip = false;
+
+var pause = false;
+var gen, frame;
+var startTime;
+var lastTime;
+var lastFPSGen;
+var lastFPSTime;
+var actualFPS = 0;
+
+window.onload = init;
+
+function init() {
+    if (!gl) {
+        alert('Could not initialize WebGL 2.0, try another browser');
+        window.location.replace(glNotFoundRedirect);
+        return;
+    }
+    gl.disable(gl.DEPTH_TEST);
+
+    width = canvas.width;
+    height = canvas.height;
+
+    canvas.onmousedown = onMouseDown;
+    canvas.onmousemove = onMouseMove;
+    canvas.onmouseup   = onMouseUp;
+    canvas.onpointerdown = onMouseDown;
+    canvas.onpointermove = onMouseMove;
+    canvas.onpointerup   = onMouseUp;
+    if (useWindowSize)
+        window.onresize = onResize;
+    window.onkeypress = onKeyPress;
+
+    loadShaderFiles(['vertex.glsl', 'fragment_sim.glsl', 'fragment_draw.glsl', shadertoyFilename],
+        initWebGL);
+}
+
+function initWebGL(shaderSources) {
+    var vertexSource = shaderSources[0];
+    var simFragmentTemplate = shaderSources[1];
+    var drawFragmentSource = shaderSources[2];
+    var shadertoySource = shaderSources[3];
+    var simFragmentSource = simFragmentTemplate
+        .replace("/* Replace shader code here */", shadertoySource)
+    //console.log(fragmentShaderSource);
+
+    simProgram = createProgramFromSources(gl, vertexSource, simFragmentSource);
+    gl.useProgram(simProgram);
+
+    uniforms = {
+        iResolution:        gl.getUniformLocation(simProgram, "iResolution"),
+        iTime:              gl.getUniformLocation(simProgram, "iTime"),
+        iTimeDelta:         gl.getUniformLocation(simProgram, "iTimeDelta"),
+        iFrame:             gl.getUniformLocation(simProgram, "iFrame"),
+        iChannelTime:       gl.getUniformLocation(simProgram, "iChannelTime"),
+        iChannelResolution: gl.getUniformLocation(simProgram, "iChannelResolution"),
+        iMouse:             gl.getUniformLocation(simProgram, "iMouse"),
+        iChannel0:          gl.getUniformLocation(simProgram, "iChannel0"),
+        iChannel1:          gl.getUniformLocation(simProgram, "iChannel1"),
+        iChannel2:          gl.getUniformLocation(simProgram, "iChannel2"),
+        iChannel3:          gl.getUniformLocation(simProgram, "iChannel3"),
+        iDate:              gl.getUniformLocation(simProgram, "iDate"),
+        iFrameRate:         gl.getUniformLocation(simProgram, "iFrameRate")
+    };
+
+    var vertexArray = new Float32Array([
+        -1,-1, +1,-1, -1,+1,  // first triangle
+        -1,+1, +1,-1, +1,+1   // second triangle
+    ]);
+    var vertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertexArray, gl.STATIC_DRAW);
+
+    var a_position = gl.getAttribLocation (simProgram, "a_position");
+    gl.activeTexture(gl.TEXTURE0);
+    gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(a_position);
+
+    resetTime();
+    initUniforms();
+    setUniforms();
+
+    onResize();
+
+    drawProgram = createProgramFromSources(gl, vertexSource, drawFragmentSource);
+    gl.useProgram(drawProgram);
+
+    var draw_iChannel0 = gl.getUniformLocation(drawProgram, "iChannel0");
+    gl.uniform1i(draw_iChannel0, 0);
+
+    runOnce();
+}
+
+function makeTexture(gl, width, height, data) {
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);  // gl.LINEAR
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);  // gl.LINEAR
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);  // gl.CLAMP_TO_EDGE
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);  // gl.CLAMP_TO_EDGE
+
+    var framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+    return [texture, framebuffer];
+}
+
+function makeRandomArray(rgba) {
+    var numPixels = rgba.length/4;
+    var probability = 0.25;
+    for (var i=0;i<numPixels;i++) {
+        var ii = i * 4;
+        var state = Math.random() < probability ? 1 : 0;
+        rgba[ii] = rgba[ii + 1] = rgba[ii + 2] = state ? 255 : 0;
+        rgba[ii + 3] = 255;
+    }
+    return rgba;
+}
+
+function resetTime() {
+    gen = 0;
+    startTime = new Date();
+    lastTime = new Date(startTime);
+    lastFPSTime = new Date(startTime);
+    lastFPSGen = 0;
+}
+
+function initUniforms() {
+    gl.useProgram(simProgram);
+    gl.uniform1i(uniforms.iChannel0, 0);
+    gl.uniform1i(uniforms.iChannel1, 1);
+    gl.uniform1i(uniforms.iChannel2, 2);
+    gl.uniform1i(uniforms.iChannel3, 3);
+    gl.uniform1f(uniforms.iSampleRate, 44100.0);
+    gl.uniform4f(uniforms.iMouse, 0.0, 0.0, 0.0, 0.0);
+}
+
+function setUniforms() {
+    var now = new Date();
+    var year = now.getFullYear();
+    var month_minus1 = now.getMonth();
+    var day_minus1 = now.getDate() - 1;
+    var midnight = new Date(now).setHours(0, 0, 0, 0);
+    var seconds = (now - midnight) / 1000;
+    var elapsed = (now - startTime) / 1000;
+    var delta = (now - lastTime) / 1000;
+
+    var deltaFPSTime = (now - lastFPSTime) / 1000;
+    if (gen == 0)
+        actualFPS = 0;
+    else if (deltaFPSTime >= 3) {
+        actualFPS = (gen - lastFPSGen) / deltaFPSTime;
+        lastFPSTime = now;
+        lastFPSGen = gen;
+    }
+
+    gl.useProgram(simProgram);
+    gl.uniform1i(uniforms.iFrame, gen);
+    gl.uniform1f(uniforms.iTime, elapsed);
+    gl.uniform1fv(uniforms.iChannelTime, [elapsed, elapsed, elapsed, elapsed]);
+    gl.uniform1f(uniforms.iTimeDelta, delta);
+    gl.uniform4f(uniforms.iDate, year, month_minus1, day_minus1, seconds);
+    gl.uniform1f(uniforms.iFrameRate, actualFPS);
+
+    lastTime = now;
+}
+
+function runOnce() {
+    if (!pause) {
+        setUniforms();
+        gl.useProgram(simProgram);
+
+        for (var step = 0; step < stepsPerFrame; step++) {
+            frameFlip = !frameFlip;
+            // read from frame (as texture), calculate and write to alternate frame (as framebuffer)
+            gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureA : textureB);  // set frame as texture input
+            gl.bindFramebuffer(gl.FRAMEBUFFER, frameFlip ? framebufferB : framebufferA);  // set alternate frame as render output
+            gl.drawArrays(gl.TRIANGLES, 0, 6);  // read from texture, calculate and render to framebuffer
+            gen++;
+        }
+
+        // render to canvas
+        gl.useProgram(drawProgram);
+        gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureB : textureA);  // set last frame as texture input
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);  // set canvas as render output
+        gl.drawArrays(gl.TRIANGLES, 0, 6);  // render to canvas
+        frame++;
+
+        textbox.innerHTML = width + "x" + height + " " + actualFPS.toFixed(1) + "fps";
+    }
+
+    window.requestAnimationFrame(runOnce);
+    //window.setTimeout(() => { window.requestAnimationFrame(runOnce) }, 1000/targetFPS);
+}
+
+function onResize(e) {
+    if (!gl) return;
+
+    if (useWindowSize) {
+        width = canvas.clientWidth * devicePixelRatio;
+        height = canvas.clientHeight * devicePixelRatio;
+        canvas.width = width;
+        canvas.height = height;
+    } else {
+        width = canvas.width;
+        height = canvas.height;
+        canvas.style.width = (width / devicePixelRatio) + "px";
+        canvas.style.height = (height / devicePixelRatio) + "px";
+    }
+
+    //var newArray = new Uint8Array(width * height * 4);
+    [textureA, framebufferA] = makeTexture(gl, width, height, null);  // makeRandomArray(newArray)
+    [textureB, framebufferB] = makeTexture(gl, width, height, null);
+
+    gl.viewport(0, 0, width, height);
+
+    const ratio = 1.0;
+    gl.useProgram(simProgram);
+    gl.uniform2f(uniforms.iResolution, width, height);
+    gl.uniform3fv(uniforms.iChannelResolution, [width,height,ratio, width,height,ratio, width,height,ratio, width,height,ratio]);
+
+    resetTime();
+}
+
+function onKeyPress(e) {
+    switch (e.key) {
+        case " ": pause = ! pause; break;
+    }
+    switch (e.keyCode) {
+        case 13: gen = 0; break;
+    }
+}
+
+var isMouseDown = false;
+function set_iMouse(e, sx, sy) {
+    var x = e.clientX * devicePixelRatio;
+    var y = height - e.clientY * devicePixelRatio;
+    gl.useProgram(simProgram);
+    gl.uniform4f(uniforms.iMouse, x, y, sx*x, sy*y);
+}
+function onMouseDown(e) { isMouseDown = true;  set_iMouse(e, +1, +1); }
+function onMouseMove(e) { if (isMouseDown)     set_iMouse(e, +1, -1); }
+function onMouseUp  (e) { isMouseDown = false; set_iMouse(e, -1, -1); }
+
+</script>
+
+</body>
+</html>
