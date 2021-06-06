@@ -37,13 +37,14 @@ function createProgramFromSources(gl, vertexShaderSource, fragmentShaderSource) 
 function loadFile(url, urlIndex, callback) {
     var request = new XMLHttpRequest();
     request.open('GET', url, true);
+    //request.setRequestHeader("Accept", "application/vnd.github.3.raw");
 
     request.onreadystatechange = function () {
         if (request.readyState == 4) {
-            if (request.status == 0) {
+            if (request.status == 0 || request.status == 200) {
                 callback(request.responseText, urlIndex)
             } else {
-                throw "failed to download shader: " + url;
+                throw "failed to download shader: (" + url + ") " + request.statusText;
             }
         }
     };
