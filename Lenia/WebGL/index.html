@@ -237,7 +237,7 @@ function runOnce() {
         gl.drawArrays(gl.TRIANGLES, 0, 6);  // render to canvas
         frame++;
 
-        textbox.innerHTML = width + "x" + height + " " + actualFPS.toFixed(1) + "fps";
+        textbox.innerHTML = width + "x" + height + (devicePixelRatio == 1 ? "" : " retina") + " " + actualFPS.toFixed(1) + "fps";
     }
 
     window.requestAnimationFrame(runOnce);
@@ -248,15 +248,15 @@ function onResize(e) {
     if (!gl) return;
 
     if (useWindowSize) {
-        width = canvas.clientWidth * devicePixelRatio;
-        height = canvas.clientHeight * devicePixelRatio;
+        width = Math.floor(canvas.clientWidth * devicePixelRatio);
+        height = Math.floor(canvas.clientHeight * devicePixelRatio);
         canvas.width = width;
         canvas.height = height;
     } else {
         width = canvas.width;
         height = canvas.height;
-        canvas.style.width = (width / devicePixelRatio) + "px";
-        canvas.style.height = (height / devicePixelRatio) + "px";
+        canvas.style.width = Math.ceil(width / devicePixelRatio) + "px";
+        canvas.style.height = Math.ceil(height / devicePixelRatio) + "px";
     }
 
     //var newArray = new Uint8Array(width * height * 4);
