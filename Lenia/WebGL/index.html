@@ -34,7 +34,7 @@ const shadertoyFilename = './shadertoy/lenia4.glsl';  // error line number - 31
 //const targetFPS = 60;
 const stepsPerFrame = 1;
 const useWindowSize = false;
-const useRetinaDisplay = true;
+const useRetinaDisplay = false;
 const devicePixelRatio = useRetinaDisplay ? (window.devicePixelRatio || 1) : 1;  // retina display: devicePixelRatio=2
 // https://www.khronos.org/webgl/wiki/HandlingHighDPI
 
@@ -42,6 +42,8 @@ const canvas = document.getElementById("glCanvas");
 const textbox = document.getElementById("showText");
 const gl = canvas.getContext("webgl2", { antialias:false });
 const glNotFoundRedirect = "https://caniuse.com/webgl2";
+const canvasFilter = gl.LINEAR;  // gl.NEAREST or gl.LINEAR
+const canvasWrap = gl.REPEAT;  // gl.REPEAT or gl.CLAMP_TO_EDGE
 
 var width, height;
 var simProgram, drawProgram;
@@ -144,10 +146,10 @@ function makeTexture(gl, width, height, data) {
     var texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);  // gl.LINEAR
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);  // gl.LINEAR
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);  // gl.CLAMP_TO_EDGE
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);  // gl.CLAMP_TO_EDGE
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, canvasFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, canvasFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, canvasWrap);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, canvasWrap);
 
     var framebuffer = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -218,23 +220,23 @@ function setUniforms() {
 
 function runOnce() {
     if (!pause) {
-        setUniforms();
         gl.useProgram(simProgram);
+        setUniforms();
 
         for (var step = 0; step < stepsPerFrame; step++) {
             frameFlip = !frameFlip;
-            // read from frame (as texture), calculate and write to alternate frame (as framebuffer)
-            gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureA : textureB);  // set frame as texture input
-            gl.bindFramebuffer(gl.FRAMEBUFFER, frameFlip ? framebufferB : framebufferA);  // set alternate frame as render output
-            gl.drawArrays(gl.TRIANGLES, 0, 6);  // read from texture, calculate and render to framebuffer
+            // read from frame (as texture), calculate and render to alternate frame (as framebuffer)
+            gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureA : textureB);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, frameFlip ? framebufferB : framebufferA);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
             gen++;
         }
 
-        // render to canvas
+        // render the latest frame (as texture) to canvas (as framebuffer)
         gl.useProgram(drawProgram);
-        gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureB : textureA);  // set last frame as texture input
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);  // set canvas as render output
-        gl.drawArrays(gl.TRIANGLES, 0, 6);  // render to canvas
+        gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureB : textureA);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
         frame++;
 
         textbox.innerHTML = width + "x" + height + (devicePixelRatio == 1 ? "" : " retina") + " " + actualFPS.toFixed(1) + "fps";
