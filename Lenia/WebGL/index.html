@@ -187,6 +187,10 @@ function setSpecies(species) {
 window.onload = init;
 
 function init() {
+    window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
+        throwError(url + "</br>#" + lineNumber + ": " + errorMsg);
+    }
+
     if (!gl) {
         alert('Could not initialize WebGL 2.0, try another browser');
         window.location.replace(glNotFoundRedirect);

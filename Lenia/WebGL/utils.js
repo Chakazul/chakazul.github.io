@@ -1,13 +1,18 @@
 //from http://webglfundamentals.org/webgl/lessons/webgl-boilerplate.html
 "use strict";
 
+function throwError(errorMsg) {
+    textbox.innerHTML = errorMsg;
+    throw errorMsg;
+}
+
 function compileShader(gl, shaderSource, shaderType) {
     var shader = gl.createShader(shaderType);
     gl.shaderSource(shader, shaderSource);
     gl.compileShader(shader);
     var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
     if (!success) {
-        throw "failed to compile shader: " + gl.getShaderInfoLog(shader);
+        throwError("failed to compile shader: " + gl.getShaderInfoLog(shader));
     }
     return shader;
 }
@@ -24,7 +29,7 @@ function createProgramFromSources(gl, vertexShaderSource, fragmentShaderSource) 
 
     var success = gl.getProgramParameter(program, gl.LINK_STATUS);
     if (!success) {
-        throw "filed to link program: " + gl.getProgramInfoLog (program);
+        throwError("filed to link program: " + gl.getProgramInfoLog (program));
     }
 
     return program;
@@ -44,7 +49,7 @@ function loadFile(url, urlIndex, callback) {
             if (request.status == 0 || request.status == 200) {
                 callback(request.responseText, urlIndex)
             } else {
-                throw "failed to download shader: (" + url + ") " + request.statusText;
+                throwError("failed to download shader: (" + url + ") " + request.statusText);
             }
         }
     };
