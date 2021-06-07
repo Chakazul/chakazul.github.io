@@ -1,7 +1,5 @@
 "use strict";
 
-alert(1);
-
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
     throwError(url + "</br>#" + lineNumber + ": " + errorMsg);
 }
