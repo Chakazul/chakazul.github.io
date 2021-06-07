@@ -85,9 +85,15 @@ function init() {
     canvas.onmousedown = onMouseDown;
     canvas.onmousemove = onMouseMove;
     canvas.onmouseup   = onMouseUp;
-    canvas.onpointerdown = onMouseDown;
-    canvas.onpointermove = onMouseMove;
-    canvas.onpointerup   = onMouseUp;
+	if (window.PointerEvent) {
+		canvas.onpointerdown = onMouseDown;
+		canvas.onpointermove = onMouseMove;
+		canvas.onpointerup   = onMouseUp;
+	} else {
+		canvas.ontouchstart = onMouseDown;
+		canvas.ontouchmove  = onMouseMove;
+		canvas.ontouchend   = onMouseUp;
+	}
     if (useWindowSize)
         window.onresize = onResize;
     window.onkeypress = onKeyPress;
