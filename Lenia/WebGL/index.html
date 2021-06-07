@@ -31,9 +31,16 @@ HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
 <script type="text/javascript">
 "use strict";
 
+alert(2);
+window.onload = init;
+
+const canvas = document.getElementById("glCanvas");
+const textbox = document.getElementById("showText");
+const gl = canvas.getContext("webgl2", { antialias:false });
+textbox.innerHTML = "initializing global...";
+
 const url = new URL(window.location.href);
 const isMobile = checkMobile();
-
 const shadertoyFilename = './shadertoy/lenia4param.glsl';  // error line number - 31
 var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
 var initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
@@ -45,9 +52,6 @@ const pixelSize = useLogicalPixel ? getParam("pixel", "int", 1, 5) : 1/(window.d
 // https://www.khronos.org/webgl/wiki/HandlingHighDPI
 // https://mydevice.io
 
-const canvas = document.getElementById("glCanvas");
-const textbox = document.getElementById("showText");
-const gl = canvas.getContext("webgl2", { antialias:false });
 const glNotFoundRedirect = "https://caniuse.com/webgl2";
 const canvasFilter = gl.LINEAR;  // gl.NEAREST or gl.LINEAR
 const canvasWrap = gl.REPEAT;  // gl.REPEAT or gl.CLAMP_TO_EDGE
@@ -67,6 +71,7 @@ var lastFPSTime;
 var actualFPS = 0;
 var speciesName = "";
 
+alert(3);
 function setSpecies(species) {
 	//gl.uniform1f(params.R, 12.);  // space resolution = kernel radius
 	gl.uniform1f(params.T, 2.);  // time resolution = number of divisions per unit time
@@ -184,13 +189,8 @@ function setSpecies(species) {
 	}
 }
 
-window.onload = init;
-
 function init() {
-    window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
-        throwError(url + "</br>#" + lineNumber + ": " + errorMsg);
-    }
-
+    textbox.innerHTML = "initializing window...";
     if (!gl) {
         alert('Could not initialize WebGL 2.0, try another browser');
         window.location.replace(glNotFoundRedirect);
@@ -218,11 +218,13 @@ function init() {
         window.onresize = onResize;
     window.onkeypress = onKeyPress;
 
+    textbox.innerHTML = "loading shader files...";
     loadShaderFiles(['./vertex.glsl', './fragment_sim.glsl', './fragment_draw.glsl', shadertoyFilename],
         initWebGL);
 }
 
 function initWebGL(shaderSources) {
+    textbox.innerHTML = "initializing simulation shader program...";
     var vertexSource = shaderSources[0];
     var simFragmentTemplate = shaderSources[1];
     var drawFragmentSource = shaderSources[2];
@@ -234,6 +236,7 @@ function initWebGL(shaderSources) {
     simProgram = createProgramFromSources(gl, vertexSource, simFragmentSource);
     gl.useProgram(simProgram);
 
+    textbox.innerHTML = "initializing uniform variables...";
     uniforms = {
         iResolution:        gl.getUniformLocation(simProgram, "iResolution"),
         iTime:              gl.getUniformLocation(simProgram, "iTime"),
@@ -265,6 +268,7 @@ function initWebGL(shaderSources) {
 		};
 	}
 
+    textbox.innerHTML = "initializing vertex shader...";
     var vertexArray = new Float32Array([
         -1,-1, +1,-1, -1,+1,  // first triangle
         -1,+1, +1,-1, +1,+1   // second triangle
@@ -285,12 +289,14 @@ function initWebGL(shaderSources) {
 
     onResize();
 
+    textbox.innerHTML = "initializing drawing shader program...";
     drawProgram = createProgramFromSources(gl, vertexSource, drawFragmentSource);
     gl.useProgram(drawProgram);
 
     var draw_iChannel0 = gl.getUniformLocation(drawProgram, "iChannel0");
     gl.uniform1i(draw_iChannel0, 0);
 
+    textbox.innerHTML = "finish initializing";
     runOnce();
 }
 
