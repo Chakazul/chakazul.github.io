@@ -31,9 +31,15 @@ HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
 <script type="text/javascript">
 "use strict";
 
+window.onload = init;
+
+const canvas = document.getElementById("glCanvas");
+const textbox = document.getElementById("showText");
+const gl = canvas.getContext("webgl2", { antialias:false });
+textbox.innerHTML = "initializing global...";
+
 const url = new URL(window.location.href);
 const isMobile = checkMobile();
-
 const shadertoyFilename = './shadertoy/lenia4param.glsl';  // error line number - 31
 var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
 var initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
@@ -45,9 +51,6 @@ const pixelSize = useLogicalPixel ? getParam("pixel", "int", 1, 5) : 1/(window.d
 // https://www.khronos.org/webgl/wiki/HandlingHighDPI
 // https://mydevice.io
 
-const canvas = document.getElementById("glCanvas");
-const textbox = document.getElementById("showText");
-const gl = canvas.getContext("webgl2", { antialias:false });
 const glNotFoundRedirect = "https://caniuse.com/webgl2";
 const canvasFilter = gl.LINEAR;  // gl.NEAREST or gl.LINEAR
 const canvasWrap = gl.REPEAT;  // gl.REPEAT or gl.CLAMP_TO_EDGE
@@ -183,8 +186,6 @@ function setSpecies(species) {
 		break;
 	}
 }
-
-window.onload = init;
 
 function init() {
     textbox.innerHTML = "initializing window...";
