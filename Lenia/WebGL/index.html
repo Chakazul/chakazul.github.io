@@ -30,13 +30,23 @@ HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
 <script type="text/javascript">
 "use strict";
 
+const isMobile = checkMobile();
+const url = new URL(window.location.href);
+function getParam(name, type, desktopDefault, mobileDefault) {
+	var x = url.searchParams.get(name);
+	return x===null ? (isMobile ? mobileDefault : desktopDefault) : 
+		type=="int" ? parseInt(x) : 
+		type=="bool" ? x!="0" : x;
+}
+
 const shadertoyFilename = './shadertoy/lenia4.glsl';  // error line number - 31
 //const targetFPS = 60;
-const stepsPerFrame = 1;
-const useWindowSize = false;
-const useRetinaDisplay = false;
-const devicePixelRatio = useRetinaDisplay ? (window.devicePixelRatio || 1) : 1;  // retina display: devicePixelRatio=2
+const stepsPerFrame = getParam("step", "int", 1, 1);
+const useWindowSize = getParam("resize", "bool", false, true);
+const useLogicalPixel = getParam("pixel", "bool", false, true);
+const pixelSize = useLogicalPixel ? getParam("pixel", "int", 1, 5) : 1/(window.devicePixelRatio || 1);
 // https://www.khronos.org/webgl/wiki/HandlingHighDPI
+// https://mydevice.io
 
 const canvas = document.getElementById("glCanvas");
 const textbox = document.getElementById("showText");
