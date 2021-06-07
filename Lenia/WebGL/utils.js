@@ -79,7 +79,7 @@ function checkMobile() {
 	return check;
 }
 
-function getParam(url, name, type, desktopDefault, mobileDefault) {
+function getParam(name, type, desktopDefault, mobileDefault) {
     var x = url.searchParams.get(name);
     return x===null ? (isMobile ? mobileDefault : desktopDefault) : 
         type=="int" ? parseInt(x) : 

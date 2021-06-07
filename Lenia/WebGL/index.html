@@ -35,13 +35,13 @@ const url = new URL(window.location.href);
 const isMobile = checkMobile();
 
 const shadertoyFilename = './shadertoy/lenia4param.glsl';  // error line number - 31
-var randomSpecies = Math.floor(new Date().getSeconds() / 120 * 9); //Math.floor(Math.random() * 9);
-var initSpecies = getParam(url, "species", "int", randomSpecies, randomSpecies);
+var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
+var initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
 //const targetFPS = 60;
-const stepsPerFrame = getParam(url, "step", "int", 1, 1);
-const useWindowSize = getParam(url, "resize", "bool", false, true);
-const useLogicalPixel = getParam(url, "pixel", "bool", false, true);
-const pixelSize = useLogicalPixel ? getParam(url, "pixel", "int", 1, 5) : 1/(window.devicePixelRatio || 1);
+const stepsPerFrame = getParam("step", "int", 1, 1);
+const useWindowSize = getParam("resize", "bool", false, true);
+const useLogicalPixel = getParam("pixel", "bool", false, true);
+const pixelSize = useLogicalPixel ? getParam("pixel", "int", 1, 5) : 1/(window.devicePixelRatio || 1);
 // https://www.khronos.org/webgl/wiki/HandlingHighDPI
 // https://mydevice.io
 
@@ -442,8 +442,8 @@ function set_iMouse(e, sx, sy) {
 function onMouseDown(e) { isMouseDown = true;  set_iMouse(e, +1, +1); }
 function onMouseMove(e) { if (isMouseDown)     set_iMouse(e, +1, -1); }
 function onMouseUp  (e) { isMouseDown = false; set_iMouse(e, -1, -1); 
-	randomSpecies = Math.floor(new Date().getSeconds() / 120 * 9); //Math.floor(Math.random() * 9);
-	initSpecies = getParam(url, "species", "int", randomSpecies, randomSpecies);
+	randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
+	initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
 	setSpecies(initSpecies);
 }
 
