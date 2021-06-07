@@ -1,5 +1,6 @@
-//from http://webglfundamentals.org/webgl/lessons/webgl-boilerplate.html
 "use strict";
+
+alert(1);
 
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
     throwError(url + "</br>#" + lineNumber + ": " + errorMsg);
@@ -9,6 +10,8 @@ function throwError(errorMsg) {
     textbox.innerHTML = errorMsg;
     throw errorMsg;
 }
+
+// from http://webglfundamentals.org/webgl/lessons/webgl-boilerplate.html
 
 function compileShader(gl, shaderSource, shaderType) {
     var shader = gl.createShader(shaderType);
@@ -38,7 +41,6 @@ function createProgramFromSources(gl, vertexShaderSource, fragmentShaderSource) 
 
     return program;
 }
-
 
 
 // from https://stackoverflow.com/questions/4878145/javascript-and-webgl-external-scripts
@@ -79,6 +81,7 @@ function loadShaderFiles(urls, callback) {
         loadFile(urls[i], i, partialCallback);
     }
 }
+
 
 // https://stackoverflow.com/questions/11381673/detecting-a-mobile-browser
 
