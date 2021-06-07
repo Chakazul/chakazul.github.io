@@ -35,8 +35,8 @@ const url = new URL(window.location.href);
 const isMobile = checkMobile();
 
 const shadertoyFilename = './shadertoy/lenia4param.glsl';  // error line number - 31
-var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
-const initSpecies = getParam(url, "species", "int", randomSpecies, randomSpecies);
+var randomSpecies = Math.floor(new Date().getSeconds() / 120 * 9); //Math.floor(Math.random() * 9);
+var initSpecies = getParam(url, "species", "int", randomSpecies, randomSpecies);
 //const targetFPS = 60;
 const stepsPerFrame = getParam(url, "step", "int", 1, 1);
 const useWindowSize = getParam(url, "resize", "bool", false, true);
@@ -442,8 +442,9 @@ function set_iMouse(e, sx, sy) {
 function onMouseDown(e) { isMouseDown = true;  set_iMouse(e, +1, +1); }
 function onMouseMove(e) { if (isMouseDown)     set_iMouse(e, +1, -1); }
 function onMouseUp  (e) { isMouseDown = false; set_iMouse(e, -1, -1); 
-	randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
-	setSpecies(randomSpecies);
+	randomSpecies = Math.floor(new Date().getSeconds() / 120 * 9); //Math.floor(Math.random() * 9);
+	initSpecies = getParam(url, "species", "int", randomSpecies, randomSpecies);
+	setSpecies(initSpecies);
 }
 
 </script>
