@@ -31,6 +31,7 @@ HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
 <script type="text/javascript">
 "use strict";
 
+alert(2);
 window.onload = init;
 
 const canvas = document.getElementById("glCanvas");
@@ -70,6 +71,7 @@ var lastFPSTime;
 var actualFPS = 0;
 var speciesName = "";
 
+alert(3);
 function setSpecies(species) {
 	//gl.uniform1f(params.R, 12.);  // space resolution = kernel radius
 	gl.uniform1f(params.T, 2.);  // time resolution = number of divisions per unit time
