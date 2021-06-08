@@ -40,7 +40,7 @@ textbox.innerHTML = "initializing global...";
 
 const url = new URL(window.location.href);
 const isMobile = checkMobile();
-const shadertoyFilename = './shadertoy/lenia4param.glsl';  // error line number - 31
+const shadertoyFilename = './shadertoy/" + getParam("file", "string", "lenia4param", "lenia4param") + ".glsl';  // error line number - 31
 var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
 var initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
 //const targetFPS = 60;
