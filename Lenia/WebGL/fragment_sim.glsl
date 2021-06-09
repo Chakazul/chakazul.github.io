@@ -33,7 +33,6 @@ out vec4 fragColor;
 
 /* End of Shadertoy/Smoothstep.io code */
 
-void main()
-{
+void main() {
     mainImage(fragColor, gl_FragCoord.xy);
 }
