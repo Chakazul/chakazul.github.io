@@ -1,3 +1,5 @@
+// from https://smoothstep.io/anim/41ff4ba126d9
+
 // modified from SmoothLife by davidar - https://www.shadertoy.com/view/Msy3RD
 
 // multiple species (A, B...), can have different spatial scales (R) and time scales (T) 
@@ -25,7 +27,7 @@ const mat4 m1 = mat4(v1, v1, v1, v1);
 const float pixelSize = 1.;
 
 // choose species A, change numbers at end of xxx_?
-const float R_a = 17.;  // space resolution = kernel radius
+const float R_a = 15.;  // space resolution = kernel radius
 const float T_a = 2.;  // time resolution = number of divisions per unit time
 #define baseNoise_a baseNoise_2
 #define   betaLen_a   betaLen_2
@@ -71,7 +73,7 @@ const mat4        src_0 = mat4( 0., 0., 0., 1., 1., 1., 2., 2., 2., 0., 0., 1., 
 const mat4        dst_0 = mat4( 0., 0., 0., 1., 1., 1., 2., 2., 2., 1., 2., 0., 2., 0., 1., v0 );  // destination channels
 
 // species: Z18A9R Tessellatium (highly reproductive) (modified for lower reproduction)
-const float baseNoise_1 = 0.145;
+const float baseNoise_1 = 0.155;
 const mat4    betaLen_1 = mat4( 1., 1., 2., 2., 1., 2., 1., 1., 1., 2., 2., 2., 1., 2., 1., v0 );  // kernel ring number
 const mat4      beta0_1 = mat4( 1., 1., 1., 0., 1., 3./4., 1., 1., 1., 11./12., 3./4., 1., 1., 1./4., 1., v0 );  // kernel ring heights
 const mat4      beta1_1 = mat4( 0., 0., 1./4., 1., 0., 1., 0., 0., 0., 1., 1., 11./12., 0., 1., 0., v0 );
@@ -220,18 +222,21 @@ mat4 bell(in mat4 x, in mat4 m, in mat4 s)
 
 /**/
 // high precision = value, low precision = species
-const float highSize = 64.;
+const float highSize = 64.;  // 6 bits value
+const float lowSize = 4.;  // 2 bits species = none + max 3 species
+const float valMargin = 0.01;  // value 0..1 pack into 0.01..0.99
+const float valBand = 1. - 2. * valMargin;
 ivec3 unpackSpecies(in vec3 texel)
 {
-    return ivec3(fract(texel * highSize) * float(speciesNum) + 0.5);
+    return ivec3(fract(texel * highSize) * lowSize + 0.5);
 }
 vec3 unpackValue(in vec3 texel)
 {
-    return (floor(texel * highSize) / highSize -0.1)/0.8;
+    return (floor(texel * highSize) / highSize -valMargin)/valBand;
 }
 vec3 packTexel(in ivec3 species, in vec3 val)
 {
-    return (floor((val*0.8+0.1) * highSize) + vec3(species) / float(speciesNum)) / highSize;
+    return (floor((val*valBand+valMargin) * highSize) + vec3(species) / lowSize) / highSize;
 }
 /*/
 // high precision = species, low precision = value
@@ -335,7 +340,7 @@ vec3 addSum(in vec2 xy,
 {
     // get neighbor cell, unpack species and value
     vec2 uv = xy / iResolution.xy;
-    vec3 texel = texture(iChannel0, uv).rgb;
+    vec3 texel = texture(iPrevFrame, uv).rgb;
     ivec3 species = unpackSpecies(texel);
     vec3 value = unpackValue(texel);
 
@@ -444,10 +449,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     //species = species_a * select_a + species_b * select_b + species * select_0;
 
     // choose growth according to species, add to original value
-    vec3 is_a = vec3(equal(species, ivec3(species_a)));
-    vec3 is_b = vec3(equal(species, ivec3(species_b)));
-    vec3 is_0 = vec3(equal(species, ivec3(species_0)));
-    vec3 growth = growth_a * is_a + growth_b * is_b + vec3(-0.1) * is_0;
+    vec3 is_none = vec3(equal(species, ivec3(species_0)));
+    vec3 growth = growth_a * float(select_a) + growth_b * float(select_b) + vec3(-0.1) * is_none;
     value = clamp(growth + value, 0., 1.);
 
     // debug: uncomment to show list of kernels
@@ -458,19 +461,20 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     // initialize with random species and values
     if (iFrame == 0)
     {
-        float speciesNoise_a = noise(fragCoord/R_a/pixelSize/8. + sin(iDate.w)*100.);
-        float speciesNoise_b = noise(fragCoord/R_b/pixelSize/8. + cos(iDate.w)*100.);
+        float speciesNoise_a = noise(fragCoord/R_a/pixelSize/8. + 17.);
+        float speciesNoise_b = noise(fragCoord/R_b/pixelSize/8. + 23.);
         bool is_a = (speciesNoise_a > 0.);
         bool is_b = (speciesNoise_b > -0.1) && !is_a;
         species = ivec3(species_a * int(is_a) + species_b * int(is_b));
         float R = R_a * float(is_a) + R_b * float(is_b);
         float baseNoise = baseNoise_a * float(is_a) + baseNoise_b * float(is_b);
         vec3 valueNoise = vec3( 
-            noise(fragCoord/R/pixelSize + fract(iDate.w)*100.), 
-            noise(fragCoord/R/pixelSize + sin(iDate.w)*100.), 
-            noise(fragCoord/R/pixelSize + cos(iDate.w)*100.) );
-        value = clamp(baseNoise - 0.04 + valueNoise, 0., 1.);
+            noise(fragCoord/R/pixelSize), 
+            noise(fragCoord/R/pixelSize + 13.), 
+            noise(fragCoord/R/pixelSize + 27.) );
+        value = clamp(baseNoise + valueNoise, 0., 1.);
     }
+    else if (iFrame==1) {}
 
     texel = packTexel(species, value);
     fragColor = vec4(texel, 1.);

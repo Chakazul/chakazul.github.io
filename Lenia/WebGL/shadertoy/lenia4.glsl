@@ -79,7 +79,7 @@ const mat4        dst = mat4( 0., 0., 0., 1., 1., 1., 2., 2., 2., 1., 2., 0., 2.
 
 #ifdef species3
 // species: tri-color ghosts
-const float baseNoise = 0.185;
+const float baseNoise = 0.09;
 const float R = 10.;  // space resolution = kernel radius
 const float T = 10.;  // time resolution = number of divisions per unit time
 const mat4    betaLen = mat4( 2., 3., 1., 2., 3., 1., 2., 3., 1., v0, v0 );  // kernel ring number
@@ -89,7 +89,7 @@ const mat4      beta2 = mat4( 0., 3./4., 0., 0., 3./4., 0., 0., 3./4., 0., v0, v
 const mat4         mu = mat4( 0.16, 0.22, 0.28, 0.16, 0.22, 0.28, 0.16, 0.22, 0.28, v0, v0 );  // growth center
 const mat4      sigma = mat4( 0.025, 0.042, 0.025, 0.025, 0.042, 0.025, 0.025, 0.042, 0.025, v1, v1 );  // growth width
 const mat4        eta = mat4( 0.666, 0.666, 0.666, 0.666, 0.666, 0.666, 0.666, 0.666, 0.666, v0, v0 );  // growth strength
-const mat4       relR = mat4( 1., 1., 1., 1., 1., 1., 1., 1., 1., v0, v0 );  // relative kernel radius
+const mat4       relR = mat4( 1., 1., 1., 1., 1., 1., 1., 1., 1., v1, v1 );  // relative kernel radius
 const mat4        src = mat4( 0., 0., 0., 1., 1., 1., 2., 2., 2., v0, v0 );  // source channels
 const mat4        dst = mat4( 0., 0., 0., 1., 1., 1., 2., 2., 2., v0, v0 );  // destination channels
 #endif
@@ -216,8 +216,8 @@ const ivec4 dst0 = ivec4(dst[0]), dst1 = ivec4(dst[1]), dst2 = ivec4(dst[2]), ds
 
 vec2 hash( vec2 p )
 {
-	p = vec2( dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)) );
-	return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+    p = vec2( dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)) );
+    return -1.0 + 2.0*fract(sin(p)*43758.5453123);
 }
 
 float noise( in vec2 p )
@@ -225,14 +225,14 @@ float noise( in vec2 p )
     const float K1 = 0.366025404; // (sqrt(3)-1)/2;
     const float K2 = 0.211324865; // (3-sqrt(3))/6;
 
-	vec2  i = floor( p + (p.x+p.y)*K1 );
+    vec2  i = floor( p + (p.x+p.y)*K1 );
     vec2  a = p - i + (i.x+i.y)*K2;
     float m = step(a.y,a.x); 
     vec2  o = vec2(m,1.0-m);
     vec2  b = a - o + K2;
-	vec2  c = a - 1.0 + 2.0*K2;
+    vec2  c = a - 1.0 + 2.0*K2;
     vec3  h = max( 0.5-vec3(dot(a,a), dot(b,b), dot(c,c) ), 0.0 );
-	vec3  n = h*h*h*h*vec3( dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1.0)));
+    vec3  n = h*h*h*h*vec3( dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1.0)));
     return dot( n, vec3(70.0) );
 }
 
