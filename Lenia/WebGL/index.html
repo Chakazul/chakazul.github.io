@@ -40,8 +40,9 @@ textbox.innerHTML = "initializing global...";
 
 const url = new URL(window.location.href);
 const isMobile = checkMobile();
-const shadertoyFilename = "./shadertoy/" + getParam("file", "string", "lenia4param", "lenia4param") + ".glsl";  // error line number - 31
-var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
+const filename = getParam("file", "string", "lenia4param", "lenia4param");
+const shadertoyFilename = "./shadertoy/" + filename + ".glsl";  // error line number - 31
+var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 10); //Math.floor(Math.random() * 9);
 var initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
 //const targetFPS = 60;
 const stepsPerFrame = getParam("step", "int", 1, 1);
@@ -183,6 +184,18 @@ function setSpecies(species) {
 		gl.uniformMatrix4fv(params.sigma,   false, [0.062, 0.1495, 0.0488, 0.0555, 0.0763, 0.0333, 0.0724, 0.1345, 0.1807, 0.1413, 0.1136, 0.0701, 0.1038, 0.1185, 0.0571, 1.] );  // growth width
 		gl.uniformMatrix4fv(params.eta,     false, [0.076, 0.562, 0.548, 0.306, 0.568, 0.598, 0.396, 0.298, 0.59, 0.396, 0.156, 0.426, 0.558, 0.388, 0.132, 0.] );  // growth strength
 		gl.uniformMatrix4fv(params.relR,    false, [0.58, 0.68, 0.5, 0.87, 1.0, 1.0, 0.88, 0.88, 0.86, 0.98, 0.63, 0.53, 1.0, 0.89, 0.59, 1.] );  // relative kernel radius
+		break;
+		case 9:
+        speciesName = "F45LYC cloud";
+		gl.uniform1f(params.baseNoise, 0.09);
+        gl.uniformMatrix4fv(params.betaLen, false, [3., 2., 1., 3., 2., 1., 3., 2., 1., 2., 1., 1., 2., 2., 1., 0.] );  // kernel ring number
+        gl.uniformMatrix4fv(params.beta0,   false, [1., 2./3., 1., 1., 5./12., 1., 1., 1./6., 1., 1./6., 1., 1., 7./12., 1./4., 1., 0.] );  // kernel ring heights
+        gl.uniformMatrix4fv(params.beta1,   false, [1./4., 1., 0., 1./12., 1., 0., 1./12., 1., 0., 1., 0., 0., 1., 1., 0., 0.] );
+        gl.uniformMatrix4fv(params.beta2,   false, [11./12., 0., 0., 2./3., 0., 0., 7./12., 0., 0., 0., 0., 0., 0., 0., 0., 0.] );
+        gl.uniformMatrix4fv(params.mu,      false, [0.151, 0.217, 0.249, 0.358, 0.243, 0.463, 0.145, 0.181, 0.31, 0.116, 0.326, 0.68, 0.276, 0.242, 0.119, 0.] );  // growth center
+        gl.uniformMatrix4fv(params.sigma,   false, [0.0176, 0.0693, 0.0606, 0.025, 0.0752, 0.112, 0.01, 0.0844, 0.0847, 0.0602, 0.087, 0.1145, 0.0671, 0.035, 0.0922, 1.] );  // growth width
+        gl.uniformMatrix4fv(params.eta,     false, [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.] );  // growth strength
+        gl.uniformMatrix4fv(params.relR,    false, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.] );  // relative kernel radius
 		break;
 	}
 }
@@ -395,7 +408,9 @@ function runOnce() {
         gl.drawArrays(gl.TRIANGLES, 0, 6);
         frame++;
 
-        textbox.innerHTML = width + "x" + height + " " + actualFPS.toFixed(1) + "fps" + "</br>" + speciesName;
+        var status = width + "x" + height + " " + actualFPS.toFixed(1) + "fps";
+        if (filename == "lenia4param") status += "</br>" + speciesName;
+        textbox.innerHTML = status;
     }
 
     window.requestAnimationFrame(runOnce);
@@ -450,7 +465,7 @@ function set_iMouse(e, sx, sy) {
 function onMouseDown(e) { isMouseDown = true;  set_iMouse(e, +1, +1); }
 function onMouseMove(e) { if (isMouseDown)     set_iMouse(e, +1, -1); }
 function onMouseUp  (e) { isMouseDown = false; set_iMouse(e, -1, -1); 
-	randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
+	randomSpecies = Math.floor(new Date().getSeconds() / 60 * 10); //Math.floor(Math.random() * 9);
 	initSpecies = getParam("species", "int", randomSpecies, randomSpecies);
 	setSpecies(initSpecies);
 }
