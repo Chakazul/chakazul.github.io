@@ -157,34 +157,6 @@ float reduceKernels(in mat4 m, in ivec4 ch) {
 }
 
 // add to weighted sum and total for given cell, return cell
-/*
-vec3 addSum(in vec2 xy, 
-    in mat4[speciesNum] weight, inout mat4[speciesNum] sum, inout mat4[speciesNum] total) {
-    // get neighbor cell, unpack species and value
-    vec2 uv = xy / iResolution.xy;
-    vec3 texel = texture(iChannel0, uv).rgb;
-    ivec3 species = unpackSpecies(texel);
-    vec3 value = unpackValue(texel);
-
-    // get value according to species
-    vec3 is_a = vec3(equal(species, ivec3(species_a)));
-    vec3 is_b = vec3(equal(species, ivec3(species_b)));
-    vec3 value_a = value * is_a;
-    vec3 value_b = value * is_b;
-
-    // map values to kernels
-    mat4 valueK_a = mat4( mapKernels(value_a, src0_a), mapKernels(value_a, src1_a), mapKernels(value_a, src2_a), mapKernels(value_a, src3_a) );
-    mat4 valueK_b = mat4( mapKernels(value_b, src0_b), mapKernels(value_b, src1_b), mapKernels(value_b, src2_b), mapKernels(value_b, src3_b) );
-
-    // add to weighted sum and total according to species
-    sum_a += mult(valueK_a, weight_a);
-    sum_b += mult(valueK_b, weight_b);
-    total_a += weight_a;
-    total_b += weight_b;
-    return texel;
-}
-*/
-
 vec3 addSum(in vec2 p, in vec2 d, in mat4[speciesNum] weight, inout mat4[speciesNum] sum, inout mat4[speciesNum] total) {
     vec2 uv = mod((p + d * samplingDist) / iResolution.xy, 1.);
     vec3 texel = texture(iChannel0, uv).rgb;
@@ -261,9 +233,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
 		float speciesNoise = clamp((noise(fragCoord/R/samplingDist/8. + fract(iDate.w)*10.) + 1.) / 1.5, 0., 0.99);
         species = ivec3(speciesNoise * float(speciesNum+1) );
         vec3 valueNoise = vec3( 
-            noise(fragCoord/R/samplingDist + fract(iDate.w)*100.), 
-            noise(fragCoord/R/samplingDist + sin(iDate.w)*100.), 
-            noise(fragCoord/R/samplingDist + cos(iDate.w)*100.) );
+            noise(fragCoord/R/samplingDist/2. + fract(iDate.w)*100.), 
+            noise(fragCoord/R/samplingDist/2. + sin(iDate.w)*100.), 
+            noise(fragCoord/R/samplingDist/2. + cos(iDate.w)*100.) );
         value = clamp(genomes[0].baseNoise + valueNoise, 0., 1.);
     }
 

@@ -22,7 +22,7 @@ const vec4 v1 = vec4(1.);
 const mat4 m0 = mat4(v0, v0, v0, v0);
 const mat4 m1 = mat4(v1, v1, v1, v1);
 
-const float R = 10.;  // space resolution = kernel radius
+const float R = 12.;  // space resolution = kernel radius
 uniform float T;  // time resolution = number of divisions per unit time
 uniform float baseNoise;
 uniform mat4 betaLen;  // kernel ring number
@@ -202,9 +202,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     if (iFrame == 0 || iMouse.z > 0.)
     {
         vec3 noiseRGB = vec3(
-            noise(fragCoord/R/samplingDist + mod(iDate.w,1.)*100.),
-            noise(fragCoord/R/samplingDist + sin(iDate.w)*100.),
-            noise(fragCoord/R/samplingDist + cos(iDate.w)*100.) );
+            noise(fragCoord/R/2./samplingDist + mod(iDate.w,1.)*100.),
+            noise(fragCoord/R/2./samplingDist + sin(iDate.w)*100.),
+            noise(fragCoord/R/2./samplingDist + cos(iDate.w)*100.) );
         rgb = baseNoise + noiseRGB;
     }
 
