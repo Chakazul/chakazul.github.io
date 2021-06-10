@@ -4,7 +4,7 @@ precision highp float;
 
 #define useHigherDigitsForSpecies 1
 
-const int speciesNum = 1;
+const int speciesNum = 2;
 
 uniform vec4      iMouse;                // mouse pixel coords. xy: current (if MLB down), zw: click
 uniform sampler2D iChannel0;             // input channel 0

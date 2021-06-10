@@ -10,7 +10,7 @@
 #define useHigherDigitsForSpecies 1
 #define testRandomTexel 0
 
-const int speciesNum = 1;  // number of coexist species
+const int speciesNum = 2;  // number of coexist species
 const float maxR = 12.;  // space resolution = kernel radius
 const float samplingDist = 1.;
 // change samplingDist to other numbers (with nearest or linear filter in Buffer A) for funny effects :)
@@ -150,7 +150,7 @@ vec3 randomTexel(in vec2 p) {
             simplexNoise(p2 + sin(iDate.w) * vec2(10.1, 10.2)), 
             simplexNoise(p2 + sin(iDate.w) * vec2(10.3, -10.4)), 
             simplexNoise(p2 + sin(iDate.w) * vec2(-10.5, 0.6)) );
-        value = clamp(g.baseNoise + valueNoise, 0., 1.);
+        value = clamp(g.baseNoise + 0.01 + valueNoise, 0., 1.);
     } else {
         value = vec3(0., 0., 0.);
     }
@@ -291,7 +291,6 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
         }
     }
 
-    /*
     // unpack current cell
     //ivec3 species = unpackSpecies(texel);
     vec3 value = unpackValue(texel);
@@ -329,8 +328,8 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
 
     value = clamp(finalGrowth + value, 0., 1.);
     ivec3 species = finalSpecies;
-    */
 
+    /*
     mat4 avg = sum[0] / (total[0] + EPSILON);    // avoid divided by zero
 
 	ivec3 species = unpackSpecies(texel);
@@ -341,6 +340,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
     mat4 growthK = mult(g.eta, bell(avg, g.mu, g.sigma) * 2. - 1.) / g.T;
     vec3 growth = reduceKernels(growthK);
     value = clamp(growth + value, 0., 1.);
+    */
 
 
     // debug: uncomment to show list of kernels
