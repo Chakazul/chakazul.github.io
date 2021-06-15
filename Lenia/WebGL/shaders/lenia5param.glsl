@@ -8,11 +8,11 @@
 #define PI 3.141592653589
 #define mult matrixCompMult
 
-#define usePackSpecies 1
+#define usePackSpecies 0
 #define usePackSpeciesHigher 1
-#define useDecideSpecies 1
+#define useDecideSpecies 0
 #define use3RingKernels 0
-#define useEitherGradient 0
+#define useEitherGradient 1
 #define testRandomTexel 0
 #define testDrawKernels 0
 #define testRadialCoord 0
