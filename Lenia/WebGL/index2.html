@@ -3,49 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <title>Lenia in WebGL</title>
-<!--
-code borrowed from 
-basic code template:
-    github.com/tmngo/smoothlife-shader/
-    github.com/rreusser/regl-smooth-life/
-optimization:
-    github.com/benpm/webgl-cellular-automata/
-shadertoy emulation:
-    github.com/alexjc/shadertoy-render/
-    github.com/xbmc/visualization.shadertoy/
-    shadertoyunofficial.wordpress.com/2016/07/20/special-shadertoy-features/
--->
 <style>
-HTML, BODY { padding:0; margin:0; width:100%; height:100%; overflow:hidden; }
+HTML, BODY { padding:0px; margin:0px; width:100%; height:100%; overflow:hidden; }
+#glCanvas, #jsCanvas { position:absolute; left:0px; top:0px; }
 #glCanvas { width:100%; height:100%; overflow:hidden; image-rendering:pixelated; }
-#showText { position:absolute; left:10px; top:10px; padding:5px; opacity:0.75; background-color:#668; color:#eef; font:0.7em Courier New; }
+#jsCanvas { pointer-events:none; }
+#infobox { position:absolute; left:10px; top:10px; padding:5px; margin:0; opacity:0.75; background-color:#668; color:#eef; font:0.7em Courier New; }
 </style>
 </head>
 
 <body>
 <canvas id="glCanvas" width="640" height="360"></canvas>
+<canvas id="jsCanvas"></canvas>
 <!--shadertoy at mac 840x472, at win 640x360-->
-<div id="showText" onclick="this.style.display='none';">initializing...</div>
+<pre id="infobox" onclick="this.style.display='none';">initializing...</pre>
 
-<script type="text/javascript" src="utils.js"></script>
+<script type="text/javascript" src="utils2.js"></script>
 <script type="text/javascript">
 "use strict";
 
-const canvas = document.getElementById("glCanvas");
-const textbox = document.getElementById("showText");
-textbox.innerHTML = "initializing global...";
-const gl = canvas.getContext("webgl2", { antialias:false });
+const glCanvas = document.getElementById("glCanvas");
+const jsCanvas = document.getElementById("jsCanvas");
+const gl = glCanvas.getContext("webgl2", { antialias:false });
+const ctx = jsCanvas.getContext('2d');
+
+const infobox = document.getElementById("infobox");
+infobox.innerHTML = "initializing global...";
 
 const url = new URL(window.location.href);  // url params: ?file=filename&species=7&step=1&resize=1&pixel=5
 const isMobile = checkMobile();
 
-const shadertoyFilename = "./shadertoy/" + getParam("file", "string", "lenia5param", "lenia5param") + ".glsl";  // error line number - 31
-const drawFilename = "./shadertoy/lenia5draw.glsl";
-//const drawFilename = "./fragment_draw.glsl";
 const speciesNum = 2;
-var speciesList = [2, 1, 7];
-var radiusList = [12, 9, 9];
-var timeList = [2, 2, 2];
+const speciesList = [2, 1, 5];
+const radiusList = [12, 9, 9];
+const timeList = [2, 2, 2];
+const maxR = Math.max.apply(Math, radiusList);
 //var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
 //var speciesList = getParam("species", "int", randomSpecies, randomSpecies);  // setSpecies(0..8)
 
@@ -58,13 +50,23 @@ const pixelSize = useLogicalPixel ? getParam("pixel", "int", 1, 5) : 1/(window.d
 // https://www.khronos.org/webgl/wiki/HandlingHighDPI
 // https://mydevice.io
 
+const shaderFolder = "./shaders/";
+const shaderExt = ".glsl";
+const vertexFilename = "_vertex";
+const fragmentTemplateFilename = "_fragment";
+const contentFilename = getParam("file", "string", "lenia5param", "lenia5param");  // error line number - 31
+
+const fragmentConstants =
+"const int speciesNum = " + speciesNum + ";\n" +
+"const float maxR = " + maxR.toFixed(1) + ";";
+
 const glNotFoundRedirect = "https://caniuse.com/webgl2";
-const canvasFilter = gl.LINEAR;  // gl.NEAREST or gl.LINEAR
-const canvasWrap = gl.REPEAT;  // gl.REPEAT or gl.CLAMP_TO_EDGE
+const canvasFilter = gl.NEAREST;  // gl.NEAREST or gl.LINEAR
+const canvasWrap = gl.CLAMP_TO_EDGE;  // gl.REPEAT or gl.CLAMP_TO_EDGE
 
 var width, height;
-var simProgram, drawProgram;
-var simGlobals, drawGlobals, genomes;
+var simProgram, visProgram;
+var simGlobals, simOptions, visGlobals, genomes;
 var framebufferA, framebufferB, textureA, textureB;
 var frameFlip = false;
 
@@ -76,6 +78,11 @@ var lastFPSGen;
 var lastFPSTime;
 var actualFPS = 0;
 var speciesName = Array(speciesNum);
+
+var useGradient = 0;  // 0:none, 1:linear, 2:radial
+var gradientVar = 2;  // 0:mu, 1:sigma, 2:eta
+var gradientMax = 1;
+var gradientX = 12, gradientY = 11;
 
 window.onload = init;
 
@@ -107,7 +114,7 @@ function setSpecies(speciesList) {
             gl.uniformMatrix4fv(g.beta1,   false, [0., 0., 1./4., 1., 0., 1., 0., 0., 0., 1., 1., 11./12., 0., 1., 0., 0.] );
             gl.uniformMatrix4fv(g.beta2,   false, [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.mu,      false, [0.175, 0.382, 0.231, 0.123, 0.398, 0.224, 0.193, 0.512, 0.427, 0.286, 0.508, 0.372, 0.196, 0.371, 0.246, 0.] );  // growth center
-            gl.uniformMatrix4fv(g.sigma,   false, [0.0682, 0.1568, 0.034, 0.0484, 0.0816, 0.0376, 0.063, 0.1189, 0.1827, 0.1422, 0.1079, 0.0724, 0.0934, 0.1107, 0.0672, 1.] );  // growth width
+            gl.uniformMatrix4fv(g.sigma,   false, [0.0682, 0.1568, 0.034, 0.0484, 0.0816, 0.0376, 0.063, 0.1189, 0.1827, 0.1422, 0.1079, 0.0724, 0.0934, 0.1107, 0.0672, 1.] );  // growth width  // lower reproduction
             gl.uniformMatrix4fv(g.eta,     false, [0.138, 0.544, 0.326, 0.256, 0.544, 0.544, 0.442, 0.198, 0.58, 0.282, 0.396, 0.618, 0.382, 0.374, 0.376, 0.] );  // growth strength
             gl.uniformMatrix4fv(g.relR,    false, [0.78, 0.56, 0.6, 0.84, 0.76, 0.82, 1.0, 0.68, 0.99, 0.72, 0.56, 0.65, 0.85, 0.54, 0.82, 1.] );  // relative kernel radius
             //gl.uniformMatrix4fv(g.sigma,   false, 0.0682, 0.1568, 0.034, 0.0484, 0.0816, 0.0376, 0.063, 0.1189, 0.1827, 0.1422, 0.1079, 0.0724, 0.0934, 0.1107, 0.0712, 1.] );  // growth width
@@ -120,10 +127,11 @@ function setSpecies(speciesList) {
             gl.uniformMatrix4fv(g.beta1,   false, [0., 0., 0., 1., 0., 1., 0., 0., 0., 0., 0., 11./12., 1., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.beta2,   false, [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.mu,      false, [0.118, 0.174, 0.244, 0.114, 0.374, 0.222, 0.306, 0.449, 0.498, 0.295, 0.43, 0.353, 0.238, 0.39, 0.1, 0.] );  // growth center
-            gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0954, 0.0995, 0.1114, 0.0601, 1.] );  // growth width
-            gl.uniformMatrix4fv(g.eta,     false, [0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength
+            gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0754, 0.0995, 0.1144, 0.0601, 1.] );  // growth width
+            gl.uniformMatrix4fv(g.eta,     false, [0.125, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.800, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength  // higher cilia production
             gl.uniformMatrix4fv(g.relR,    false, [0.85, 0.61, 0.5, 0.81, 0.85, 0.93, 0.88, 0.74, 0.97, 0.92, 0.56, 0.56, 0.95, 0.59, 0.58, 1.] );  // relative kernel radius
-            //gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0754, 0.0995, 0.1144, 0.0601, 1.] );  // growth width
+            //gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0954, 0.0995, 0.1114, 0.0601, 1.] );  // growth width  // electric circuit
+            //gl.uniformMatrix4fv(g.eta,     false, [0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength
             break;
             case 3:
             speciesName[s] = "tri-color ghosts";
@@ -175,7 +183,7 @@ function setSpecies(speciesList) {
             break;
             case 7:
             speciesName[s] = "GDNQYX variety";  // Tessellatium (stable)";
-            gl.uniform1f(g.baseNoise, 0.13);
+            gl.uniform1f(g.baseNoise, 0.11);
             gl.uniformMatrix4fv(g.betaLen, false, [1., 1., 2., 2., 1., 2., 1., 1., 1., 2., 2., 2., 1., 2., 1., 0.] );  // kernel ring number
             gl.uniformMatrix4fv(g.beta0,   false, [1., 1., 1., 0., 1., 5./6., 1., 1., 1., 11./12., 3./4., 1., 1., 1./6., 1., 0.] );  // kernel ring heights
             gl.uniformMatrix4fv(g.beta1,   false, [0., 0., 1./4., 1., 0., 1., 0., 0., 0., 1., 1., 11./12., 0., 1., 0., 0.] );
@@ -215,7 +223,7 @@ function setSpecies(speciesList) {
 }
 
 function init() {
-    textbox.innerHTML = "initializing canvas...";
+    infobox.innerHTML = "initializing canvas...";
     if (!gl) {
         if (confirm('Could not initialize WebGL 2.0, want to see which browsers support it?'))
             window.location.href = glNotFoundRedirect;
@@ -223,45 +231,37 @@ function init() {
     }
     gl.disable(gl.DEPTH_TEST);
 
-    width = canvas.width;
-    height = canvas.height;
+    width = glCanvas.width;
+    height = glCanvas.height;
 
-    canvas.onmousedown = onMouseDown;
-    canvas.onmousemove = onMouseMove;
-    canvas.onmouseup   = onMouseUp;
-    if (window.PointerEvent) {
-        canvas.onpointerdown = onMouseDown;
-        canvas.onpointermove = onMouseMove;
-        canvas.onpointerup   = onMouseUp;
-    } else {
-        canvas.ontouchstart = onMouseDown;
-        canvas.ontouchmove  = onMouseMove;
-        canvas.ontouchend   = onMouseUp;
-    }
+    glCanvas.onmousedown = onMouseDown;
+    glCanvas.onmousemove = onMouseMove;
+    glCanvas.onmouseup   = onMouseUp;
 
     if (useWindowSize)
         window.onresize = onResize;
-    window.onkeypress = onKeyPress;
+    window.onkeydown = onKeyDown;
 
-    textbox.innerHTML = "loading shader files...";
-    loadShaderFiles(["./vertex.glsl", "./fragment_sim.glsl", drawFilename, shadertoyFilename],  // "./fragment_draw.glsl"
+    infobox.innerHTML = "loading shader files...";
+    loadShaderFiles([vertexFilename, fragmentTemplateFilename, contentFilename],
         initWebGL);
 }
 
 function initWebGL(shaderSources) {
-    textbox.innerHTML = "initializing simulation shader program...";
+    infobox.innerHTML = "initializing simulation shader program...";
     var vertexSource = shaderSources[0];
-    var simFragmentTemplate = shaderSources[1];
-    var drawFragmentSource = shaderSources[2];
-    var shadertoySource = shaderSources[3];
-    var simFragmentSource = simFragmentTemplate
-        .replace("/* Replace shader code here */", shadertoySource)
-    //console.log(fragmentShaderSource);
+    var fragmentTemplate = shaderSources[1];
+    var contentSource = shaderSources[2];
+
+    var fragmentSource = fragmentTemplate
+        .replace("/* Replace shader content here */", fragmentConstants + contentSource);
+    var simFragmentSource = fragmentSource.replace("mainFunction", "mainBuffer");
+    var visFragmentSource = fragmentSource.replace("mainFunction", "mainImage");
 
     simProgram = createProgramFromSources(gl, vertexSource, simFragmentSource);
     gl.useProgram(simProgram);
 
-    textbox.innerHTML = "initializing simulation uniforms...";
+    infobox.innerHTML = "initializing simulation uniforms...";
     simGlobals = {
         iResolution:        gl.getUniformLocation(simProgram, "iResolution"),
         iTime:              gl.getUniformLocation(simProgram, "iTime"),
@@ -270,12 +270,20 @@ function initWebGL(shaderSources) {
         iChannelTime:       gl.getUniformLocation(simProgram, "iChannelTime"),
         iChannelResolution: gl.getUniformLocation(simProgram, "iChannelResolution"),
         iMouse:             gl.getUniformLocation(simProgram, "iMouse"),
+        iMouseToggle:       gl.getUniformLocation(simProgram, "iMouseToggle"),  // not in shadertoy
         iChannel0:          gl.getUniformLocation(simProgram, "iChannel0"),
         iChannel1:          gl.getUniformLocation(simProgram, "iChannel1"),
         iChannel2:          gl.getUniformLocation(simProgram, "iChannel2"),
         iChannel3:          gl.getUniformLocation(simProgram, "iChannel3"),
         iDate:              gl.getUniformLocation(simProgram, "iDate"),
         iFrameRate:         gl.getUniformLocation(simProgram, "iFrameRate")
+    };
+    simOptions = {
+        useGradient: gl.getUniformLocation(simProgram, "useGradient"),
+        gradientVar: gl.getUniformLocation(simProgram, "gradientVar"),
+        gradientMax: gl.getUniformLocation(simProgram, "gradientMax"),
+        gradientIdx: gl.getUniformLocation(simProgram, "gradientIdx"),
+        customNoise: gl.getUniformLocation(simProgram, "customNoise")
     };
     if (speciesNum > 0) {
         genomes = [];
@@ -297,7 +305,7 @@ function initWebGL(shaderSources) {
         }
     }
 
-    textbox.innerHTML = "initializing vertex shader...";
+    infobox.innerHTML = "initializing vertex shader...";
     var vertexArray = new Float32Array([
         -1,-1, +1,-1, -1,+1,  // first triangle
         -1,+1, +1,-1, +1,+1   // second triangle
@@ -311,17 +319,19 @@ function initWebGL(shaderSources) {
     gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(a_position);
 
-    textbox.innerHTML = "initializing drawing shader program...";
-    drawProgram = createProgramFromSources(gl, vertexSource, drawFragmentSource);
-    gl.useProgram(drawProgram);
+    infobox.innerHTML = "initializing visualization shader program...";
+    visProgram = createProgramFromSources(gl, vertexSource, visFragmentSource);
+    gl.useProgram(visProgram);
 
-    textbox.innerHTML = "initializing drawing uniforms...";
-    drawGlobals = {
-        iMouse:             gl.getUniformLocation(drawProgram, "iMouse"),
-        iChannel0:          gl.getUniformLocation(drawProgram, "iChannel0")
+    infobox.innerHTML = "initializing visualization uniforms...";
+    visGlobals = {
+        iResolution:        gl.getUniformLocation(visProgram, "iResolution"),
+        iMouse:             gl.getUniformLocation(visProgram, "iMouse"),
+        iMouseToggle:       gl.getUniformLocation(visProgram, "iMouseToggle"),  // not in shadertoy
+        iChannel0:          gl.getUniformLocation(visProgram, "iChannel0")
     };
 
-    textbox.innerHTML = "initializing uniform values...";
+    infobox.innerHTML = "initializing uniform values...";
     resetTime();
     initGlobals();
     setGlobals();
@@ -329,8 +339,8 @@ function initWebGL(shaderSources) {
 
     onResize();
 
-    textbox.innerHTML = "finish initializing";
-    runOnce();
+    infobox.innerHTML = "finish initializing";
+    mainLoop();
 }
 
 function makeTexture(gl, width, height, data) {
@@ -377,10 +387,12 @@ function initGlobals() {
     gl.uniform1i(simGlobals.iChannel3, 3);
     gl.uniform1f(simGlobals.iSampleRate, 44100.0);
     gl.uniform4f(simGlobals.iMouse, 0.0, 0.0, 0.0, 0.0);
+    gl.uniform1i(simGlobals.iMouseToggle, 0);
 
-    gl.useProgram(drawProgram);
-    gl.uniform1i(drawGlobals.iChannel0, 0);
-    gl.uniform4f(drawGlobals.iMouse, 0.0, 0.0, 0.0, 0.0);
+    gl.useProgram(visProgram);
+    gl.uniform1i(visGlobals.iChannel0, 0);
+    gl.uniform4f(visGlobals.iMouse, 0.0, 0.0, 0.0, 0.0);
+    gl.uniform1i(visGlobals.iMouseToggle, 0);
 }
 
 function setGlobals() {
@@ -411,51 +423,120 @@ function setGlobals() {
     gl.uniform4f(simGlobals.iDate, year, month_minus1, day_minus1, seconds);
     gl.uniform1f(simGlobals.iFrameRate, actualFPS);
 
+    gl.uniform1i(simOptions.useGradient, useGradient);
+    gl.uniform1i(simOptions.gradientVar, gradientVar);
+    gl.uniform1f(simOptions.gradientMax, gradientMax);
+    gl.uniform2i(simOptions.gradientIdx, gradientX, gradientY);
+
     lastTime = now;
 }
 
-function runOnce() {
-    if (!pause) {
-        gl.useProgram(simProgram);
-        setGlobals();
+function mainLoop() {
+    if (!pause) renderFrame();
 
-        for (var step = 0; step < stepsPerFrame; step++) {
-            frameFlip = !frameFlip;
-            // read from frame (as texture), calculate and render to alternate frame (as framebuffer)
-            gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureA : textureB);
-            gl.bindFramebuffer(gl.FRAMEBUFFER, frameFlip ? framebufferB : framebufferA);
-            gl.drawArrays(gl.TRIANGLES, 0, 6);
-            gen++;
-        }
+    displayInfo();
+    drawCoords();
 
-        // render the latest frame (as texture) to canvas (as framebuffer)
-        gl.useProgram(drawProgram);
-        gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureB : textureA);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    window.requestAnimationFrame(mainLoop);
+    //window.setTimeout(() => { window.requestAnimationFrame(mainLoop) }, 1000/targetFPS);
+}
+
+function renderFrame() {
+    gl.useProgram(simProgram);
+    setGlobals();
+
+    for (var step = 0; step < stepsPerFrame; step++) {
+        frameFlip = !frameFlip;
+        // read from frame (as texture), calculate and render to alternate frame (as framebuffer)
+        gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureA : textureB);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, frameFlip ? framebufferB : framebufferA);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
-        frame++;
-
-        textbox.innerHTML = width + "x" + height + " " + actualFPS.toFixed(1) + "fps" + "</br>" + speciesName.join("</br>");
+        gen++;
     }
 
-    window.requestAnimationFrame(runOnce);
-    //window.setTimeout(() => { window.requestAnimationFrame(runOnce) }, 1000/targetFPS);
+    // render the latest frame (as texture) to canvas (as framebuffer)
+    gl.useProgram(visProgram);
+    gl.bindTexture(gl.TEXTURE_2D, frameFlip ? textureB : textureA);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    frame++;
+}
+
+function displayInfo() {
+    var gene = gl.getUniform(simProgram, [genomes[0].mu, genomes[0].sigma, genomes[0].eta][gradientVar]);
+    var geneName = ["mu", "sigma", "eta"][gradientVar];
+    var xName = ["", "x", "r"][useGradient];
+    var yName = ["", "y", "&theta;"][useGradient];
+    var xIdx = gradientX == -1 ? " -" : (gradientX < 10 ? " " : "") + gradientX;
+    var yIdx = gradientY == -1 ? " -" : (gradientY < 10 ? " " : "") + gradientY;
+    var x = isMouseToggle ? mouseDragX/width : mouseHoverX/width;
+    var y = isMouseToggle ? mouseDragY/height : mouseHoverY/height;
+    if (useGradient == 2) {
+        x -= 0.5;  y -= 0.5;
+        [x, y] = [ Math.sqrt(x*x+y*y) * 1.75, Math.atan2(y, x)/2./Math.PI + 0.5 ];
+    }
+    x = x * gradientMax;  y = y * gradientMax;
+    infobox.innerHTML = 
+        width + "x" + height + " " + actualFPS.toFixed(1) + "fps\n" + 
+        (useGradient > 0 ? 
+            ["","linear","radial"][useGradient]+" gradient: " + geneName + "\n" +
+            "kernel:  (" +
+                xName + ": " + xIdx + ", " + yName + ": " + yIdx + 
+            ")\n" +
+            "current: (" + 
+                (gradientX==-1 ? "    -, " : gene[gradientX].toFixed(3) + ", ") + (gradientY==-1 ? "    -" : gene[gradientY].toFixed(3)) + 
+            ")\n" +
+            (isMouseToggle ? "ZOOMED:  " : "hover:   ") + "(" +
+                (gradientX==-1 ? "    -, " : x.toFixed(3) + ", ") + (gradientY==-1 ? "    -" : y.toFixed(3)) + 
+            ")\n"
+        : "") +
+        speciesName.join("\n");
+}
+
+function drawCoords() {
+    var w = width * pixelSize;
+    var h = height * pixelSize;
+    var x = isMouseToggle ? mouseDragX * pixelSize : mouseHoverX * pixelSize;
+    var y = isMouseToggle ? h - mouseDragY * pixelSize : h - mouseHoverY * pixelSize;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = "white";
+    if (!isMouseToggle) {
+        if (useGradient == 1) {
+            ctx.beginPath();  ctx.moveTo(0, y);  ctx.lineTo(w, y);  ctx.stroke();
+            ctx.beginPath();  ctx.moveTo(x, 0);  ctx.lineTo(x, h);  ctx.stroke();
+        } else if (useGradient == 2) {
+            var u = x - w/2, v = y - h/2;
+            var r = Math.sqrt(u*u + v*v);
+            var a = Math.sqrt(u*u + v*v*w*w/h/h), b = a*h/w;  // solve ellipse (u^2/w^2 + v^2/h^2 = 1) and axis ratio (b/a = h/w)
+            var rwh = Math.sqrt(w*w + h*h);
+            ctx.beginPath();
+            ctx.ellipse(w/2, h/2, a, b, 0, 0, 2*Math.PI);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(w/2, h/2);
+            ctx.lineTo(u / r * rwh + w/2, v / r * rwh + h/2);
+            ctx.stroke();
+            //ctx.arc(w/2, h/2, r, 0, 2*Math.PI);
+        }
+    }
 }
 
 function onResize(e) {
     if (!gl) return;
 
     if (useWindowSize) {
-        width = Math.floor(canvas.clientWidth / pixelSize);
-        height = Math.floor(canvas.clientHeight / pixelSize);
-        canvas.width = width;
-        canvas.height = height;
+        width = Math.floor(glCanvas.clientWidth / pixelSize);
+        height = Math.floor(glCanvas.clientHeight / pixelSize);
+        glCanvas.width = width;
+        glCanvas.height = height;
     } else {
-        width = canvas.width;
-        height = canvas.height;
-        canvas.style.width = Math.ceil(width * pixelSize) + "px";
-        canvas.style.height = Math.ceil(height * pixelSize) + "px";
+        width = glCanvas.width;
+        height = glCanvas.height;
+        glCanvas.style.width = Math.ceil(width * pixelSize) + "px";
+        glCanvas.style.height = Math.ceil(height * pixelSize) + "px";
     }
+    jsCanvas.width = glCanvas.clientWidth;
+    jsCanvas.height = glCanvas.clientHeight;
 
     //var newArray = new Uint8Array(width * height * 4);
     [textureA, framebufferA] = makeTexture(gl, width, height, null);  // makeRandomArray(newArray)
@@ -465,39 +546,110 @@ function onResize(e) {
 
     const ratio = 1.0;
     gl.useProgram(simProgram);
-    gl.uniform2f(simGlobals.iResolution, width, height);
+    gl.uniform3f(simGlobals.iResolution, width, height, ratio);
     gl.uniform3fv(simGlobals.iChannelResolution, [width,height,ratio, width,height,ratio, width,height,ratio, width,height,ratio]);
+
+    gl.useProgram(visProgram);
+    gl.uniform3f(visGlobals.iResolution, width, height, ratio);
 
     resetTime();
 }
 
-function onKeyPress(e) {
-    switch (e.key) {
-        case " ": pause = ! pause; break;
-    }
+function cycleInt(v, num, min=0) {
+    return (v - min + num) % num + min;
+}
+
+function opSetGradient(dV, dX, dY) {
+    var v = useGradient * 3 + gradientVar;  // 2, 3..5, 6..8
+    v = cycleInt(v + dV, 7, 2);
+    useGradient = Math.floor(v / 3);  gradientVar = v % 3;
+    gradientMax = [0.5, 0.2, 1][gradientVar];  //[0.5, 0.2, 1]
+    gradientX = cycleInt(gradientX + dX, 16, -1);  // -1, 0..14
+    gradientY = cycleInt(gradientY + dY, 16, -1);
+}
+
+function opRandomize(customNoise) {
+    gl.useProgram(simProgram);
+    gl.uniform1f(simOptions.customNoise, customNoise);
+    gen = 0;
+}
+
+function onKeyDown(e) {
     switch (e.keyCode) {
-        case 13: gen = 0; break;
+        case 32: /*space*/ pause = ! pause; break;
+        case 13: /*enter*/ opRandomize(-1); break;
+        case 33: /*pgup*/  opSetGradient(+1,  0,  0); break;
+        case 34: /*pgdn*/  opSetGradient(-1,  0,  0); break;
+        case 37: /*left*/  opSetGradient( 0, -1,  0); break;
+        case 38: /*up*/    opSetGradient( 0,  0, +1); break;
+        case 39: /*right*/ opSetGradient( 0, +1,  0); break;
+        case 40: /*down*/  opSetGradient( 0,  0, -1); break;
+    }
+
+    var ch = String.fromCharCode(e.keyCode);
+    switch (ch) {
+        case "1": case "2": case "3": case "4": case "5": 
+        case "6": case "7": case "8": case "9": 
+            opRandomize(parseInt(ch) * 0.02); break;
     }
 }
 
 var isMouseDown = false;
-function set_iMouse(e, sx, sy) {
-    var x = Math.floor(e.clientX / pixelSize);
-    var y = Math.floor(height - e.clientY / pixelSize);
-    gl.useProgram(simProgram);
-    gl.uniform4f(simGlobals.iMouse, x, y, sx*x, sy*y);
-    gl.useProgram(drawProgram);
-    gl.uniform4f(drawGlobals.iMouse, x, y, sx*x, sy*y);
+var isMouseToggle = false;
+var mouseHoverX = 0, mouseHoverY = 0;
+var mouseStartX = 0, mouseStartY = 0;
+var mouseDragX = 0, mouseDragY = 0;
+function setMouseHover(e, sx, sy) {
+    mouseHoverX = Math.floor(e.clientX / pixelSize);
+    mouseHoverY = Math.floor(height - e.clientY / pixelSize);
 }
-function onMouseDown(e) { isMouseDown = true;  set_iMouse(e, +1, +1); }
-function onMouseMove(e) { if (isMouseDown)     set_iMouse(e, +1, -1); }
-function onMouseUp  (e) { isMouseDown = false; set_iMouse(e, -1, -1); 
+function set_iMouse(e, sx, sy, isStart) {
+    mouseDragX = Math.floor(e.clientX / pixelSize);
+    mouseDragY = Math.floor(height - e.clientY / pixelSize);
+    if (isStart) {
+        mouseStartX = mouseDragX;
+        mouseStartY = mouseDragY;
+    }
+    gl.useProgram(simProgram);
+    gl.uniform4f(simGlobals.iMouse, mouseDragX, mouseDragY, sx*mouseStartX, sy*mouseStartY);
+    gl.uniform1i(simGlobals.iMouseToggle, isMouseToggle ? 1 : 0);
+    gl.useProgram(visProgram);
+    gl.uniform4f(visGlobals.iMouse, mouseDragX, mouseDragY, sx*mouseStartX, sy*mouseStartY);
+    gl.uniform1i(visGlobals.iMouseToggle, isMouseToggle ? 1 : 0);
+}
+function onMouseDown(e) {
+    isMouseDown = true;
+    isMouseToggle = !isMouseToggle;
+    set_iMouse(e, +1, +1, true);
+}
+function onMouseMove(e) {
+    if (isMouseDown)
+        set_iMouse(e, +1, -1, false);
+    else
+        setMouseHover(e);
+}
+function onMouseUp(e) { 
+    isMouseDown = false;
+    set_iMouse(e, -1, -1, false);
     //randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
     //speciesList = getParam("species", "int", randomSpecies, randomSpecies);
-    setSpecies(speciesList);
+    //setSpecies(speciesList);
 }
 
 </script>
 
 </body>
 </html>
+
+<!--
+code borrowed from 
+basic code template:
+    github.com/tmngo/smoothlife-shader/
+    github.com/rreusser/regl-smooth-life/
+optimization:
+    github.com/benpm/webgl-cellular-automata/
+shadertoy emulation:
+    github.com/alexjc/shadertoy-render/
+    github.com/xbmc/visualization.shadertoy/
+    shadertoyunofficial.wordpress.com/2016/07/20/special-shadertoy-features/
+-->
