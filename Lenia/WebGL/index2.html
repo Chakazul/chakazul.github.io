@@ -33,7 +33,7 @@ infobox.innerHTML = "initializing global...";
 const url = new URL(window.location.href);  // url params: ?file=filename&species=7&step=1&resize=1&pixel=5
 const isMobile = checkMobile();
 
-const speciesNum = 2;
+const speciesNum = 1;
 const speciesList = [2, 1, 5];
 const radiusList = [12, 9, 9];
 const timeList = [2, 2, 2];
@@ -79,8 +79,8 @@ var lastFPSTime;
 var actualFPS = 0;
 var speciesName = Array(speciesNum);
 
-var useGradient = 0;  // 0:none, 1:linear, 2:radial
-var gradientVar = 2;  // 0:mu, 1:sigma, 2:eta
+var useGradient = 1;  // 0:none, 1:linear, 2:radial
+var gradientVar = 0;  // 0:mu, 1:sigma, 2:eta
 var gradientMax = 1;
 var gradientX = 12, gradientY = 11;
 
