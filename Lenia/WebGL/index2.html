@@ -127,11 +127,11 @@ function setSpecies(speciesList) {
             gl.uniformMatrix4fv(g.beta1,   false, [0., 0., 0., 1., 0., 1., 0., 0., 0., 0., 0., 11./12., 1., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.beta2,   false, [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.mu,      false, [0.118, 0.174, 0.244, 0.114, 0.374, 0.222, 0.306, 0.449, 0.498, 0.295, 0.43, 0.353, 0.238, 0.39, 0.1, 0.] );  // growth center
-            gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0754, 0.0995, 0.1144, 0.0601, 1.] );  // growth width
-            gl.uniformMatrix4fv(g.eta,     false, [0.125, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.800, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength  // higher cilia production
+            gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0954, 0.0995, 0.1114, 0.0601, 1.] );  // growth width  // higher cilia production
+            gl.uniformMatrix4fv(g.eta,     false, [0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength
             gl.uniformMatrix4fv(g.relR,    false, [0.85, 0.61, 0.5, 0.81, 0.85, 0.93, 0.88, 0.74, 0.97, 0.92, 0.56, 0.56, 0.95, 0.59, 0.58, 1.] );  // relative kernel radius
-            //gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0954, 0.0995, 0.1114, 0.0601, 1.] );  // growth width  // electric circuit
-            //gl.uniformMatrix4fv(g.eta,     false, [0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength
+            //gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0754, 0.0995, 0.1144, 0.0601, 1.] );  // growth width
+            //gl.uniformMatrix4fv(g.eta,     false, [0.125, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.800, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength  // electric circuit
             break;
             case 3:
             speciesName[s] = "tri-color ghosts";
