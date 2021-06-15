@@ -83,8 +83,27 @@ mat4 bell(in mat4 x, in mat4 m, in mat4 s)
     return mat4( exp(v[0]), exp(v[1]), exp(v[2]), exp(v[3]) );
 }
 
+mat4 intEqual4(in mat4 m, in ivec4 v) {
+    return mat4( equal(ivec4(m[0]), v), equal(ivec4(m[1]), v), equal(ivec4(m[2]), v), equal(ivec4(m[3]), v) );
+}
+// get neighbor weights for given radius
+mat4 getWeight(in float r, in mat4 relR) {
+    if (r > 1.) return m0;
+    mat4 Br = betaLen / relR * r;  // scale radius by number of rings and relative radius
+    //mat4 height = mult(beta0, intEqual4(Br, iv0)) + mult(beta1, intEqual4(Br, iv1));  // + mult(beta2, floorEqual(Br, iv2))
+    ivec4 Br0 = ivec4(Br[0]), Br1 = ivec4(Br[1]), Br2 = ivec4(Br[2]), Br3 = ivec4(Br[3]);
+
+    // (Br==0 ? beta0 : 0) + (Br==1 ? beta1 : 0) + (Br==2 ? beta2 : 0)
+    mat4 height = mat4(
+        beta0[0] * vec4(equal(Br0, iv0)) + beta1[0] * vec4(equal(Br0, iv1)) + beta2[0] * vec4(equal(Br0, iv2)),
+        beta0[1] * vec4(equal(Br1, iv0)) + beta1[1] * vec4(equal(Br1, iv1)) + beta2[1] * vec4(equal(Br1, iv2)),
+        beta0[2] * vec4(equal(Br2, iv0)) + beta1[2] * vec4(equal(Br2, iv1)) + beta2[2] * vec4(equal(Br2, iv2)),
+        beta0[3] * vec4(equal(Br3, iv0)) + beta1[3] * vec4(equal(Br3, iv1)) + beta2[3] * vec4(equal(Br3, iv2)) );
+    mat4 mod1 = mat4( fract(Br[0]), fract(Br[1]), fract(Br[2]), fract(Br[3]) );
+    return mult(height, bell(mod1, kmu, ksigma));
+}
 // get neighbor weights (vectorized) for given radius
-mat4 getWeight(in float r, in mat4 relR)
+mat4 _getWeight(in float r, in mat4 relR)
 {
     mat4 Br = betaLen / relR * r;
     ivec4 Br0 = ivec4(Br[0]), Br1 = ivec4(Br[1]), Br2 = ivec4(Br[2]), Br3 = ivec4(Br[3]);
