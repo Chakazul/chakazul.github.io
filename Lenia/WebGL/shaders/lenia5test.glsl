@@ -318,6 +318,31 @@ void mainBuffer( out vec4 fragColor, in vec2 fragCoord ) {
         }
     }
 
+
+    mat4 avg_a = sum[0] / (total[0] + EPSILON);
+    mat4 avg_b = sum[1] / (total[1] + EPSILON);
+
+    // calculate growth (scaled by time step), reduce from kernels to destination channels
+    mat4 growthK_a = mult(genomes[0].eta, bell(avg_a, genomes[0].mu, genomes[0].sigma) * 2. - 1.) / genomes[0].T;
+    mat4 growthK_b = mult(genomes[1].eta, bell(avg_b, genomes[1].mu, genomes[1].sigma) * 2. - 1.) / genomes[1].T;
+    vec3 growth_a = reduceKernels(growthK_a);
+    vec3 growth_b = reduceKernels(growthK_b);
+
+    // unpack current cell
+    vec3 value = unpackValue(texel);
+
+    // decide which species to be next, by maximum growth (or other criteria?)
+    const vec3 aliveThreshold = vec3(-0.7);
+    ivec3 select_a = ivec3(greaterThan(growth_a, aliveThreshold)) * ivec3(greaterThanEqual(growth_a, growth_b));
+    ivec3 select_b = ivec3(greaterThan(growth_b, aliveThreshold)) * ivec3(greaterThan     (growth_b, growth_a));
+    ivec3 species = 0 * select_a + 1 * select_b;
+
+    // choose growth according to species, add to original value
+    vec3 is_none = vec3(equal(species, ivec3(-1)));
+    vec3 growth = growth_a * float(select_a) + growth_b * float(select_b) + vec3(-0.1) * is_none;
+    value = clamp(growth + value, 0., 1.);
+
+/*
     // unpack current cell
     //ivec3 species = unpackSpecies(texel);
     vec3 value = unpackValue(texel);
@@ -393,7 +418,7 @@ void mainBuffer( out vec4 fragColor, in vec2 fragCoord ) {
     value = clamp(growth + value, 0., 1.);
 
     #endif
-
+*/
     // randomize at start
     if (iFrame == 0)
         texel = randomTexel(fragCoord);
