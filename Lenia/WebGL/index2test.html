@@ -53,6 +53,7 @@ const shaderFolder = "./shaders/";
 const shaderExt = ".glsl";
 const vertexFilename = "_vertex";
 const fragmentTemplateFilename = "_fragment";
+const drawFragmentFilename = "_fragment_draw";
 const contentFilename = getParam("file", "string", "lenia5test", "lenia5test");  // error line number - 31
 
 const glNotFoundRedirect = "https://caniuse.com/webgl2";
@@ -244,7 +245,7 @@ function init() {
     window.onkeydown = onKeyDown;
 
     infobox.innerHTML = "loading shader files...";
-    loadShaderFiles([vertexFilename, fragmentTemplateFilename, contentFilename],
+    loadShaderFiles([vertexFilename, fragmentTemplateFilename, drawFragmentFilename, contentFilename],
         initWebGL);
 }
 
@@ -252,12 +253,13 @@ function initWebGL(shaderSources) {
     infobox.innerHTML = "initializing simulation shader program...";
     var vertexSource = shaderSources[0];
     var fragmentTemplate = shaderSources[1];
-    var contentSource = shaderSources[2];
+    var visFragmentSource = shaderSources[2];
+    var contentSource = shaderSources[3];
 
     var fragmentSource = fragmentTemplate
         .replace("/* Replace shader content here */", contentSource);
     var simFragmentSource = fragmentSource.replace("mainFunction", "mainBuffer");
-    var visFragmentSource = fragmentSource.replace("mainFunction", "mainImage");
+    //var visFragmentSource = fragmentSource.replace("mainFunction", "mainImage");
 
     simProgram = createProgramFromSources(gl, vertexSource, simFragmentSource);
     gl.useProgram(simProgram);
