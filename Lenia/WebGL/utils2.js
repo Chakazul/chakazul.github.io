@@ -90,10 +90,34 @@ function checkMobile() {
 	return check;
 }
 
-function getParam(name, type, desktopDefault, mobileDefault) {
-    var x = url.searchParams.get(name);
+function getParam(key, type, desktopDefault, mobileDefault) {
+    var x = url.searchParams.get(key);
     return x===null ? (isMobile ? mobileDefault : desktopDefault) : 
         type=="int" ? parseInt(x) : 
         type=="bool" ? x!="0" : x;
+}
+
+// https://gist.github.com/niyazpk/f8ac616f181f6042d1e0
+function setParam(params, key, value) {
+    // remove the hash part before operating on the uri
+    var i = params.indexOf('#');
+    var hash = i === -1 ? ''  : params.substr(i);
+         params = i === -1 ? params : params.substr(0, i);
+
+    var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+    var separator = params.indexOf('?') !== -1 ? "&" : "?";
+    if (params.match(re)) {
+        params = params.replace(re, '$1' + key + "=" + value + '$2');
+    } else {
+        params = params + separator + key + "=" + value;
+    }
+    return params + hash;  // finally append the hash as well
+}
+
+function reloadWithParam(paramDict) {
+    var params = window.location.search;
+    for (const [key, value] of Object.entries(paramDict))
+        params = setParam(params, key, value);
+    window.location.search = params;
 }
 

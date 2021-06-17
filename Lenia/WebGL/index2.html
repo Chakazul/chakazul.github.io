@@ -4,16 +4,18 @@
 <meta charset="UTF-8">
 <title>Lenia in WebGL</title>
 <style>
-HTML, BODY { padding:0px; margin:0px; width:100%; height:100%; overflow:hidden; }
+HTML, BODY { padding:0px; margin:0px; width:100%; height:100%; overflow:hidden; background-color:#222; }
+BUTTON { margin:2px; padding:5px 8px; opacity:0.75; background-color:#66a; color:#fff; font:bold 1em Arial; }
+#footer { position:fixed; left:0px; bottom:5px; color:#fff; font:bold 1em Arial; }
 #glCanvas, #jsCanvas { position:absolute; left:0px; top:0px; }
 #glCanvas { width:100%; height:100%; overflow:hidden; image-rendering:pixelated; }
 #jsCanvas { pointer-events:none; }
-#infobox { position:absolute; left:10px; top:10px; padding:5px; margin:0; opacity:0.75; background-color:#668; color:#eef; font:0.7em Courier New; }
+#infobox { position:absolute; left:10px; top:10px; padding:5px; margin:0px; opacity:0.75; background-color:#668; color:#eef; font:0.7em Courier New; }
 </style>
 </head>
 
 <body>
-<canvas id="glCanvas" width="640" height="360"></canvas>
+<canvas id="glCanvas" width="520" height="520"></canvas>
 <canvas id="jsCanvas"></canvas>
 <!--shadertoy at mac 840x472, at win 640x360-->
 <pre id="infobox" onclick="this.style.display='none';">initializing...</pre>
@@ -22,24 +24,29 @@ HTML, BODY { padding:0px; margin:0px; width:100%; height:100%; overflow:hidden; 
 <script type="text/javascript">
 "use strict";
 
+const infobox = document.getElementById("infobox");
+infobox.innerHTML = "initializing global...";
+const url = new URL(window.location.href);  // url params: ?file=filename&species=7&step=1&resize=1&pixel=5
+const isMobile = checkMobile();
+
+const speciesNum = getParam("species", "int", 1, 1);
+var speciesIDs = getRandomSpeciesList();
+const radiusList = [9, 12];
+const timeList = [2, 2];
+const maxR = Math.max.apply(Math, radiusList.slice(0, speciesNum));
+
+var gradientMode = getParam("grad", "int", 0, 0);  // 0:none, 1:linear, 2:radial
+var gradientVar = 0;  // 0:mu, 1:sigma, 2:eta
+var gradientMax = 1;
+var gradientX = 12, gradientY = 11;
+// species 2: mu 10,11,12; sigma 6,12; eta 0,10,12
+// species 7: mu 11,12
+// species 9: mu 10,12,13
+
 const glCanvas = document.getElementById("glCanvas");
 const jsCanvas = document.getElementById("jsCanvas");
 const gl = glCanvas.getContext("webgl2", { antialias:false });
 const ctx = jsCanvas.getContext('2d');
-
-const infobox = document.getElementById("infobox");
-infobox.innerHTML = "initializing global...";
-
-const url = new URL(window.location.href);  // url params: ?file=filename&species=7&step=1&resize=1&pixel=5
-const isMobile = checkMobile();
-
-const speciesNum = 1;
-const speciesList = [2, 1, 5];
-const radiusList = [12, 9, 9];
-const timeList = [2, 2, 2];
-const maxR = Math.max.apply(Math, radiusList);
-//var randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
-//var speciesList = getParam("species", "int", randomSpecies, randomSpecies);  // setSpecies(0..8)
 
 //const targetFPS = 60;
 const FPSSamplingSec = 2;
@@ -56,9 +63,34 @@ const vertexFilename = "_vertex";
 const fragmentTemplateFilename = "_fragment";
 const contentFilename = getParam("file", "string", "lenia5param", "lenia5param");  // error line number - 31
 
-const fragmentConstants =
+var fragmentConstants =
 "const int speciesNum = " + speciesNum + ";\n" +
-"const float maxR = " + maxR.toFixed(1) + ";";
+"const float maxR = " + maxR.toFixed(1) + ";\n";
+
+if (speciesNum == 1)
+fragmentConstants +=
+`#define usePackSpecies 0
+#define usePackSpeciesHigher 1
+#define useDecideSpecies 0
+#define useDecideByMaxGrowth 0
+#define use3RingKernels 1
+#define useGradient 1
+#define testRandomTexel 0
+#define testDrawKernels 0
+#define testRadialCoord 0
+`;
+else
+fragmentConstants +=
+`#define usePackSpecies 1
+#define usePackSpeciesHigher 1
+#define useDecideSpecies 1
+#define useDecideByMaxGrowth 0
+#define use3RingKernels 1
+#define useGradient 1
+#define testRandomTexel 0
+#define testDrawKernels 0
+#define testRadialCoord 0
+`;
 
 const glNotFoundRedirect = "https://caniuse.com/webgl2";
 const canvasFilter = gl.NEAREST;  // gl.NEAREST or gl.LINEAR
@@ -79,21 +111,26 @@ var lastFPSTime;
 var actualFPS = 0;
 var speciesName = Array(speciesNum);
 
-var useGradient = 1;  // 0:none, 1:linear, 2:radial
-var gradientVar = 0;  // 0:mu, 1:sigma, 2:eta
-var gradientMax = 1;
-var gradientX = 12, gradientY = 11;
-
 window.onload = init;
 
-function setSpecies(speciesList) {
+function getRandomSpeciesList() {
+    var tick = new Date().getTime() / 5000;
+    var randomSpecies1 = Math.floor(tick % 10);
+    var randomSpecies2 = Math.floor(tick / 10 % 10);
+    var species1 = getParam("s1", "int", randomSpecies1, randomSpecies1);
+    var species2 = getParam("s2", "int", randomSpecies2, randomSpecies2);
+    var speciesIDs = [species1, species2];
+    return speciesIDs;
+}
+
+function setSpecies(speciesIDs) {
     gl.useProgram(simProgram);
     for (var s = 0; s < speciesNum; s++) {
         var g = genomes[s];
         gl.uniform1f(g.R, radiusList[s]);  // space resolution = kernel radius
         gl.uniform1f(g.T, timeList[s]);  // time resolution = number of divisions per unit time
         gl.uniform1f(g.randomScale, 1.);
-        switch (speciesList[s]) {
+        switch (speciesIDs[s]) {
             case 0:
             speciesName[s] = "VT049W fission";  // Tessellatium (sometimes reproductive)
             gl.uniform1f(g.baseNoise, 0.10);
@@ -121,17 +158,17 @@ function setSpecies(speciesList) {
             break;
             case 2:
             speciesName[s] = "G6G6CR ciliates";  // Ciliatium (immune system) (modified for higher cilia production)
-            gl.uniform1f(g.baseNoise, 0.09);
+            gl.uniform1f(g.baseNoise, 0.11);
             gl.uniformMatrix4fv(g.betaLen, false, [1., 1., 1., 2., 1., 2., 1., 1., 1., 1., 1., 2., 1., 1., 2., 0.] );  // kernel ring number
             gl.uniformMatrix4fv(g.beta0,   false, [1., 1., 1., 1./12., 1., 5./6., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0.] );  // kernel ring heights
             gl.uniformMatrix4fv(g.beta1,   false, [0., 0., 0., 1., 0., 1., 0., 0., 0., 0., 0., 11./12., 1., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.beta2,   false, [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.] );
             gl.uniformMatrix4fv(g.mu,      false, [0.118, 0.174, 0.244, 0.114, 0.374, 0.222, 0.306, 0.449, 0.498, 0.295, 0.43, 0.353, 0.238, 0.39, 0.1, 0.] );  // growth center
             gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0954, 0.0995, 0.1114, 0.0601, 1.] );  // growth width  // higher cilia production
-            gl.uniformMatrix4fv(g.eta,     false, [0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength
+            gl.uniformMatrix4fv(g.eta,     false, [0.125, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.800, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength  // electric circuit
             gl.uniformMatrix4fv(g.relR,    false, [0.85, 0.61, 0.5, 0.81, 0.85, 0.93, 0.88, 0.74, 0.97, 0.92, 0.56, 0.56, 0.95, 0.59, 0.58, 1.] );  // relative kernel radius
             //gl.uniformMatrix4fv(g.sigma,   false, [0.0639, 0.159, 0.0287, 0.0469, 0.0822, 0.0294, 0.0775, 0.124, 0.1836, 0.1373, 0.0999, 0.0754, 0.0995, 0.1144, 0.0601, 1.] );  // growth width
-            //gl.uniformMatrix4fv(g.eta,     false, [0.125, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.800, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength  // electric circuit
+            //gl.uniformMatrix4fv(g.eta,     false, [0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, 0.] );  // growth strength
             break;
             case 3:
             speciesName[s] = "tri-color ghosts";
@@ -183,7 +220,7 @@ function setSpecies(speciesList) {
             break;
             case 7:
             speciesName[s] = "GDNQYX variety";  // Tessellatium (stable)";
-            gl.uniform1f(g.baseNoise, 0.11);
+            gl.uniform1f(g.baseNoise, 0.12);
             gl.uniformMatrix4fv(g.betaLen, false, [1., 1., 2., 2., 1., 2., 1., 1., 1., 2., 2., 2., 1., 2., 1., 0.] );  // kernel ring number
             gl.uniformMatrix4fv(g.beta0,   false, [1., 1., 1., 0., 1., 5./6., 1., 1., 1., 11./12., 3./4., 1., 1., 1./6., 1., 0.] );  // kernel ring heights
             gl.uniformMatrix4fv(g.beta1,   false, [0., 0., 1./4., 1., 0., 1., 0., 0., 0., 1., 1., 11./12., 0., 1., 0., 0.] );
@@ -219,6 +256,7 @@ function setSpecies(speciesList) {
             gl.uniformMatrix4fv(g.relR,    false, [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.] );  // relative kernel radius
             break;
         }
+        speciesName[s] = "#" + speciesIDs[s] + ": " + speciesName[s];
     }
 }
 
@@ -243,6 +281,9 @@ function init() {
     window.onkeydown = onKeyDown;
 
     infobox.innerHTML = "loading shader files...";
+    var clickAction = document.getElementById("clickAction");
+    clickAction.innerText = speciesNum == 1 ? (gradientMode == 0 ? "Random" : "Gradient zoom") : "Show species";
+
     loadShaderFiles([vertexFilename, fragmentTemplateFilename, contentFilename],
         initWebGL);
 }
@@ -279,11 +320,11 @@ function initWebGL(shaderSources) {
         iFrameRate:         gl.getUniformLocation(simProgram, "iFrameRate")
     };
     simOptions = {
-        useGradient: gl.getUniformLocation(simProgram, "useGradient"),
-        gradientVar: gl.getUniformLocation(simProgram, "gradientVar"),
-        gradientMax: gl.getUniformLocation(simProgram, "gradientMax"),
-        gradientIdx: gl.getUniformLocation(simProgram, "gradientIdx"),
-        customNoise: gl.getUniformLocation(simProgram, "customNoise")
+        gradientMode: gl.getUniformLocation(simProgram, "gradientMode"),
+        gradientVar:  gl.getUniformLocation(simProgram, "gradientVar"),
+        gradientMax:  gl.getUniformLocation(simProgram, "gradientMax"),
+        gradientIdx:  gl.getUniformLocation(simProgram, "gradientIdx"),
+        customNoise:  gl.getUniformLocation(simProgram, "customNoise")
     };
     if (speciesNum > 0) {
         genomes = [];
@@ -335,7 +376,7 @@ function initWebGL(shaderSources) {
     resetTime();
     initGlobals();
     setGlobals();
-    setSpecies(speciesList);
+    setSpecies(speciesIDs);
 
     onResize();
 
@@ -423,7 +464,7 @@ function setGlobals() {
     gl.uniform4f(simGlobals.iDate, year, month_minus1, day_minus1, seconds);
     gl.uniform1f(simGlobals.iFrameRate, actualFPS);
 
-    gl.uniform1i(simOptions.useGradient, useGradient);
+    gl.uniform1i(simOptions.gradientMode, gradientMode);
     gl.uniform1i(simOptions.gradientVar, gradientVar);
     gl.uniform1f(simOptions.gradientMax, gradientMax);
     gl.uniform2i(simOptions.gradientIdx, gradientX, gradientY);
@@ -465,21 +506,22 @@ function renderFrame() {
 function displayInfo() {
     var gene = gl.getUniform(simProgram, [genomes[0].mu, genomes[0].sigma, genomes[0].eta][gradientVar]);
     var geneName = ["mu", "sigma", "eta"][gradientVar];
-    var xName = ["", "x", "r"][useGradient];
-    var yName = ["", "y", "&theta;"][useGradient];
+    var xName = ["", "x", "r"][gradientMode];
+    var yName = ["", "y", "&theta;"][gradientMode];
     var xIdx = gradientX == -1 ? " -" : (gradientX < 10 ? " " : "") + gradientX;
     var yIdx = gradientY == -1 ? " -" : (gradientY < 10 ? " " : "") + gradientY;
     var x = isMouseToggle ? mouseDragX/width : mouseHoverX/width;
     var y = isMouseToggle ? mouseDragY/height : mouseHoverY/height;
-    if (useGradient == 2) {
+    if (gradientMode == 2) {
         x -= 0.5;  y -= 0.5;
         [x, y] = [ Math.sqrt(x*x+y*y) * 1.75, Math.atan2(y, x)/2./Math.PI + 0.5 ];
     }
     x = x * gradientMax;  y = y * gradientMax;
     infobox.innerHTML = 
         width + "x" + height + " " + actualFPS.toFixed(1) + "fps\n" + 
-        (useGradient > 0 ? 
-            ["","linear","radial"][useGradient]+" gradient: " + geneName + "\n" +
+        speciesName.join("\n") + "\n" +
+        (gradientMode > 0 ? 
+            ["","linear","radial"][gradientMode]+" gradient on " + geneName + "\n" +
             "kernel:  (" +
                 xName + ": " + xIdx + ", " + yName + ": " + yIdx + 
             ")\n" +
@@ -489,8 +531,7 @@ function displayInfo() {
             (isMouseToggle ? "ZOOMED:  " : "hover:   ") + "(" +
                 (gradientX==-1 ? "    -, " : x.toFixed(3) + ", ") + (gradientY==-1 ? "    -" : y.toFixed(3)) + 
             ")\n"
-        : "") +
-        speciesName.join("\n");
+        : "");
 }
 
 function drawCoords() {
@@ -501,10 +542,10 @@ function drawCoords() {
     ctx.clearRect(0, 0, w, h);
     ctx.strokeStyle = "white";
     if (!isMouseToggle) {
-        if (useGradient == 1) {
+        if (gradientMode == 1) {
             ctx.beginPath();  ctx.moveTo(0, y);  ctx.lineTo(w, y);  ctx.stroke();
             ctx.beginPath();  ctx.moveTo(x, 0);  ctx.lineTo(x, h);  ctx.stroke();
-        } else if (useGradient == 2) {
+        } else if (gradientMode == 2) {
             var u = x - w/2, v = y - h/2;
             var r = Math.sqrt(u*u + v*v);
             var a = Math.sqrt(u*u + v*v*w*w/h/h), b = a*h/w;  // solve ellipse (u^2/w^2 + v^2/h^2 = 1) and axis ratio (b/a = h/w)
@@ -560,24 +601,24 @@ function cycleInt(v, num, min=0) {
 }
 
 function opSetGradient(dV, dX, dY) {
-    var v = useGradient * 3 + gradientVar;  // 2, 3..5, 6..8
-    v = cycleInt(v + dV, 7, 2);
-    useGradient = Math.floor(v / 3);  gradientVar = v % 3;
+    if (speciesNum > 1)
+        return;
+    gradientVar = cycleInt(gradientVar + dV, 3);
     gradientMax = [0.5, 0.2, 1][gradientVar];  //[0.5, 0.2, 1]
     gradientX = cycleInt(gradientX + dX, 16, -1);  // -1, 0..14
     gradientY = cycleInt(gradientY + dY, 16, -1);
 }
 
-function opRandomize(customNoise) {
+function opRandomize(customNoise=-1) {
     gl.useProgram(simProgram);
     gl.uniform1f(simOptions.customNoise, customNoise);
-    gen = 0;
+    resetTime();
 }
 
 function onKeyDown(e) {
     switch (e.keyCode) {
         case 32: /*space*/ pause = ! pause; break;
-        case 13: /*enter*/ opRandomize(-1); break;
+        case 13: /*enter*/ setSpecies(getRandomSpeciesList()); opRandomize(); break;
         case 33: /*pgup*/  opSetGradient(+1,  0,  0); break;
         case 34: /*pgdn*/  opSetGradient(-1,  0,  0); break;
         case 37: /*left*/  opSetGradient( 0, -1,  0); break;
@@ -631,12 +672,50 @@ function onMouseMove(e) {
 function onMouseUp(e) { 
     isMouseDown = false;
     set_iMouse(e, -1, -1, false);
-    //randomSpecies = Math.floor(new Date().getSeconds() / 60 * 9); //Math.floor(Math.random() * 9);
-    //speciesList = getParam("species", "int", randomSpecies, randomSpecies);
-    //setSpecies(speciesList);
+    if (speciesNum == 1 && gradientMode == 0) {
+        setSpecies(getRandomSpeciesList());
+        opRandomize();
+    }
 }
 
 </script>
+
+<div id="footer">
+<div id="buttonDiv" style="display:none;">
+Control:
+<button type=button onclick="pause = !pause;" title="key: Space">Pause</button> &nbsp;
+Species: 
+<button type=button onclick="reloadWithParam({'species':1, 'grad':0});" title="url: species=1">One</button>
+<button type=button onclick="reloadWithParam({'species':2, 'grad':0});" title="url: species=2">Two</button>
+<button type=button onclick="setSpecies(getRandomSpeciesList()); opRandomize();" title="key: Enter">Random</button><br>
+Choose species:
+<button type=button onclick="speciesIDs[0] = cycleInt(speciesIDs[0] + 1, 10); setSpecies(speciesIDs);" title="url: s1=..">S1 +</button>
+<button type=button onclick="speciesIDs[0] = cycleInt(speciesIDs[0] - 1, 10); setSpecies(speciesIDs);" title="url: s1=..">S1 &minus;</button>
+<button type=button onclick="speciesIDs[1] = cycleInt(speciesIDs[1] + 1, 10); setSpecies(speciesIDs);" title="url: s2=..">S2 +</button>
+<button type=button onclick="speciesIDs[1] = cycleInt(speciesIDs[1] - 1, 10); setSpecies(speciesIDs);" title="url: s2=..">S2 &minus;</button><br>
+Random density: 
+<button type=button onclick="opRandomize(1 * 0.02);" title="key: 1">1</button>
+<button type=button onclick="opRandomize(2 * 0.02);" title="key: 2">2</button>
+<button type=button onclick="opRandomize(3 * 0.02);" title="key: 3">3</button>
+<button type=button onclick="opRandomize(4 * 0.02);" title="key: 4">4</button>
+<button type=button onclick="opRandomize(5 * 0.02);" title="key: 5">5</button>
+<button type=button onclick="opRandomize(6 * 0.02);" title="key: 6">6</button>
+<button type=button onclick="opRandomize(7 * 0.02);" title="key: 7">7</button>
+<button type=button onclick="opRandomize(8 * 0.02);" title="key: 8">8</button>
+<button type=button onclick="opRandomize(9 * 0.02);" title="key: 9">9</button><br>
+Gradient: 
+<button type=button onclick="reloadWithParam({'species':1, 'grad':1});" title="url: grad=1">Linear</button>
+<button type=button onclick="reloadWithParam({'species':1, 'grad':2});" title="url: grad=2">Radial</button>
+<button type=button onclick="opSetGradient(+1,  0,  0);" title="key: PgUp">Var +</button>
+<button type=button onclick="opSetGradient(-1,  0,  0);" title="key: PgDn">Var &minus;</button>
+<button type=button onclick="opSetGradient( 0, +1,  0);" title="key: Right">X +</button>
+<button type=button onclick="opSetGradient( 0, -1,  0);" title="key: Left">X &minus;</button>
+<button type=button onclick="opSetGradient( 0,  0, +1);" title="key: Up">Y +</button>
+<button type=button onclick="opSetGradient( 0,  0, -1);" title="key: Down">Y &minus;</button><br>
+Mouse click / touch action: <span id="clickAction"></span>
+</div>
+<button type=button onclick="buttonDiv.style.display = buttonDiv.style.display=='none' ? '' : 'none';">Menu</button>
+</div>
 
 </body>
 </html>
