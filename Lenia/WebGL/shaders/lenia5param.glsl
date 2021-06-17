@@ -8,15 +8,6 @@
 #define PI 3.141592653589
 #define mult matrixCompMult
 
-#define usePackSpecies 0
-#define usePackSpeciesHigher 1
-#define useDecideSpecies 0
-#define use3RingKernels 0
-#define useEitherGradient 1
-#define testRandomTexel 0
-#define testDrawKernels 0
-#define testRadialCoord 0
-
 const float biasNoise = speciesNum == 1 ? 0. : 0.02;
 const float pNoSpecies = -0.1;
 const float samplingDist = 1.;
@@ -43,7 +34,7 @@ struct genome {
 };
 uniform genome genomes[speciesNum];
 
-uniform int useGradient;
+uniform int gradientMode;
 uniform int gradientVar;
 uniform float gradientMax;
 uniform ivec2 gradientIdx;
@@ -139,13 +130,13 @@ float simplexNoise( in vec2 p ) {
 }
 
 // Voronoi noise from https://www.shadertoy.com/view/XlB3zW
-float voronoiNoise(in vec2 p, in float scale) {
+float voronoiNoise(in vec2 n, in float scale) {
     float i = 0.0, dis = 2.0;
     for(int x = -1;x<=1;x++)
     for(int y = -1;y<=1;y++) {
-        vec2 p = floor(p/scale)+vec2(x,y);
+        vec2 p = floor(n/scale)+vec2(x,y);
         vec2 h2 = fract(cos(p*mat2(89.4,-75.7,-81.9,79.6))*343.42);
-        float d = length(h2+vec2(x,y)-fract(p/scale));
+        float d = length(h2+vec2(x,y)-fract(n/scale));
         if (dis > d) { dis = d; i = fract(cos(p.x*89.42-p.y*75.7)*343.42); }
     }
     return i;
@@ -303,7 +294,8 @@ void mainBuffer( out vec4 fragColor, in vec2 fragCoord ) {
     //ivec3 species = unpackSpecies(texel);
     vec3 value = unpackValue(texel);
 
-    vec3[speciesNum] growth;
+    #if useDecideByMaxGrowth == 1
+    vec3[speciesNum] growthList;
     vec3 maxGrowth = vec3(-99.);
     ivec3 argmax = ivec3(-99);
     for (int s=0; s<speciesNum; s++) {
@@ -315,7 +307,7 @@ void mainBuffer( out vec4 fragColor, in vec2 fragCoord ) {
         // calculate growth (scaled by time step), reduce from kernels to destination channels
         mat4 growthK = mult(g.eta, bell(avg, g.mu, g.sigma) * 2. - 1.) / g.T;
         vec3 growthS = reduceKernels(growthK);
-        growth[s] = growthS;
+        growthList[s] = growthS;
 
         // calculate max and argmax of growth
         ivec3 isMore = ivec3(greaterThan(growthS, maxGrowth));
@@ -324,20 +316,55 @@ void mainBuffer( out vec4 fragColor, in vec2 fragCoord ) {
         argmax = argmax * (ic1-isMore) + s * isMore;
     }
 
-    vec3 finalGrowth = vec3(-0.1);
-    ivec3 finalSpecies = ivec3(-1);
+    vec3 growth = vec3(-0.1);  // (-0.1)
+    ivec3 species = ivec3(-1);
     for (int s=0; s<speciesNum; s++) {
         // decide which species to be next, by maximum growth (or other criteria?)
-        vec3 growthS = growth[s];
+        vec3 growthS = growthList[s];
         ivec3 isSelect = ivec3(greaterThan(growthS, aliveThreshold)) * ivec3(equal(ivec3(s), argmax));
 
-        finalGrowth = mix(finalGrowth, growthS, vec3(isSelect));
+        growth = mix(growth, growthS, vec3(isSelect));
         //finalGrowth = finalGrowth * vec3(ic1-isSelect) + growthS * vec3(isSelect);
-        finalSpecies = finalSpecies * (ic1-isSelect) + s * isSelect;
+        species = species * (ic1-isSelect) + s * isSelect;
     }
 
-    value = clamp(finalGrowth + value, 0., 1.);
-    ivec3 species = finalSpecies;
+    value = clamp(growth + value, 0., 1.);
+
+    #elif useDecideByMaxGrowth == 0
+
+    mat4[speciesNum] avgList;
+    vec3 maxAvg = vec3(-99.);
+    ivec3 argmax = ivec3(-99);
+    for (int s=0; s<speciesNum; s++) {
+        // weighted average = weighted sum / total weights, avoid divided by zero
+        mat4 avgK = sum[s] / (total[s] + EPSILON);    // avoid divided by zero
+        avgList[s] = avgK;
+        vec3 avgS = reduceKernels(avgK);
+
+        // calculate max and argmax of avg
+        ivec3 isMore = ivec3(greaterThan(avgS, maxAvg));
+        maxAvg = mix(maxAvg, avgS, float(isMore));
+        argmax = argmax * (ic1-isMore) + s * isMore;
+    }
+
+    vec3 growth = vec3(-0.1);  // (-0.1)
+    ivec3 species = ivec3(-1);
+    for (int s=0; s<speciesNum; s++) {
+        genome g = genomes[s];
+
+        // decide which species to be next, by maximum neighbor avg (or other criteria?)
+        mat4 avgK = avgList[s];
+        mat4 growthK = mult(g.eta, bell(avgK, g.mu, g.sigma) * 2. - 1.) / g.T;
+        vec3 growthS = reduceKernels(growthK);
+
+        ivec3 isSelect = ivec3(greaterThan(growthS, aliveThreshold)) * ivec3(equal(ivec3(s), argmax));
+        growth = mix(growth, growthS, vec3(isSelect));
+        species = species * (ic1-isSelect) + s * isSelect;
+    }
+
+    value = clamp(growth + value, 0., 1.);
+
+    #endif
 
 #elif useDecideSpecies == 0
 
@@ -348,16 +375,16 @@ void mainBuffer( out vec4 fragColor, in vec2 fragCoord ) {
 
     // calculate growth, add a small portion to destination channel
     genome g = genomes[0];
-#if useEitherGradient == 0
+#if useGradient == 0
     mat4 growthK = mult(g.eta, bell(avg, g.mu, g.sigma) * 2. - 1.) / g.T;
-#elif useEitherGradient == 1
+#elif useGradient == 1
     mat4 growthK;
-    if (useGradient == 0) {
+    if (gradientMode == 0) {
         growthK = mult(g.eta, bell(avg, g.mu, g.sigma) * 2. - 1.) / g.T;
     } else {
         mat4[3] gene = mat4[] (g.mu, g.sigma, g.eta);
         vec2 xy = (iMouseToggle == 1 ? iMouse.xy / iResolution.xy + (uv - 0.5) / 10. : uv);
-        if (useGradient == 2) {
+        if (gradientMode == 2) {
             xy -= vec2(0.5, 0.5);
             xy = vec2( length(xy) * 1.75, atan(xy.y, xy.x)/2./PI + 0.5 );
         }
@@ -398,7 +425,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
         texel = unpackValue(texel);
 #endif
 
-#if useEitherGradient == 1 && testRadialCoord == 1
+#if useGradient == 1 && testRadialCoord == 1
     vec2 uv = fragCoord / iResolution.xy;
     vec2 xy = uv - vec2(0.5, 0.5);
     float r = length(xy) * 1.75 * gradientMax;
