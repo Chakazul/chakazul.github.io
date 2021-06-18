@@ -1,17 +1,14 @@
-// from https://www.shadertoy.com/view/7lsGDr
+// from https://smoothstep.io/anim/41ff4ba126d9
+
 // modified from SmoothLife by davidar - https://www.shadertoy.com/view/Msy3RD
 
-// multiple species
-// maximum 16 kernels by using 4x4 matrix (mat4)
+// multiple species (A, B...), can have different spatial scales (R) and time scales (T) 
+// maximum 16 kernels by using 4x4 matrix
+// when matrix operation not available (e.g. exp, mod, equal, /), split into four vec4 operations
 
+// common
 #define EPSILON 0.000001
 #define mult matrixCompMult
-
-#define usePackSpecies 1
-#define usePackSpeciesHigher 0
-#define useDecideSpecies 1
-#define useDecideByMaxGrowth 1
-#define use3RingKernels 0
 
 const int speciesNum = 2;
 const float maxR = 15.;
@@ -46,7 +43,7 @@ struct genome {
     float randomScale;
 };
 
-const genome genomes[speciesNum] = genome[] (
+const genome genome_a = 
     genome(
         15., 2.,
         mat4( 1., 1., 1., 2., 1., 2., 1., 1., 1., 1., 1., 2., 1., 1., 2., v0 ),  // kernel ring number
@@ -58,7 +55,8 @@ const genome genomes[speciesNum] = genome[] (
         mat4( 0.082, 0.462, 0.496, 0.27, 0.518, 0.576, 0.324, 0.306, 0.544, 0.374, 0.33, 0.528, 0.498, 0.43, 0.26, v0 ),  // growth strength
         mat4( 0.85, 0.61, 0.5, 0.81, 0.85, 0.93, 0.88, 0.74, 0.97, 0.92, 0.56, 0.56, 0.95, 0.59, 0.58, v1 ),  // relative kernel radius
         0.175, 1.
-    ),
+    );
+const genome genome_b = 
     genome(
         10., 2.,
         mat4( 1., 1., 2., 2., 1., 2., 1., 1., 1., 2., 2., 2., 1., 2., 1., v0 ),  // kernel ring number
@@ -70,8 +68,7 @@ const genome genomes[speciesNum] = genome[] (
         mat4( 0.138, 0.544, 0.326, 0.256, 0.544, 0.544, 0.442, 0.198, 0.58, 0.282, 0.396, 0.618, 0.382, 0.374, 0.376, v0 ),  // growth strength
         mat4( 0.78, 0.56, 0.6, 0.84, 0.76, 0.82, 1.0, 0.68, 0.99, 0.72, 0.56, 0.65, 0.85, 0.54, 0.82, v1 ),  // relative kernel radius
         0.155, 1.
-    )
-);
+    );
 
 // when matrix operation not available (e.g. exp, mod, equal, /), break down into four vec4 operations
 mat4 intEqual4(in mat4 m, in ivec4 v) {
@@ -173,7 +170,12 @@ vec3 randomValue(in vec2 p, in genome g) {
 
 vec3 randomTexel(in vec2 p) {
     int species = randomSpecies(p);
-    vec3 value = species > -1 ? randomValue(p, genomes[species]) : vec3(0.);
+    genome g;
+    if (species==0)
+        g = genome_a;
+    else
+        g = genome_b;
+    vec3 value = species > -1 ? randomValue(p, g) : vec3(0.);
     return packTexel(ivec3(species), value);
 }
 
@@ -181,11 +183,7 @@ vec3 randomTexel(in vec2 p) {
 mat4 getWeight(in float r, in genome g) {
     if (r > g.R) return m0;
     mat4 Br = g.betaLen * r / g.R / g.relR;  // scale radius by number of rings and relative radius
-    #if use3RingKernels == 1
-    mat4 height = mult(g.beta0, intEqual4(Br, iv0)) + mult(g.beta1, intEqual4(Br, iv1)) + mult(g.beta2, intEqual4(Br, iv2));
-    #else
     mat4 height = mult(g.beta0, intEqual4(Br, iv0)) + mult(g.beta1, intEqual4(Br, iv1));
-    #endif
     return mult(height, bell(fract4(Br), kmu, ksigma));
 }
 
@@ -226,18 +224,23 @@ vec3 reduceKernels(in mat4 m) {
         matrixDot(m, dstK[2]) );
 }
 
-vec3 addSum(in vec2 p, in vec2 d, in mat4[speciesNum] weight, inout mat4[speciesNum] sum, inout mat4[speciesNum] total) {
+vec3 addSum(in vec2 p, in vec2 d, 
+    in mat4 weight_a, inout mat4 sum_a, inout mat4 total_a, 
+    in mat4 weight_b, inout mat4 sum_b, inout mat4 total_b)
+{
     vec2 uv = (p + d * samplingDist) / iResolution.xy;  // either set texture repeat or use fract(...)
     vec3 texel = texture(iChannel0, uv).rgb;
     ivec3 species = unpackSpecies(texel);
     vec3 value = unpackValue(texel);
 
-    for (int s=0; s<speciesNum; s++) {
-        vec3 valueS = value * vec3(equal(species, ivec3(s)));
-        mat4 valueK = mapKernels(valueS);
-        sum[s] += mult(valueK, weight[s]);
-        total[s] += weight[s];
-    }
+    vec3 valueS = value * vec3(equal(species, ivec3(0)));
+    mat4 valueK = mapKernels(valueS);
+    sum_a += mult(valueK, weight_a);
+    total_a += weight_a;
+    valueS = value * vec3(equal(species, ivec3(1)));
+    valueK = mapKernels(valueS);
+    sum_b += mult(valueK, weight_b);
+    total_b += weight_b;
     return texel;
 }
 
@@ -247,64 +250,63 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
 
     // loop through the neighborhood, optimized: same weights for all quadrants/octants
     // calculate the weighted average of neighborhood from source channel
-    mat4[speciesNum] sum, total, weight;
-    for (int s=0; s<speciesNum; s++) {
-        sum[s] = mat4(0.);
-        total[s] = mat4(0.);
-    }
+    mat4 sum_a = mat4(0.);
+    mat4 sum_b = mat4(0.);
+    mat4 total_a = mat4(0.);
+    mat4 total_b = mat4(0.);
 
     // self
     float r = 0.;
-    for (int s=0; s<speciesNum; s++) 
-        weight[s] = getWeight(r, genomes[s]);
-    vec3 texel = addSum(fragCoord, vec2(0, 0), weight, sum, total);
+    mat4 weight_a = getWeight(r, genome_a);
+    mat4 weight_b = getWeight(r, genome_b);
+    vec3 texel = addSum(fragCoord, vec2(0, 0), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
     // orthogonal
     const int intR = int(ceil(maxR));
     for (int x=1; x<=intR; x++) {
         r = float(x);
-        for (int s=0; s<speciesNum; s++) 
-            weight[s] = getWeight(r, genomes[s]);
-        addSum(fragCoord, vec2(+x, 0), weight, sum, total);
-        addSum(fragCoord, vec2(-x, 0), weight, sum, total);
-        addSum(fragCoord, vec2(0, +x), weight, sum, total);
-        addSum(fragCoord, vec2(0, -x), weight, sum, total);
+        weight_a = getWeight(r, genome_a);
+        weight_b = getWeight(r, genome_b);
+        addSum(fragCoord, vec2(+x, 0), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+        addSum(fragCoord, vec2(-x, 0), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+        addSum(fragCoord, vec2(0, +x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+        addSum(fragCoord, vec2(0, -x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
     }
     // diagonal
     const int diagR = int(ceil(float(intR) / sqrt(2.)));
     for (int x=1; x<=diagR; x++) {
         r = sqrt(2.) * float(x);
-        for (int s=0; s<speciesNum; s++) 
-            weight[s] = getWeight(r, genomes[s]);
-        addSum(fragCoord, vec2(+x, +x), weight, sum, total);
-        addSum(fragCoord, vec2(+x, -x), weight, sum, total);
-        addSum(fragCoord, vec2(-x, +x), weight, sum, total);
-        addSum(fragCoord, vec2(-x, -x), weight, sum, total);
+        weight_a = getWeight(r, genome_a);
+        weight_b = getWeight(r, genome_b);
+        addSum(fragCoord, vec2(+x, +x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+        addSum(fragCoord, vec2(+x, -x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+        addSum(fragCoord, vec2(-x, +x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+        addSum(fragCoord, vec2(-x, -x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
     }
     // others
     for (int y=1; y<=intR-1; y++)
     for (int x=y+1; x<=intR; x++) {
         r = sqrt(float(x*x + y*y));
         if (r <= maxR) {
-            for (int s=0; s<speciesNum; s++) 
-                weight[s] = getWeight(r, genomes[s]);
-            addSum(fragCoord, vec2(+x, +y), weight, sum, total);
-            addSum(fragCoord, vec2(+x, -y), weight, sum, total);
-            addSum(fragCoord, vec2(-x, +y), weight, sum, total);
-            addSum(fragCoord, vec2(-x, -y), weight, sum, total);
-            addSum(fragCoord, vec2(+y, +x), weight, sum, total);
-            addSum(fragCoord, vec2(+y, -x), weight, sum, total);
-            addSum(fragCoord, vec2(-y, +x), weight, sum, total);
-            addSum(fragCoord, vec2(-y, -x), weight, sum, total);
+            weight_a = getWeight(r, genome_a);
+            weight_b = getWeight(r, genome_b);
+            addSum(fragCoord, vec2(+x, +y), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(+x, -y), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(-x, +y), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(-x, -y), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(+y, +x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(+y, -x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(-y, +x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
+            addSum(fragCoord, vec2(-y, -x), weight_a, sum_a, total_a, weight_b, sum_b, total_b);
         }
     }
 
 
-    mat4 avg_a = sum[0] / (total[0] + EPSILON);
-    mat4 avg_b = sum[1] / (total[1] + EPSILON);
+    mat4 avg_a = sum_a / (total_a + EPSILON);
+    mat4 avg_b = sum_b / (total_b + EPSILON);
 
     // calculate growth (scaled by time step), reduce from kernels to destination channels
-    mat4 growthK_a = mult(genomes[0].eta, bell(avg_a, genomes[0].mu, genomes[0].sigma) * 2. - 1.) / genomes[0].T;
-    mat4 growthK_b = mult(genomes[1].eta, bell(avg_b, genomes[1].mu, genomes[1].sigma) * 2. - 1.) / genomes[1].T;
+    mat4 growthK_a = mult(genome_a.eta, bell(avg_a, genome_a.mu, genome_a.sigma) * 2. - 1.) / genome_a.T;
+    mat4 growthK_b = mult(genome_b.eta, bell(avg_b, genome_b.mu, genome_b.sigma) * 2. - 1.) / genome_b.T;
     vec3 growth_a = reduceKernels(growthK_a);
     vec3 growth_b = reduceKernels(growthK_b);
 
@@ -322,83 +324,6 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
     vec3 growth = growth_a * float(select_a) + growth_b * float(select_b) + vec3(-0.1) * is_none;
     value = clamp(growth + value, 0., 1.);
 
-/*
-    // unpack current cell
-    //ivec3 species = unpackSpecies(texel);
-    vec3 value = unpackValue(texel);
-
-    #if useDecideByMaxGrowth == 1
-    vec3[speciesNum] growthList;
-    vec3 maxGrowth = vec3(-99.);
-    ivec3 argmax = ivec3(-99);
-    for (int s=0; s<speciesNum; s++) {
-        genome g = genomes[s];
-
-        // weighted average = weighted sum / total weights, avoid divided by zero
-        mat4 avg = sum[s] / (total[s] + EPSILON);    // avoid divided by zero
-
-        // calculate growth (scaled by time step), reduce from kernels to destination channels
-        mat4 growthK = mult(g.eta, bell(avg, g.mu, g.sigma) * 2. - 1.) / g.T;
-        vec3 growthS = reduceKernels(growthK);
-        growthList[s] = growthS;
-
-        // calculate max and argmax of growth
-        ivec3 isMore = ivec3(greaterThan(growthS, maxGrowth));
-        maxGrowth = mix(maxGrowth, growthS, float(isMore));
-        //maxGrowth = maxGrowth * float(ic1-isMore) + growthS * float(isMore);
-        argmax = argmax * (ic1-isMore) + s * isMore;
-    }
-
-    vec3 growth = vec3(-0.1);  // (-0.1)
-    ivec3 species = ivec3(-1);
-    for (int s=0; s<speciesNum; s++) {
-        // decide which species to be next, by maximum growth (or other criteria?)
-        vec3 growthS = growthList[s];
-        ivec3 isSelect = ivec3(greaterThan(growthS, aliveThreshold)) * ivec3(equal(ivec3(s), argmax));
-
-        growth = mix(growth, growthS, vec3(isSelect));
-        //finalGrowth = finalGrowth * vec3(ic1-isSelect) + growthS * vec3(isSelect);
-        species = species * (ic1-isSelect) + s * isSelect;
-    }
-
-    value = clamp(growth + value, 0., 1.);
-
-    #elif useDecideByMaxGrowth == 0
-
-    mat4[speciesNum] avgList;
-    vec3 maxAvg = vec3(-99.);
-    ivec3 argmax = ivec3(-99);
-    for (int s=0; s<speciesNum; s++) {
-        // weighted average = weighted sum / total weights, avoid divided by zero
-        mat4 avgK = sum[s] / (total[s] + EPSILON);    // avoid divided by zero
-        avgList[s] = avgK;
-        vec3 avgS = reduceKernels(avgK);
-
-        // calculate max and argmax of avg
-        ivec3 isMore = ivec3(greaterThan(avgS, maxAvg));
-        maxAvg = mix(maxAvg, avgS, float(isMore));
-        argmax = argmax * (ic1-isMore) + s * isMore;
-    }
-
-    vec3 growth = vec3(-0.1);  // (-0.1)
-    ivec3 species = ivec3(-1);
-    for (int s=0; s<speciesNum; s++) {
-        genome g = genomes[s];
-
-        // decide which species to be next, by maximum neighbor avg (or other criteria?)
-        mat4 avgK = avgList[s];
-        mat4 growthK = mult(g.eta, bell(avgK, g.mu, g.sigma) * 2. - 1.) / g.T;
-        vec3 growthS = reduceKernels(growthK);
-
-        ivec3 isSelect = ivec3(greaterThan(growthS, aliveThreshold)) * ivec3(equal(ivec3(s), argmax));
-        growth = mix(growth, growthS, vec3(isSelect));
-        species = species * (ic1-isSelect) + s * isSelect;
-    }
-
-    value = clamp(growth + value, 0., 1.);
-
-    #endif
-*/
     // randomize at start
     if (iFrame == 0)
         texel = randomTexel(fragCoord);
