@@ -256,7 +256,7 @@ function setSpecies(speciesIDs) {
             gl.uniformMatrix4fv(g.relR,    false, [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.] );  // relative kernel radius
             break;
         }
-        speciesName[s] = "#" + speciesIDs[s] + ": " + speciesName[s];
+        speciesName[s] = ["A","B","C"][s] + ":#" + speciesIDs[s] + " " + speciesName[s];
     }
 }
 
@@ -640,7 +640,7 @@ var isMouseToggle = false;
 var mouseHoverX = 0, mouseHoverY = 0;
 var mouseStartX = 0, mouseStartY = 0;
 var mouseDragX = 0, mouseDragY = 0;
-function setMouseHover(e, sx, sy) {
+function setMouseHover(e) {
     mouseHoverX = Math.floor(e.clientX / pixelSize);
     mouseHoverY = Math.floor(height - e.clientY / pixelSize);
 }
@@ -684,16 +684,18 @@ function onMouseUp(e) {
 <div id="buttonDiv" style="display:none;">
 Control:
 <button type=button onclick="pause = !pause;" title="key: Space">Pause</button> &nbsp;
-Species: 
+Mode: 
 <button type=button onclick="reloadWithParam({'species':1, 'grad':0});" title="url: species=1">One</button>
 <button type=button onclick="reloadWithParam({'species':2, 'grad':0});" title="url: species=2">Two</button>
-<button type=button onclick="setSpecies(getRandomSpeciesList()); opRandomize();" title="key: Enter">Random</button><br>
-Choose species:
-<button type=button onclick="speciesIDs[0] = cycleInt(speciesIDs[0] + 1, 10); setSpecies(speciesIDs);" title="url: s1=..">S1 +</button>
-<button type=button onclick="speciesIDs[0] = cycleInt(speciesIDs[0] - 1, 10); setSpecies(speciesIDs);" title="url: s1=..">S1 &minus;</button>
-<button type=button onclick="speciesIDs[1] = cycleInt(speciesIDs[1] + 1, 10); setSpecies(speciesIDs);" title="url: s2=..">S2 +</button>
-<button type=button onclick="speciesIDs[1] = cycleInt(speciesIDs[1] - 1, 10); setSpecies(speciesIDs);" title="url: s2=..">S2 &minus;</button><br>
-Random density: 
+<button type=button onclick="reloadWithParam({'species':1, 'grad':1});" title="url: grad=1">Linear</button>
+<button type=button onclick="reloadWithParam({'species':1, 'grad':2});" title="url: grad=2">Radial</button><br>
+Species:
+<button type=button onclick="setSpecies(getRandomSpeciesList()); opRandomize();" title="key: Enter">Random</button>
+<button type=button onclick="speciesIDs[0] = cycleInt(speciesIDs[0] + 1, 10); setSpecies(speciesIDs);" title="url: a=..">A +</button>
+<button type=button onclick="speciesIDs[0] = cycleInt(speciesIDs[0] - 1, 10); setSpecies(speciesIDs);" title="url: a=..">A &minus;</button>
+<button type=button onclick="speciesIDs[1] = cycleInt(speciesIDs[1] + 1, 10); setSpecies(speciesIDs);" title="url: b=..">B +</button>
+<button type=button onclick="speciesIDs[1] = cycleInt(speciesIDs[1] - 1, 10); setSpecies(speciesIDs);" title="url: b=..">B &minus;</button><br>
+Random: density
 <button type=button onclick="opRandomize(1 * 0.02);" title="key: 1">1</button>
 <button type=button onclick="opRandomize(2 * 0.02);" title="key: 2">2</button>
 <button type=button onclick="opRandomize(3 * 0.02);" title="key: 3">3</button>
@@ -704,14 +706,12 @@ Random density:
 <button type=button onclick="opRandomize(8 * 0.02);" title="key: 8">8</button>
 <button type=button onclick="opRandomize(9 * 0.02);" title="key: 9">9</button><br>
 Gradient: 
-<button type=button onclick="reloadWithParam({'species':1, 'grad':1});" title="url: grad=1">Linear</button>
-<button type=button onclick="reloadWithParam({'species':1, 'grad':2});" title="url: grad=2">Radial</button>
-<button type=button onclick="opSetGradient(+1,  0,  0);" title="key: PgUp">Var +</button>
-<button type=button onclick="opSetGradient(-1,  0,  0);" title="key: PgDn">Var &minus;</button>
-<button type=button onclick="opSetGradient( 0, +1,  0);" title="key: Right">X +</button>
-<button type=button onclick="opSetGradient( 0, -1,  0);" title="key: Left">X &minus;</button>
-<button type=button onclick="opSetGradient( 0,  0, +1);" title="key: Up">Y +</button>
-<button type=button onclick="opSetGradient( 0,  0, -1);" title="key: Down">Y &minus;</button><br>
+<button type=button onclick="opSetGradient(+1,  0,  0);" title="key: PgUp">var +</button>
+<button type=button onclick="opSetGradient(-1,  0,  0);" title="key: PgDn">var &minus;</button>
+<button type=button onclick="opSetGradient( 0, +1,  0);" title="key: Right">x/r +</button>
+<button type=button onclick="opSetGradient( 0, -1,  0);" title="key: Left" >x/r &minus;</button>
+<button type=button onclick="opSetGradient( 0,  0, +1);" title="key: Up"   >y/&theta; +</button>
+<button type=button onclick="opSetGradient( 0,  0, -1);" title="key: Down" >y/&theta; &minus;</button><br>
 Mouse click / touch action: <span id="clickAction"></span>
 </div>
 <button type=button onclick="buttonDiv.style.display = buttonDiv.style.display=='none' ? '' : 'none';">Menu</button>
