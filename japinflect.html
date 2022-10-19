@@ -1,0 +1,440 @@
+<html>
+<head>
+<title>活用 Inflection</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200&family=Kiwi+Maru:wght@300&display=swap');
+BODY		{ color:#9cf; background-color:#235; font-family:sans-serif; margin:20px; }
+#mainText	{ font-family:'Noto Serif JP'; font-size:5em; min-height:1.8em; margin-left:50px; }
+#mainText SPAN.form	{ font-size:0.75em; }
+#txText		{ color:#aaa; font-size:1.8em; min-height:1.8em; margin-left:60px; font-style:italic; }
+#expText	{ font-family:'Noto Serif JP'; font-size:1em; }
+#baseText	{ font-family:'Noto Serif JP'; font-size:0.8em; }
+SPAN.word	{ color:#9f9; }  SELECT.word OPTION:checked	{ background-color:#9f9; }
+SPAN.form	{ color:#aaa; }  SELECT.form OPTION:checked	{ background-color:#aaa; }
+.high		{ color:#fff!important; }
+.negate		{ color:#f88; }
+.past		{ color:#5af; }
+.polite		{ color:#d9f; }
+INPUT[type=text],
+SELECT					{ font-size:0.9em; font-family:sans-serif; }
+.col1					{ width:15em; }
+.col2					{ width:15em; }
+.col3					{ width:26em; }
+BODY, TD				{ font-size:1.4em; vertical-align:top; padding:10px; }
+INPUT[type=checkbox]	{ width:40px; height:40px; margin:10px; }
+.grid					{ border-collapse: collapse; }
+.grid TD				{ font-family:'Noto Serif JP'; font-size:1.6em; padding:5px; border:solid 1px #999; }
+SPAN[id^=tabGrid]		{ cursor:hand; }
+</style>
+<script>
+	verbCats = ['5', '1', 's', 'k'];
+	baseList = {
+		// n=noun, 5=gotan, 1=ichidan, s/z/k=irregular, i=i-adjective, a=na-adjective
+		// 0:語幹,1:終止,2:連体, 3:未然/連用,4:意志, 5:連用,6:音便, 7:仮定,8:可能,9:命令
+		"name": ["語幹","終止形","連体形", "未然形","未然形（意志形）", "連用形","連用形（音便形）", "仮定形","可能形","命令形", "name", "未然形","連用形"],
+		"5k": ["","く","く", "か","こ", "き","い", "け","け","け", "動詞：五段活用"],
+		"5k2":["","く","く", "か","こ", "き","っ", "け","け","け", "動詞：五段活用"],
+		"5g": ["","ぐ","ぐ", "が","ご", "ぎ","い", "げ","げ","げ", "動詞：五段活用"],
+		"5s": ["","す","す", "さ","そ", "し","し", "せ","せ","せ", "動詞：五段活用"],
+		"5t": ["","つ","つ", "た","と", "ち","っ", "て","て","て", "動詞：五段活用"],
+		"5n": ["","ぬ","ぬ", "な","の", "に","ん", "ね","ね","ね", "動詞：五段活用"],
+		"5b": ["","ぶ","ぶ", "ば","ぼ", "び","ん", "べ","べ","べ", "動詞：五段活用"],
+		"5m": ["","む","む", "ま","も", "み","ん", "め","め","め", "動詞：五段活用"],
+		"5r": ["","る","る", "ら","ろ", "り","っ", "れ","れ","れ", "動詞：五段活用"],
+		"5r2":["","る","る", "ら","ろ", "い","っ", "れ","れ","い", "動詞：五段活用"],
+		"5w": ["","う","う", "わ","お", "い","っ", "え","え","え", "動詞：五段活用"],
+		"5w2":["","う","う", "わ","お", "い","う", "え","え","え", "動詞：五段活用"],
+		"1i":["","る","る", "","", "","", "れ","れ","ろ", "動詞：上一段活用"],
+		"1e":["","る","る", "","", "","", "れ","れ","ろ", "動詞：下一段活用"],
+		"s":["","[す(　)].る","[す(　)].る", "[し(　)].","[し(　)].", "[し(　)].","[し(　)].", "[す(　)].れ","[せ(　)].","[し(　)].ろ", "動詞：変格活用", "[さ(　)]."],
+		"s2":["","する","する", "し","し", "し","し", "すれ","せ","しろ", "動詞：変格活用", "さ"],
+		//"sz":["ずる","ずる", "じ","じ", "じ","じ", "ずれ","ぜる","じろ"],
+		"k":["","[来(く)].る","[来(く)].る", "[来(こ)].","[来(こ)].", "[来(き)].","[来(き)].", "[来(く)].れ","[来(こ)].れ","[来(こ)].い", "動詞：変格活用"],
+		"k2":["","くる","くる", "こ","こ", "き","き", "くれ","これ","こい", "動詞：変格活用"],
+		"i": ["","い","い", "","かろ", "く","かっ", "けれ","×","×", "イ形容詞"],
+		"a": ["","だ","な", "","だろ", "では","だっ", "なら","×","×", "ナ形容詞", "", "に"],  // で・では・じゃ
+		"n": ["","だ","の", "","だろ", "では","だっ", "なら","×","×", "名詞", "", "に"],
+		"n2": ["","だ","の", "","だろ", "は","だっ", "なら","×","×", "名詞", "", "に"],  // （形式名詞）
+		"-": ["","","", "","", "","", "","","", ""],
+	};
+	styleArr_an = ["1", "5{nない}", "0{pです}", "5あり{pませ{nん}}", "6{tた}", "5{nなかっ{tた}}", "0{pでし{tた}}", "5あり{pませ{nん}でし{tた}}"];
+	styleList = {
+		// v=verb, i=i-adjective, a=na-adjective, x=exception
+		"v": {"v":["1", "3{nない}", "5{pます}", "5{pませ{nん}}", "6{tた}", "3{nなかっ{tた}}", "5{pまし{tた}}", "5{pませ{nん}でし{tた}}"]},
+		"i": {"i":["1", "5{nない}", "1{pです}", "5あり{pませ{nん}}", "6{tた}", "5{nなかっ{tた}}", "6{p{tた}です}", "5あり{pませ{nん}でし{tた}}"]},
+		"a": {"a":styleArr_an},
+		"n": {"n":styleArr_an},
+		"n2": {"n2":styleArr_an},
+		"x1": {"v":["7ば", "3{nなけれ}ば"], "i":["7ば", "5{nなけれ}ば"], "a":["7ば", "5{nなけれ}ば"], "n":["7ば", "5{nなけれ}ば"]},  // 仮定
+		"x2": {"v":["6たら", "3{nなかっ}たら"], "i":["6たら", "5{nなかっ}たら"], "a":["6たら", "5{nなかっ}たら"], "n":["6たら", "5{nなかっ}たら"]},  // 仮定
+		"x3": {
+			"v":["1なら", "3{nない}なら", "", "", "6{tた}なら", "3{nなかっ{tた}}なら", "", ""], 
+			"i":["1なら", "5{nない}なら", "", "", "6{tた}なら", "5{nなかっ{tた}}なら", "", ""], 
+			"a":["7", "5{nない}なら", "", "", "6{tた}なら", "5{nなかっ{tた}}なら", "", ""], 
+			"n":["7", "5{nない}なら", "", "", "6{tた}なら", "5{nなかっ{tた}}なら", "", ""],
+		},  // 仮定
+		"x4": {"v":["9", "1{nな}", "5{pなさい}", "6てはいけ{pませ{nん}}"]},  // 命令
+		"x5": {"v":["6て", "3{nない}て", "6て{pください}", "3{nない}で{pください}"]},  // 依頼
+		"x6": {"v":["4*よう", "1{nまい}", "5{pましょう}", "3{nない}ようにし{pましょう}"]},  // 勧誘
+		"x7": {
+			"v":["4*よう", "1{nまい}", "1{pでしょう}", "3{p{nない}でしょう}"], 
+			"i":["4*よう", "5ある{nまい}", "1{pでしょう}", "5{p{nない}でしょう}"], 
+			"a":["4*よう", "5ある{nまい}", "0{pでしょう}", "5{p{nない}でしょう}"],
+			"n":["4*よう", "5ある{nまい}", "0{pでしょう}", "5{p{nない}でしょう}"],
+		},  // 推量
+	};
+
+	function loadText0() {
+		mainText.innerHTML = "<span class='word'><ruby>書<rt>か</rt></ruby>い</span><span class='form'>てい</span><span class='polite'>ませ</span><span class='negate'>ん</span><span class='polite'>でし</span><span class='past'>た</span>";
+	}
+	function loadText() {
+		data = selWord.options[selWord.selectedIndex].value.split("#");
+		word = data[0].split("|");
+		wordTx = data.length > 1 ? data[1].split("|") : null;
+
+		wordStem = word[0];
+		wordType = word[2];
+		wordCat = wordType[0];
+		// base = selBase.options[selBase.selectedIndex].value;
+		data = selForm.options[selForm.selectedIndex].value.split("#");
+		formArr = data[0].split("|");
+		formTxV = data.length > 1 ? data[1].split("|") : null;
+		formTxN = data.length > 2 ? data[2].split("|") : null;
+
+		formDict = {};
+		for (e of formArr) {
+			es = e.split(":");
+			formDict[es[0]] = es[1] + ":" + es[2];
+		}
+		form = null;
+		if (wordCat in formDict) {  // 5,1,s,k,i,n
+			form = formDict[wordCat];
+		} else if (verbCats.includes(wordCat) && 'v' in formDict) {
+			form = formDict['v'];
+		} else if ('*' in formDict) {
+			form = formDict['*'];
+		}
+
+		[textWord, textTx, textExp, textBase] = getJap(wordStem, wordType, form, chkNegate.checked, chkPast.checked, chkPolite.checked, wordTx, formTxV, formTxN, isGrid=false)
+		if (textWord == "-") {
+			textWord = "<span class='word'>" + ruby("[-(　)]") + "</span>";
+			textTx = " ";
+			textExp = "　";
+			textBase = "　";
+		}
+		mainText.innerHTML = textWord;
+		txText.innerHTML = textTx;
+		expText.innerHTML = textExp;
+		baseText.innerHTML = textBase;
+
+		if (wordType == 's') wordType = 's2';
+		if (wordType == 'k') wordType = 'k2';
+		tabGrid11.innerHTML = getJap(wordStem, wordType, form, false, false, false, null, null, null, isGrid=true);
+		tabGrid21.innerHTML = getJap(wordStem, wordType, form, true,  false, false, null, null, null, isGrid=true);
+		tabGrid31.innerHTML = getJap(wordStem, wordType, form, false, true,  false, null, null, null, isGrid=true);
+		tabGrid41.innerHTML = getJap(wordStem, wordType, form, true,  true,  false, null, null, null, isGrid=true);
+		tabGrid12.innerHTML = getJap(wordStem, wordType, form, false, false, true,  null, null, null, isGrid=true);
+		tabGrid22.innerHTML = getJap(wordStem, wordType, form, true,  false, true,  null, null, null, isGrid=true);
+		tabGrid32.innerHTML = getJap(wordStem, wordType, form, false, true,  true,  null, null, null, isGrid=true);
+		tabGrid42.innerHTML = getJap(wordStem, wordType, form, true,  true,  true,  null, null, null, isGrid=true);
+	}
+	function setFlags(neg, past, polite) {
+		chkNegate.checked = neg;
+		chkPast.checked = past;
+		chkPolite.checked = polite;
+		loadText();
+	}
+	function ruby(text) {
+		return "" + text
+			.replaceAll("[","<ruby>").replaceAll("]","</ruby>").replaceAll("(","<rt>").replaceAll(")","</rt>")
+			.replaceAll("{h","<span class='high'>").replaceAll("{n","<span class='negate'>").replaceAll("{t","<span class='past'>").replaceAll("{p","<span class='polite'>").replaceAll("}","</span>");
+	}
+	function clean(text) {
+		return "" + text
+			.replaceAll("[","").replaceAll("]","")
+			.replaceAll("{h","").replaceAll("{n","").replaceAll("{t","").replaceAll("{p","").replaceAll("}","");
+	}
+	function getJap(wordStem, wordType, form, neg, past, polite, wordTx, formTxV, formTxN, isGrid) {
+		// txtDebug.innerHTML = "";
+		if (!form) return "-";
+		// txtDebug.innerHTML = form;
+		fs = form.split(":");
+		formBase = fs[0].substring(0, 1);
+		formBase = formBase=='a' ? 11 : formBase=='b' ? 12 : parseInt(formBase);
+		formHead = baseList[wordType][formBase];
+		formTail = fs[0].substring(1);
+		formType = fs[1];
+		isException = (formType == '=');
+		if (formType == '=') formType = wordType;
+		isException = isException | (formType.substring(0, 1) == 'x');
+
+		if (formType == '-') {
+			if (neg || past || polite) return "-";
+			style = "0";
+		} else {
+			wordCat = wordType[0];
+			formCat = formType[0];
+			styleSubList = verbCats.includes(formCat) ? styleList['v'] : styleList[formType];
+			if (!styleSubList) return "-";
+			if (isException)
+				styleArray = verbCats.includes(wordCat) ? styleSubList['v'] : styleSubList[wordType];
+			else
+				styleArray = verbCats.includes(formCat) ? styleSubList['v'] : styleSubList[formType];
+			if (!styleArray) return "-";
+
+			index = neg * 1 + polite * 2 + past * 4;
+			if (index >= styleArray.length) return "-";
+			style = styleArray[index];
+			if (style == "") return "-";
+			// txtDebug.innerHTML = form + " " + style;
+		}
+
+		styleBase = style.substring(0, 1);
+		styleBase = styleBase=='a' ? 11 : styleBase=='b' ? 12 : parseInt(styleBase);
+		if (isException)
+			styleHead = baseList[wordType][styleBase];
+		else
+			styleHead = baseList[formType][styleBase];
+		styleTail = style.substring(1);
+		
+		// exceptions
+		if (formTail == "*せられ") {
+			formTail = (formHead == "さ") ? "せられ" : "され";
+		}
+		if (styleTail == "*よう") {
+			styleTail = ['1','s','k'].includes(wordCat) ? "よう" : "う";
+		}
+		if (formTail == "てあ" && styleTail.startsWith("{nな")) {
+			formTail = "て";　　styleHead = "";
+		}
+		if (formTail == "てい" && styleTail.startsWith("{tた")) {
+			styleHead = "っ";
+		}
+		if (formHead == "[す(　)].る" && formTail == "べき") {
+			formHead = "[す(　)].";
+		}
+		if (formHead == "する" && formTail == "べき") {
+			formHead = "す";
+		}
+
+		if (formHead.indexOf(".") > -1) {
+			st = formHead.split(".");
+			formHead1 = st[0];  formHead2 = st[1];
+		} else {
+			formHead1 = "";  formHead2 = formHead;
+		}
+		if (styleHead.indexOf(".") > -1) {
+			st = styleHead.split(".");
+			styleHead1 = st[0];  styleHead2 = st[1];
+		} else {
+			styleHead1 = "";  styleHead2 = styleHead;
+		}
+
+		textWord = 
+			"<span class='word'>" + ruby(wordStem) + "</span>" +
+			"<span class='word'>" + ruby(formHead1) + "</span>" + 
+			"<span class='form'>" + ruby(formHead2) + "</span>" +
+			(isException ? "<span class='form'>" : "<span class='form high'>") + ruby(formTail) + "</span>" +
+			"<span class='word'>" + ruby(styleHead1) + "</span>" + 
+			"<span class='form'>" + ruby(styleHead2) + "</span>" +
+			(isException ? "<span class='form high'>" : "<span class='form'>") + ruby(styleTail) + "</span>";
+
+		// exceptions
+		// if (wordType.startsWith('s') && formBase == 0 && (formTail == "させ" || formTail == "され" || formTail == "させられ")) {
+		// 	formBase = 3;  formTail = formTail.substring(1);
+		// }
+
+		if (isGrid) {
+			textWord = textWord.replace("<rt>", "<rt style='display:none'>");
+			return textWord;
+		} else {
+			tail = clean(formTail + styleHead1 + (isException?"":styleHead2) + styleTail);
+			adds = (neg?"否定・":"") + (past?"過去・":"") + (polite?"丁寧・":"");
+			textExp = 
+				baseList[wordType][10] + "：" + 
+				(isException ? baseList["name"][styleBase] : baseList["name"][formBase]) + 
+				(tail!="" ? "　＋　" + tail : "") +
+				(adds!="" ? "（" + adds.substring(0, adds.length-1) + "）" : "");
+		
+			b1 = baseList["name"];
+			wordType2 = (wordType == 's' ? 's2' : wordType == 'k' ? 'k2' : wordType);
+			b2 = baseList[wordType2];
+			textBase = 
+				b1[3] + "：" + b2[3] + (b2[3]!=""?"／":"") + b2[4] + (b2.length == 12 ? "／" + b2[11] : "") + "　" +
+				b1[5] + "：" + b2[5] + (b2[5]!=""?"／":"") + b2[6] + (b2.length == 13 ? "／" + b2[12] : "") + "　" +
+				b1[1] + "：" + b2[1] + "　" +
+				b1[2] + "：" + b2[2] + "　" +
+				b1[7] + "：" + b2[7] + "　" +
+				b1[9] + "：" + b2[9];
+
+			wordCat = wordType[0];
+			formTx = verbCats.includes(wordCat) ? formTxV : formTxN;
+			if (wordTx && formTx) {
+				textTx = formTx[neg * 1 + past * 2];
+				textTxArr = textTx.split(" ");
+				for (i=0; i<textTxArr.length; i++) {
+					if (!["is", "do", "does", "have", "has", "someone", "to", "be", "been"].includes(textTxArr[i]) && !textTxArr[i].startsWith("{"))
+						textTxArr[i] = "{h" + textTxArr[i] + "}";
+				}
+				textTx = textTxArr.join(" ");
+				textTx = textTx
+					.replace("VA", "<span class='word'>" + wordTx[0] + "</span>")
+					.replace("VD", "<span class='word'>" + wordTx[1] + "</span>")
+					.replace("VN", "<span class='word'>" + wordTx[2] + "</span>")
+					.replace("VG", "<span class='word'>" + wordTx[3] + "</span>")
+					.replace("VS", "<span class='word'>" + wordTx[4] + "</span>")
+					.replace("N", "<span class='word'>" + wordTx[0] + "</span>");
+				if (polite)
+					textTx = textTx + " {p&#40;polite form&#41;}";
+				textTx = ruby(textTx);
+			} else {
+				textTx = "";
+			}
+			return [textWord, textTx, textExp, textBase];
+		}	
+	}
+</script>
+</head>
+
+<body onLoad="loadText()">
+日本語活用 Japanese Inflection
+<br><br>
+
+<div id="mainText"></div>
+<div id="txText"></div>
+<div id="expText"></div>
+<div id="baseText"></div>
+<br>
+
+<table>
+<tr><td>
+	<!-- <span class="word">用言 word</span><br> -->
+	<select id="selWord" size=9 class="col1 word" onChange="loadText()">
+		<option value="[書(か)]|く|5k#write|wrote|written|writing|writes" selected>書く　　　（動詞：五段）</option>
+		<!-- <option value="[行(い)]|く|5k2#go|went|gone|going|goes">行く　　　（動詞：五段）</option> -->
+		<option value="[泳(およ)]|ぐ|5g#swim|swam|swum|swimming|swims">泳ぐ　　　（動詞：五段）</option>
+		<option value="[話(はな)]|す|5s#speak|spoke|spoken|speaking|speaks">話す　　　（動詞：五段）</option>
+		<option value="[立(た)]|つ|5t#stand|standed|standed|standing|stands">立つ　　　（動詞：五段）</option>
+		<option value="[死(し)]|ぬ|5n#die|died|died|dying|dies">死ぬ　　　（動詞：五段）</option>
+		<option value="[呼(よ)]|ぶ|5b#call|called|called|calling|calls">呼ぶ　　　（動詞：五段）</option>
+		<option value="[飲(の)]|む|5m#drink|drank|drunk|drinking|drinks">飲む　　　（動詞：五段）</option>
+		<option value="[走(はし)]|る|5r#run|ran|run|running|runs">走る　　　（動詞：五段）</option>  <!-- 切る/着る 知る 要る/居る 入る 走る 帰る/変える 喋る 湿る/閉める -->
+		<!-- <option value="[下(くだ)]さ|る|5r2#give|gave|given|giving|gives">下さる　　（動詞：五段）</option> -->
+		<option value="[歌(うた)]|う|5w#sing|sang|sung|sining|sings">歌う　　　（動詞：五段）</option>
+		<!-- <option value="[問(と)]|う|5w2#ask|asked|asked|asking|asks">問う　　　（動詞：五段）</option> -->
+		<option value="[見(み)]|る|1i#see|saw|seen|seeing|sees">見る　　　（動詞：上一段）</option>
+		<option value="[借(か)]り|る|1i#borrow|borrowed|borrowed|borrowing|borrows">借りる　　（動詞：上一段）</option>
+		<option value="[寝(ね)]|る|1e#sleep|slept|slept|sleeping|sleeps">寝る　　　（動詞：下一段）</option>
+		<option value="[食(た)]べ|る|1e#eat|ate|eaten|eating|eats">食べる　　（動詞：下一段）</option>
+		<option value="|[来(く)]る|k#come|came|come|coming|comes">来る　　　（動詞：変格）</option>
+		<option value="|する|s#do|did|done|doing|does">する　　　（動詞：変格）</option>
+		<option value="[勉強(べんきょう)]|する|s2#study|studied|studied|studying|studies">勉強する　（動詞：変格）</option>
+		<!--<option value="[論(ろん)]|ずる|sz">論ずる　　（動詞：変格）</option>-->
+		<option value="[甘(あま)]|い|i#sweet">甘い　　　（イ形容詞）</option>
+		<!-- <option value="|[良(い)]い|i">良い　　　（イ形容詞）</option> -->
+		<option value="[楽(たの)]し|い|i#happy">楽しい　　（イ形容詞）</option>
+		<option value="[元気(げんき)]|だ|a#healthy">元気だ　　（ナ形容詞）</option>
+		<option value="[ユニーク(　)]|だ|a#unique">ユニークだ（ナ形容詞）</option>
+		<option value="[寿司(すし)]||n#sushi">寿司　　　（名詞）</option>
+		<option value="[パンダ(　)]||n#panda">パンダ　　（名詞）</option>
+	</select><br>
+	<div id="txtDebug"></div>
+	<!-- <input id="txtWord" class="col1" onChange="loadText()"><br><br> -->
+	<!-- <span class="word">用言の種類 word type</span><br>
+	<select id="selWordType" size=6 class="col1 word" onChange="loadText()">
+		<option value="5" selected>動詞：五段活用 class-5 verb</option>
+		<option value="1i">動詞：上一段活用 class-1a verb</option>
+		<option value="1e">動詞：下一段活用 class-1b verb</option>
+		<option value="s">動詞：変格活用 irregular verb</option>
+		<option value="i">イ形容詞 i-adjective</option>
+		<option value="a">ナ形容詞 na-adjective</option>
+	</select><br> -->
+	<br>
+	<input id="btnShowForm" type="button" value="show more..." onClick="divFlags.style.display=''; selForm.style.display=''; btnShowForm.style.display='none';">
+</td><td>
+	<!-- <span class="form">結合 form</span><br> -->
+	<!-- *=all, v=verb, 5=gotan, 1=ichidan, s/k=irregular, i=i-adjective, n=na-adjective, '='=same, -=none -->
+	<select id="selForm" size=9 class="col3 form" onChange="loadText()" style="display:none;">
+<!--	<option disabled>═══ 打消 ═════════</option>
+		<option>打消（未然形＋ない）negation</option>
+		<option>打消（未然形＋ぬ）negation</option>-->
+		<option value="*:0:=#VA|do {nnot} VA|{tdid} VA|{tdid} {nnot} VA#N|{nnot} N|{twas} N|{twas} {nnot} N" selected>直接（終止形）indicative</option>
+		<option disabled>═══ （動詞）使役・受身 ═════════</option>
+		<option value="5:3せ:1e|1:3させ:1e|s:aせ:1e|k:3させ:1e#let VA|do {nnot} let VA|{tlet} VA|{tdid} {nnot} let VA">使役（未然形＋せる）causative</option>
+		<option value="5:3れ:1e|1:3られ:1e|s:aれ:1e|k:3られ:1e#is VN|is {nnot} VN|{twas} VN|{twas} {nnot} VN">受身（未然形＋れる）passive</option>
+		<option value="5:3*せられ:1e|1:3させられ:1e|s:aせられ:1e|k:3させられ:1e#is made to VA|is {nnot} made to VA|{twas} made to VA|{twas} {nnot} made to VA">使役受身（未然形＋せられる）causative-passive</option>
+		<option value="v:8:1e#VA-able|{nnot} VA-able|{twas} VA-able|{twas} {nnot} VA-able">可能（可能形＋る）potential</option>
+		<option disabled>═══ （動詞）意志 ═════════</option>
+		<option value="v:5た:i#want to VA|do {nnot} want to VA|{twanted} to VA|{tdid} {nnot} want to VA">希望（連用形＋たい）desiderative</option>
+		<option value="v:2つもり:n2#plan to VA|do {nnot} plan to VA|{tplanned} to VA|{tdid} {nnot} plan to VA">意図（連体形＋つもり）intention</option>
+		<option value="v:1べき:a#should VA|should {nnot} VA|should {thave} VN|should {nnot} {thave} VN">当然（終止形＋べきだ）obligation</option>
+		<option value="v:0:x4#VA!|do {nnot} VA!">命令/禁止（命令形／終止形＋な）imperative / prohibitive</option>
+		<option value="v:0:x5#please VA|please do {nnot} VA">依頼（連用形＋て）request</option>
+		<option value="v:0:x6#let's VA|let's {nnot} VA">意志・勧誘（未然形＋う／終止形＋まい）hortative</option>
+		<option disabled>═══ 仮定 ═════════</option>
+		<option value="*:0:x1#if VA|if do {nnot} VA|if {tdid} VA|if {tdid} {nnot} VA#if is N|if is {nnot} N|if {twas} N|if {twas} {nnot} N">仮定条件（仮定形＋ば）conditional</option>
+		<option value="*:0:x2#if VA|if do {nnot} VA|if {tdid} VA|if {tdid} {nnot} VA#if is N|if is {nnot} N|if {twas} N|if {twas} {nnot} N">仮定条件（連用形＋たら）conditional</option>
+		<!-- <option value="v:1なら:-|i:1なら:-|a:7:-|n:7:-">仮定（終止形＋なら）conditional</option> -->
+		<option value="*:0:x3#if VA|if do {nnot} VA|if {tdid} VA|if {tdid} {nnot} VA#if is N|if is {nnot} N|if {twas} N|if {twas} {nnot} N">仮定条件（終止形＋なら）conditional</option>
+		<option disabled>═══ 推量 ═════════</option>
+		<option value="*:0:x7#probably VA|probably {nnot} VA#probably N|probably {nnot} N">推量（未然形＋う／終止形＋まい）conjecture</option>
+		<option value="v:1らし:i|i:1らし:i|a:0らし:i|n:0らし:i#apparently VA|apparently do {nnot} VA|apparently {tdid} VA|apparently {tdid} {nnot} VA#apparently N|apparently {nnot} N|apparently {twas} N|apparently {twas} {nnot} N">推定（終止形＋らしい）inference</option>
+		<option value="v:2みたい:a|i:2みたい:a|a:0みたい:a|n:0みたい:a#seem to VA|do {nnot} seem to VA|{tseemed} to VA|{tdid} {nnot} seem to VA#seem to be N|do {nnot} seem to be N|{tseemed} to be N|{tdid} {nnot} seem to be N">比況（連体形＋みたいだ）evidential</option>
+		<option value="v:2よう:a|i:2よう:a|a:2よう:a|n:2よう:a#appear to VA|do {nnot} appear to VA|{tappeared} to VA|{tdid} {nnot} appear to VA#appear to be N|do {nnot} appear to be N|{tappeared} to be N|{tdid} {nnot} appear to be N">推定・比況（連体形＋ようだ）inference</option>
+		<option value="v:5そう:a|i:0そう:a|a:0そう:a|n:0そう:a#looks like to VA|does {nnot} look like to VA|{tlooked} like to VA|{tdid} {nnot} look like to VA#looks like is N|does {nnot} look like is N|{tlooked} like is N|{tdid} {nnot} look like is N">様態（連用形＋そうだ）sensory experience</option>
+		<option value="*:1そう:a#sounds like to VA|does {nnot} sound like to VA|{tsounded} like to VA|{tdid} {nnot} sound like to VA#sounds like is N|does {nnot} sound like is N|{tsounded} like is N|{tdid} {nnot} sound like is N">伝聞（終止形＋そうだ）hearsay</option>
+		<option value="*:2はず:n2#should VA|should {nnot} VA|should {thave} VN|should {nnot} {thave} VN#should be VA|should {nnot} be VA|should {thave} been N|should {nnot} {thave} been N">予想（終止形＋はず）expectation</option>
+		<option value="v:5たが:5r|i:0が:5r|a:0が:5r|n:0が:5r#looks like someone wants to VA|looks like someone does {nnot} want to VA|looks like someone {twanted} to VA|looks like someone {tdid} {nnot} want to VA#looks like N|does {nnot} look like N|{tlooked} like N|{tdid} {nnot} look like N">様態（語幹＋がる）evidential</option>
+		<option value="v:5っぽ:i|i:0っぽ:i|a:0っぽ:i|n:0っぽ:i#VA-ish|{nnot} VA-ish|{twas} VA-ish|{twas} {nnot} VA-ish#N-ish|{nnot} N-ish|{twas} N-ish|{twas} {nnot} N-ish">状態（連用形＋っぽい）state</option>
+		<option disabled>═══ 詞化 ═════════</option>
+		<option value="*:2こと:-#VG#being N">名詞化（終止形＋こと）nominalization</option>
+		<option value="*:2とき:-#when VG#when N">名詞化（終止形＋とき）nominalization</option>
+		<option value="i:0さ:-|a:0さ:-##N-ness">程度（語幹＋さ）degree</option>
+		<option value="i:0み:-|a:0み:-|n:0み:-##N-ity">性質（語幹＋み）characteristic</option>
+		<option value="i:5な:5r|a:bな:5r|n:bな:5r##become N|{nnot} become N|{tbecame} N|{tdid} {nnot} become N">自動詞化（連用形＋なる）denominalization</option>
+		<option disabled>═══ （動詞）テ形 gerund ═════════</option>
+		<option value="v:6てい:1i#is VG continually|is {nnot} VG continually|{twas} VG continually|{twas} {nnot} VG continually">継続（連用形＋ている）continuation</option>
+		<option value="v:6てお:5k#is VG in advance|is {nnot} VG in advance|{twas} VG in advance|{twas} {nnot} VG in advance">準備（連用形＋ておく）preparation</option>
+		<option value="v:6てしま:5w#has finished VG|has {nnot} finished VG|{thad} finished VG|{thad} {nnot} finished VG">完了（連用形＋てしまう）completion</option>
+		<option value="v:6てあ:5r#is VN as a result|is {nnot} VN as a result|{twas} VN as a result|{twas} {nnot} VN as a result">結果（連用形＋てある）result</option>
+		<option value="v:6てい:5k#VA forth|{nnot} VA forth|{tdid} VA forth|{tdid} {nnot} VA forth">変化（連用形＋ていく）state change</option>
+		<option value="v:6て:k2#VA back|{nnot} VA back|{tdid} VA back|{tdid} {nnot} VA back">変化（連用形＋てくる）state change</option>
+		<option value="v:6てみ:1i#try to VA|{nnot} try to VA|{ttried} to VA|{tdid} {nnot} try to VA">試行（連用形＋てみる）trial</option>
+		<option value="v:6てくださ:5r2#someone VA to/for|someone {nnot} VA to/for|someone {tdid} VA to/for|someone {tdid} {nnot} VA to/for">他授（連用形＋てくれる・くださる）giving</option>
+		<option value="v:6ていただ:5k#is VN from/by someone|is {nnot} VN from/by someone|{twas} VN from/by someone|{twas} {nnot} VN from/by someone">我受（連用形＋てもらう・いただく）receiving</option>
+		<option value="v:6てあげ:1e#VA to/for someone|{nnot} VA to/for someone|{tdid} VA to/for someone|{tdid} {nnot} VA to/for someone">我授（連用形＋てやる・あげる）giving</option>
+		<option value="v:6てほし:i#want someone to VA|{nnot} want someone to VA|{twanted} someone to VA|{tdid} {nnot} want someone to VA">希望（連用形＋てほしい）desiderative</option>
+	</select>
+</td><td>
+	<!-- <span class="word">活用形 base</span><br>
+	<select id="selBase" size=10 class="col2 word" onChange="loadText()">
+		<option value="1" selected>終止形 terminal</option>
+		<option value="0">└語幹 stem</option>
+		<option value="2">連体形 attributive</option>
+		<option value="3">未然形 irrealis</option>
+		<option value="4">└意志形 volitional</option>
+		<option value="5">連用形 continuative</option>
+		<option value="6">└音便形 euphonic</option>
+		<option value="7">仮定形 hypothetical</option>
+		<option value="8">└可能形 potential</option>
+		<option value="9">命令形 imperative</option>
+	</select><br> -->
+	<table class="grid">
+	<tr><td></td><td>丁寧</td><td>普通</td></tr>
+	<tr><td>現在肯定</td><td onclick="setFlags(false, false, true);"><span id="tabGrid12"></span></td><td onclick="setFlags(false, false, false);"><span id="tabGrid11"></span></td></tr>
+	<tr><td>現在否定</td><td onclick="setFlags(true,  false, true);"><span id="tabGrid22"></span></td><td onclick="setFlags(true,  false, false);"><span id="tabGrid21"></span></td></tr>
+	<tr><td>過去肯定</td><td onclick="setFlags(false, true,  true);"><span id="tabGrid32"></span></td><td onclick="setFlags(false, true,  false);"><span id="tabGrid31"></span></td></tr>
+	<tr><td>過去否定</td><td onclick="setFlags(true,  true,  true);"><span id="tabGrid42"></span></td><td onclick="setFlags(true,  true,  false);"><span id="tabGrid41"></span></td></tr>
+	</table>
+	<br>
+	<div id="divFlags" style="display:none;">
+	<input type="checkbox" id="chkNegate" onChange="loadText()"><label for="chkNegate" class="negate">否定 negative</label>
+	<input type="checkbox" id="chkPast" onChange="loadText()"><label for="chkPast" class="past">過去 past</label>
+	<input type="checkbox" id="chkPolite" onChange="loadText()"><label for="chkPolite" class="polite">丁寧 polite</label><br>
+	</div>
+</td><td>
+</td></tr>
+</table>
+
+</body>	
+</html>
