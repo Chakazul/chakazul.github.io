@@ -1,0 +1,68 @@
+@font-face {
+    font-family:HentaiKana;
+    src: url('../font/ninjal_hentaigana.woff2') format('woff2');
+}
+@font-face {
+	font-family:font1;
+	src: url('../font/KiChoJIS-M290.woff') format('woff');
+}
+@font-face {
+	font-family:font2;
+	src: url('../font/JISZ8903M61204-ss03.woff') format('woff');
+}
+
+.serif {
+    font-family:Hentaikana, 'Noto Serif JP', 'メイリオ', serif;
+}
+.sans {
+    font-family:GoogleSansCJK, 'Noto Sans JP', 'メイリオ', sans-serif;
+    color: darkblue;
+}
+.org_sans {
+    font-family:'Noto Sans JP', 'メイリオ', sans-serif;
+}
+.font1 {
+    font-family:font1;
+}
+.font2 {
+    font-family:font2;
+}
+.glyph {
+    width: 120px;
+    height: 120px;
+    position: relative;
+    top: 20px;
+}
+
+div.char {
+    display: inline-block;
+    border-width: 1px;
+    border-style: solid;
+    border-color: black;
+    margin: 1px 0px;
+}
+
+div.main {
+    font-family:Hentaikana, 'Noto Serif JP', serif;
+    font-size: 120px;
+    line-height: 1.3;
+    margin: 0px;
+}
+
+div.main2 {
+    display: inline-block;
+    font-family:'Noto Serif JP', serif;
+    font-size: 120px;
+    line-height: 1.3;
+    margin: 1px 0px;
+}
+
+div.bottom, div.top {
+    background: #eee;
+    padding: 5px;
+    text-align: center;
+}
+
+div.bottom span, div.top span {
+    margin: 0px 5px;
+}

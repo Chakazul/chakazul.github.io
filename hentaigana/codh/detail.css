@@ -1,0 +1,372 @@
+@charset "UTF-8";
+/*********** General **************/
+
+
+.more{
+    border:2px solid #000;
+    padding:6px 20px;
+    display:inline-block;
+    margin-top:4rem;
+}
+
+.right{
+    float:right;
+}
+
+.left{
+    float:left;
+}
+
+figure.left {
+    margin-right: 20px;
+    width: 380px;
+}
+
+/************ Detail *************/
+.content_head{
+    background:#dedbe3;
+    padding:2.5em 0 1.5em;
+}
+.content_head h2{
+    color: #3f415e;
+/*    white-space: nowrap;
+    width: 140px;*/
+    overflow: visible;
+/*    padding-bottom: 5px;
+    border-bottom: 4px solid #3f415e;*/
+    margin-bottom: 30px;
+    font-size: 3rem;
+}
+.pcPad{
+    padding-left:6rem;
+    padding-right:6rem;
+}
+
+section h3{
+    font-size:2.5rem;
+    margin: 1em 0;
+    color: #000;
+}
+section h4{
+    font-size:1.8rem;
+    color: #000;
+}
+
+section .content_nav{
+    background:#dedbe3;
+    padding:20px;
+}
+section .content_nav{
+    margin-top:5rem;
+}
+section .content_nav ul li{
+    list-style:none;
+    margin: 5px 0;
+}
+section .content_nav h5{
+    color: #3f415e;
+    white-space: nowrap;
+    width: 50px;
+    overflow: visible;
+    padding-bottom: 3px;
+    border-bottom: 2px solid #3f415e;
+    margin-bottom: 20px;
+}
+
+article{
+    overflow:hidden;
+    margin: 30px 0;
+    font-size: 1.8rem;
+}
+
+article blockquote {
+    margin: 1em 0;
+    padding: 0;
+}
+
+article.rss {
+    margin: 0em 0;
+    padding: 0;
+}
+
+article p {
+    margin: 0 0 1em 0;
+    font-size: 1.8rem;
+    color: #000;
+}
+article figure{
+    margin: 0;
+    position:relative;
+}
+article figure figcaption{
+    background:#dedbe3;
+    margin-top:0;
+    padding:10px 20px;
+    font-size: 1.2rem;
+}
+article figure img{
+    width:100%;
+    height:auto;
+    vertical-align:bottom;
+}
+
+article article{
+    margin-top:5rem;
+}
+/*
+  #dogImg{
+  overflow:hidden;
+  margin-top:10px;
+  }
+  #dogImg figure{
+  width:45%;
+  float:left;
+  padding:0;
+  margin:0;
+  }
+  #dogImg p{
+  width:50%;
+  float:right;
+  }
+  */
+
+.rect{
+    border:1px solid #000;
+    padding:20px 30px;
+    margin:1em 0;
+}
+.bgrect{
+    background:#dedbe3;
+    padding:20px 30px;
+    margin: 1em 0;
+}
+
+blockquote strong {
+    background:url("/img/dquote.png") no-repeat left center;
+    padding-left:8rem;
+    margin: 2rem 0;
+    font-size:2.4rem;
+    font-weight:normal;
+    display: block;
+}
+
+table {
+    margin:2rem 0;
+    width:940px;
+    border-bottom:1px solid #000;
+    border-top:1px solid #000;
+    border-left:1px solid #000;
+    border-collapse:collapse;
+    page-break-inside: avoid;
+}
+table tr:nth-child(odd){
+    background:#f6f6f6;
+}
+table th{
+    text-align:left;
+    vertical-align:middle;
+}
+table td:last-child{
+    text-align:left;
+}
+table th,
+table td{
+    border-right:1px solid #000;
+    padding:10px 15px;
+}
+
+table td.new {
+    background:#fe9;
+}
+
+table td.recipe-current {
+    background:#fcc;
+}
+
+table td.recipe-trans {
+    background:#fe9;
+}
+
+nav.page {
+    padding:20px 30px;
+    background:#dedbe3;
+}
+
+nav.page span {
+    padding: 0 30px;
+}
+
+article.summary {
+    overflow: hidden;
+/*    padding: 0 10px;*/
+}
+article.summary .thumb {
+    width: 140px;
+    float: left;
+}
+
+article.summary .thumb img {
+    width: 140px;
+    height: 140px;
+}
+
+article.summary .body {
+    background: #DEDBE3;
+    color: #3F415E;
+    padding: 10px 10px 10px 150px;
+    width: 100%;
+    height: 140px;
+}
+
+article.summary .body p {
+    font-size: 1.2rem;
+    color: #3F415E;
+}
+
+/** Data set **/
+#data .content_head{
+    background:url("/img/page-title.png") no-repeat top center;
+    background-size:cover;
+    padding-top:13em;
+}
+#data .content_head h2{
+    color:#fff;
+    border-bottom-color:#fff;
+}
+.dataV{
+    overflow-x:scroll;
+    width:100%;
+/*    min-width:800px;*/
+    border-collapse:collapse;
+    border-left:1px solid #3f415e;
+    border-bottom:1px solid #3f415e;
+}
+.dataV thead tr th{
+    background:#3f415e;
+    color:#fff;
+    text-align:left;
+    padding:8px 10px;
+    border:1px solid #3f415e;
+}
+.dataV tbody tr:nth-child(odd){
+    background:#f6f6f6;
+}
+.dataV tbody th{
+    text-align:right;
+}
+.dataV tbody td a{
+/*    text-decoration:underline;*/
+    font-weight:bold;
+}
+.dataV tbody th,
+.dataV tbody td{
+    border-right:1px solid #3f415e;	
+    padding:8px 10px;
+}
+
+dl dd {
+    margin: 0px 0px 0px 30px;
+}
+
+div.glyph {
+    text-align: left;
+}
+
+div.unicode {
+    text-align: left;
+    font-size: 1rem;
+    margin: 0px;
+}
+
+div.order {
+    text-align: right;
+    font-size: 1rem;
+    margin: 0px;
+}
+
+div.count {
+    text-align: right;
+    margin: 0px;
+}
+
+p.author {
+    text-align: right;
+}
+
+p.narrow span {
+    margin: 0px 20px 0px 0px;
+}
+
+p.recipe-name {
+    margin: 15px 0px;
+    font-size: 90%;
+    color: #555;
+}
+
+div.center {
+    text-align: center;
+}
+
+#search {
+    background: #f7f7f7;
+    padding: 5px;
+    border-width: 3px;
+    border-color: #ccc;
+    border-style: solid;
+}
+
+#map * {
+    font-family: 'Lato', 'Noto Sans JP', sans-serif;
+}    
+
+@media screen and (max-width: 768px) {
+    
+    #bread_crumb nav{
+	padding-left:20px;
+	padding-right:20px;
+    }
+    .content_head{
+	padding-left:20px;
+	padding-right:20px;
+    }
+    .content_head h2{
+	font-size:2.8rem;
+    }
+    
+    blockquote strong {
+	background-position: left top;
+	padding-left: 0;
+	padding-top: 7rem;
+    }
+    
+    #data .content_head{
+	padding-top:6rem;
+    }
+    
+    figure.left {
+	float: none;
+	width: 100%;
+    }
+    
+    article.summary {
+	margin: 10px 0;
+    }
+    
+    .table_wrap {
+	width: 100%;
+	padding: 10px 0;
+	overflow: scroll;
+    }
+}
+
+form.horiz label {
+    margin: 0px 10px 0px 0px;
+}
+
+div.resize_small {
+    display: inline;
+}
+
+div.resize_small img {
+    height: 100px;
+}
