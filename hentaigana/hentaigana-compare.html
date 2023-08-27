@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="ja" dir="ltr">
+<head prefix="og: https://ogp.me/ns#">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!-- Bert: add Noto Sans JP Hantaigana (WIP) -->
+<link rel="stylesheet" href="codh/style.css">
+<link rel="stylesheet" href="codh/font-awesome.css">
+<link rel="stylesheet" href="codh/detail.css">
+<link rel="stylesheet" href="codh/hentaigana.css">
+<link rel="stylesheet" href="font/GoogleSansCJK.woff2.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&amp;display=swap" rel="stylesheet">
+<!-- <script async="true" src="https://www.googletagmanager.com/gtag/js?id=UA-89206154-1"></script><script>
+	window.dataLayer = window.dataLayer || [];
+	function gtag(){dataLayer.push(arguments);}
+	gtag('js', new Date());
+	
+	gtag('config', 'UA-89206154-1');
+      </script><script async="true" src="https://www.googletagmanager.com/gtag/js?id=G-TYZYR2JP8H"></script><script>
+	window.dataLayer = window.dataLayer || [];
+	function gtag(){dataLayer.push(arguments);}
+	gtag('js', new Date());
+	
+	gtag('config', 'G-TYZYR2JP8H');
+      </script><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<link rel="stylesheet" href="codh/style.css">
+<link rel="stylesheet" href="codh/font-awesome.css">
+<link rel="stylesheet" href="codh/detail.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lato&amp;display=swap" rel="stylesheet">
+<title>Unicode変体仮名一覧（字形拡大表示） | 日本古典籍くずし字データセット</title>
+<meta property="og:title" content="Unicode変体仮名一覧（字形拡大表示）">
+<meta property="og:type" content="website">
+<meta property="og:url" content="http://codh.rois.ac.jp/char-shape/hentaigana/large.html.ja">
+<meta property="og:image" content="http://codh.rois.ac.jpcodh/U+4E0A.jpg">
+<meta property="og:site_name" content="ROIS-DS人文学オープンデータ共同利用センター(CODH)">
+<meta property="og:description" content="Unicodeで定義された変体仮名を一覧します。">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@rois_codh">
+<meta name="twitter:creator" content="@rois_codh">
+<script src="codh/jquery-3.5.1.min.js"></script><script src="codh/common.js"></script> -->
+</head>
+<body><div class="page_wrapper">
+<!--
+<header><div class="wrap">
+<div class="header">
+<h1><a href="/"><img src="codh/logo.png" width="364" height="34" alt="ROIS-DS人文学オープンデータ共同利用センター(CODH)"></a></h1>
+<nav><ul class="lang">
+<li>日本語</li>
+<li>
+	    English
+	  </li>
+</ul>
+<div class="btn_menu"><button>
+		メニュー
+		<img src="codh/hamburger.png" width="32" height="34" alt="メニュー"></button></div></nav>
+</div>
+<div id="global_nav">
+<div id="global_nav_bg"></div>
+<div class="swrap">
+<div class="btn_menu"><button>
+		閉じる
+		<img src="codh/close.png" alt="close"></button></div>
+<nav><ul id="global_menu">
+<li><a href="/">ホーム</a></li>
+<li><a href="/about/">概要</a></li>
+<li><a href="/about/#member">メンバー</a></li>
+<li><a href="/news/">ニュース</a></li>
+<li><a href="/collaboration/">共同研究</a></li>
+<li><a href="/recruit/">採用情報</a></li>
+<li><a href="/event/">イベント</a></li>
+<li><a href="/dataset/">データセット／データベース</a></li>
+<li><a href="/project/">プロジェクト</a></li>
+<li><a href="/software/">ソフトウェア</a></li>
+<li><a href="/policy/">利用規約</a></li>
+<li><a href="/feedback/">お問い合わせ</a></li>
+</ul></nav>
+</div>
+</div>
+</div></header>
+<div id="bread_crumb" class="header"><nav class="wrap"><ul>
+<li><a href="/"><i class="fa fa-home"></i><span>ホーム</span></a></li>
+<li><a href="/char-shape/">日本古典籍くずし字データセット</a></li>
+<li><a href="/char-shape/hentaigana/">Unicode変体仮名一覧</a></li>
+<li><a href="#">字形拡大表示</a></li>
+</ul></nav></div>
+-->
+
+<div class="block"><div class="wrap"><section><article>
+show part:
+<input type="radio" name="part" id="show_list" onclick="list_container.style.display=''; components_container.style.display='none';" checked><label for="show_list"> List of Hentaigana</label>
+<input type="radio" name="part" id="show_comp" onclick="list_container.style.display='none'; components_container.style.display='';"><label for="show_comp"> Grouped by components</label>
+<br>
+display glyphs:
+<input type="checkbox" name="glyphs" id="show_serif" checked onclick="showAll('serif', this.checked);"><label for="show_serif"> NINJAL Serif</label>
+<input type="checkbox" name="glyphs" id="show_glyph1" checked onclick="showAll('glyph1', this.checked);"><label for="show_glyph1"> Glyphwiki Koseki</label>
+<input type="checkbox" name="glyphs" id="show_glyph2" checked onclick="showAll('glyph2', this.checked);"><label for="show_glyph2"> Glyphwiki fitzgerald</label>
+<input type="checkbox" name="glyphs" id="show_sans" checked onclick="showAll('sans', this.checked);"><label for="show_sans"> Noto Sans (WIP)</label>
+</article></section></div></div>
+
+<div id="list_container">
+
+<div class="content_head"><div class="wrap"><h2>List of Hentaigana &mdash; Unicode変体仮名一覧（字形拡大表示）</h2></div></div>
+<div class="block"><div class="wrap"><section><article id="list_div"><p>
+	<span class="blue">
+	Webpage adopted from ROIS-DS人文学オープンデータ共同利用センター(CODH) <a target="_blank" href="http://codh.rois.ac.jp/char-shape/hentaigana/large.html.ja">(original webpage)</a><br>
+	#1 font is NINJAL 変体仮名フォント -- ninjal_hentaigana.woff2 downloaded from <a href="https://cid.ninjal.ac.jp/kana/font/">国立国語研究所</a><br>
+	#2 image is 戸籍統一文字 -- koseki-90xxxx from <a target="_blank" href="https://glyphwiki.org/wiki/Group:変体仮名">Glyphwiki Koseki</a> (conversion <a target="_blank" href="https://glyphwiki.org/wiki/Group:tsuruki-work-test">table</a>)<br>
+	#3 image is 黑体变体假名 -- fitzgerald_u-xxxxx from <a target="_blank" href="https://glyphwiki.org/wiki/Group:fitzgerald_黑体变体假名">Glyphwiki user fitzgerald</a><br>
+	#4 font is Google Noto Sans JP Hentaigana (work in progress) -- GoogleSansCJK.woff2.css adopted from <a target="_blank" href="https://drive.google.com/corp/drive/folders/1ZTY5NIy2GxDgnebXV-EBkbXdVh1v7Qkr?resourcekey=0-wVw6MpGS_LdUuR2FHqRKuQ">specimen.html</a><br>
+	<!-- Font #3 is 機械彫刻用標準書体 -- KiChoJIS-M290.woff downloaded from <a href="https://font.kim/">機械彫刻用標準書体</a> -->
+	<br>
+	</span>
+		  <!-- Unicode（ユニコード）に登録されている変体仮名（へんたいがな）286文字（U+1B001〜U+1B11E）の字形（グリフ）を拡大表示します。ひらがなと変体仮名の対応については、<a href="./">Unicode変体仮名一覧</a>をご覧ください。 -->
+    </p>
+<div class="char"><div class="top"><span>え</span></div><div class="main">𛀁</div><div class="bottom"><span>江</span> <span>U+1B001</span></div></div>
+<div class="char"><div class="top"><span>あ</span></div><div class="main">𛀂</div><div class="bottom"><span>安</span> <span>U+1B002</span></div></div>
+<div class="char"><div class="top"><span>あ</span></div><div class="main">𛀃</div><div class="bottom"><span>愛</span> <span>U+1B003</span></div></div>
+<div class="char"><div class="top"><span>あ</span></div><div class="main">𛀄</div><div class="bottom"><span>阿</span> <span>U+1B004</span></div></div>
+<div class="char"><div class="top"><span>あ</span> <span>を</span></div><div class="main">𛀅</div><div class="bottom"><span>惡</span> <span>U+1B005</span></div></div>
+<div class="char"><div class="top"><span>い</span></div><div class="main">𛀆</div><div class="bottom"><span>以</span> <span>U+1B006</span></div></div>
+<div class="char"><div class="top"><span>い</span></div><div class="main">𛀇</div><div class="bottom"><span>伊</span> <span>U+1B007</span></div></div>
+<div class="char"><div class="top"><span>い</span></div><div class="main">𛀈</div><div class="bottom"><span>意</span> <span>U+1B008</span></div></div>
+<div class="char"><div class="top"><span>い</span></div><div class="main">𛀉</div><div class="bottom"><span>移</span> <span>U+1B009</span></div></div>
+<div class="char"><div class="top"><span>う</span></div><div class="main">𛀊</div><div class="bottom"><span>宇</span> <span>U+1B00A</span></div></div>
+<div class="char"><div class="top"><span>う</span></div><div class="main">𛀋</div><div class="bottom"><span>宇</span> <span>U+1B00B</span></div></div>
+<div class="char"><div class="top"><span>う</span></div><div class="main">𛀌</div><div class="bottom"><span>憂</span> <span>U+1B00C</span></div></div>
+<div class="char"><div class="top"><span>う</span></div><div class="main">𛀍</div><div class="bottom"><span>有</span> <span>U+1B00D</span></div></div>
+<div class="char"><div class="top"><span>う</span></div><div class="main">𛀎</div><div class="bottom"><span>雲</span> <span>U+1B00E</span></div></div>
+<div class="char"><div class="top"><span>え</span></div><div class="main">𛀏</div><div class="bottom"><span>盈</span> <span>U+1B00F</span></div></div>
+<div class="char"><div class="top"><span>え</span></div><div class="main">𛀐</div><div class="bottom"><span>縁</span> <span>U+1B010</span></div></div>
+<div class="char"><div class="top"><span>え</span></div><div class="main">𛀑</div><div class="bottom"><span>衣</span> <span>U+1B011</span></div></div>
+<div class="char"><div class="top"><span>え</span></div><div class="main">𛀒</div><div class="bottom"><span>衣</span> <span>U+1B012</span></div></div>
+<div class="char"><div class="top"><span>え</span></div><div class="main">𛀓</div><div class="bottom"><span>要</span> <span>U+1B013</span></div></div>
+<div class="char"><div class="top"><span>お</span></div><div class="main">𛀔</div><div class="bottom"><span>於</span> <span>U+1B014</span></div></div>
+<div class="char"><div class="top"><span>お</span></div><div class="main">𛀕</div><div class="bottom"><span>於</span> <span>U+1B015</span></div></div>
+<div class="char"><div class="top"><span>お</span></div><div class="main">𛀖</div><div class="bottom"><span>隱</span> <span>U+1B016</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀗</div><div class="bottom"><span>佳</span> <span>U+1B017</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀘</div><div class="bottom"><span>加</span> <span>U+1B018</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀙</div><div class="bottom"><span>可</span> <span>U+1B019</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀚</div><div class="bottom"><span>可</span> <span>U+1B01A</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀛</div><div class="bottom"><span>嘉</span> <span>U+1B01B</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀜</div><div class="bottom"><span>我</span> <span>U+1B01C</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀝</div><div class="bottom"><span>歟</span> <span>U+1B01D</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀞</div><div class="bottom"><span>賀</span> <span>U+1B01E</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀟</div><div class="bottom"><span>閑</span> <span>U+1B01F</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀠</div><div class="bottom"><span>香</span> <span>U+1B020</span></div></div>
+<div class="char"><div class="top"><span>か</span></div><div class="main">𛀡</div><div class="bottom"><span>駕</span> <span>U+1B021</span></div></div>
+<div class="char"><div class="top"><span>か</span> <span>け</span></div><div class="main">𛀢</div><div class="bottom"><span>家</span> <span>U+1B022</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀣</div><div class="bottom"><span>喜</span> <span>U+1B023</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀤</div><div class="bottom"><span>幾</span> <span>U+1B024</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀥</div><div class="bottom"><span>幾</span> <span>U+1B025</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀦</div><div class="bottom"><span>支</span> <span>U+1B026</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀧</div><div class="bottom"><span>木</span> <span>U+1B027</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀨</div><div class="bottom"><span>祈</span> <span>U+1B028</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀩</div><div class="bottom"><span>貴</span> <span>U+1B029</span></div></div>
+<div class="char"><div class="top"><span>き</span></div><div class="main">𛀪</div><div class="bottom"><span>起</span> <span>U+1B02A</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀫</div><div class="bottom"><span>久</span> <span>U+1B02B</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀬</div><div class="bottom"><span>久</span> <span>U+1B02C</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀭</div><div class="bottom"><span>九</span> <span>U+1B02D</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀮</div><div class="bottom"><span>供</span> <span>U+1B02E</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀯</div><div class="bottom"><span>倶</span> <span>U+1B02F</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀰</div><div class="bottom"><span>具</span> <span>U+1B030</span></div></div>
+<div class="char"><div class="top"><span>く</span></div><div class="main">𛀱</div><div class="bottom"><span>求</span> <span>U+1B031</span></div></div>
+<div class="char"><div class="top"><span>け</span></div><div class="main">𛀲</div><div class="bottom"><span>介</span> <span>U+1B032</span></div></div>
+<div class="char"><div class="top"><span>け</span></div><div class="main">𛀳</div><div class="bottom"><span>介</span> <span>U+1B033</span></div></div>
+<div class="char"><div class="top"><span>け</span></div><div class="main">𛀴</div><div class="bottom"><span>希</span> <span>U+1B034</span></div></div>
+<div class="char"><div class="top"><span>け</span></div><div class="main">𛀵</div><div class="bottom"><span>氣</span> <span>U+1B035</span></div></div>
+<div class="char"><div class="top"><span>け</span></div><div class="main">𛀶</div><div class="bottom"><span>計</span> <span>U+1B036</span></div></div>
+<div class="char"><div class="top"><span>け</span></div><div class="main">𛀷</div><div class="bottom"><span>遣</span> <span>U+1B037</span></div></div>
+<div class="char"><div class="top"><span>こ</span></div><div class="main">𛀸</div><div class="bottom"><span>古</span> <span>U+1B038</span></div></div>
+<div class="char"><div class="top"><span>こ</span></div><div class="main">𛀹</div><div class="bottom"><span>故</span> <span>U+1B039</span></div></div>
+<div class="char"><div class="top"><span>こ</span></div><div class="main">𛀺</div><div class="bottom"><span>許</span> <span>U+1B03A</span></div></div>
+<div class="char"><div class="top"><span>こ</span> <span>き</span></div><div class="main">𛀻</div><div class="bottom"><span>期</span> <span>U+1B03B</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛀼</div><div class="bottom"><span>乍</span> <span>U+1B03C</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛀽</div><div class="bottom"><span>佐</span> <span>U+1B03D</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛀾</div><div class="bottom"><span>佐</span> <span>U+1B03E</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛀿</div><div class="bottom"><span>左</span> <span>U+1B03F</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛁀</div><div class="bottom"><span>差</span> <span>U+1B040</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛁁</div><div class="bottom"><span>散</span> <span>U+1B041</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛁂</div><div class="bottom"><span>斜</span> <span>U+1B042</span></div></div>
+<div class="char"><div class="top"><span>さ</span></div><div class="main">𛁃</div><div class="bottom"><span>沙</span> <span>U+1B043</span></div></div>
+<div class="char"><div class="top"><span>し</span></div><div class="main">𛁄</div><div class="bottom"><span>之</span> <span>U+1B044</span></div></div>
+<div class="char"><div class="top"><span>し</span></div><div class="main">𛁅</div><div class="bottom"><span>之</span> <span>U+1B045</span></div></div>
+<div class="char"><div class="top"><span>し</span></div><div class="main">𛁆</div><div class="bottom"><span>事</span> <span>U+1B046</span></div></div>
+<div class="char"><div class="top"><span>し</span></div><div class="main">𛁇</div><div class="bottom"><span>四</span> <span>U+1B047</span></div></div>
+<div class="char"><div class="top"><span>し</span></div><div class="main">𛁈</div><div class="bottom"><span>志</span> <span>U+1B048</span></div></div>
+<div class="char"><div class="top"><span>し</span></div><div class="main">𛁉</div><div class="bottom"><span>新</span> <span>U+1B049</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁊</div><div class="bottom"><span>受</span> <span>U+1B04A</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁋</div><div class="bottom"><span>壽</span> <span>U+1B04B</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁌</div><div class="bottom"><span>數</span> <span>U+1B04C</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁍</div><div class="bottom"><span>數</span> <span>U+1B04D</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁎</div><div class="bottom"><span>春</span> <span>U+1B04E</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁏</div><div class="bottom"><span>春</span> <span>U+1B04F</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁐</div><div class="bottom"><span>須</span> <span>U+1B050</span></div></div>
+<div class="char"><div class="top"><span>す</span></div><div class="main">𛁑</div><div class="bottom"><span>須</span> <span>U+1B051</span></div></div>
+<div class="char"><div class="top"><span>せ</span></div><div class="main">𛁒</div><div class="bottom"><span>世</span> <span>U+1B052</span></div></div>
+<div class="char"><div class="top"><span>せ</span></div><div class="main">𛁓</div><div class="bottom"><span>世</span> <span>U+1B053</span></div></div>
+<div class="char"><div class="top"><span>せ</span></div><div class="main">𛁔</div><div class="bottom"><span>世</span> <span>U+1B054</span></div></div>
+<div class="char"><div class="top"><span>せ</span></div><div class="main">𛁕</div><div class="bottom"><span>勢</span> <span>U+1B055</span></div></div>
+<div class="char"><div class="top"><span>せ</span></div><div class="main">𛁖</div><div class="bottom"><span>聲</span> <span>U+1B056</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁗</div><div class="bottom"><span>所</span> <span>U+1B057</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁘</div><div class="bottom"><span>所</span> <span>U+1B058</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁙</div><div class="bottom"><span>曾</span> <span>U+1B059</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁚</div><div class="bottom"><span>曾</span> <span>U+1B05A</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁛</div><div class="bottom"><span>楚</span> <span>U+1B05B</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁜</div><div class="bottom"><span>蘇</span> <span>U+1B05C</span></div></div>
+<div class="char"><div class="top"><span>そ</span></div><div class="main">𛁝</div><div class="bottom"><span>處</span> <span>U+1B05D</span></div></div>
+<div class="char"><div class="top"><span>た</span></div><div class="main">𛁞</div><div class="bottom"><span>堂</span> <span>U+1B05E</span></div></div>
+<div class="char"><div class="top"><span>た</span></div><div class="main">𛁟</div><div class="bottom"><span>多</span> <span>U+1B05F</span></div></div>
+<div class="char"><div class="top"><span>た</span></div><div class="main">𛁠</div><div class="bottom"><span>多</span> <span>U+1B060</span></div></div>
+<div class="char"><div class="top"><span>た</span></div><div class="main">𛁡</div><div class="bottom"><span>當</span> <span>U+1B061</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁢</div><div class="bottom"><span>千</span> <span>U+1B062</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁣</div><div class="bottom"><span>地</span> <span>U+1B063</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁤</div><div class="bottom"><span>智</span> <span>U+1B064</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁥</div><div class="bottom"><span>知</span> <span>U+1B065</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁦</div><div class="bottom"><span>知</span> <span>U+1B066</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁧</div><div class="bottom"><span>致</span> <span>U+1B067</span></div></div>
+<div class="char"><div class="top"><span>ち</span></div><div class="main">𛁨</div><div class="bottom"><span>遲</span> <span>U+1B068</span></div></div>
+<div class="char"><div class="top"><span>つ</span></div><div class="main">𛁩</div><div class="bottom"><span>川</span> <span>U+1B069</span></div></div>
+<div class="char"><div class="top"><span>つ</span></div><div class="main">𛁪</div><div class="bottom"><span>川</span> <span>U+1B06A</span></div></div>
+<div class="char"><div class="top"><span>つ</span></div><div class="main">𛁫</div><div class="bottom"><span>津</span> <span>U+1B06B</span></div></div>
+<div class="char"><div class="top"><span>つ</span></div><div class="main">𛁬</div><div class="bottom"><span>都</span> <span>U+1B06C</span></div></div>
+<div class="char"><div class="top"><span>つ</span> <span>と</span></div><div class="main">𛁭</div><div class="bottom"><span>徒</span> <span>U+1B06D</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁮</div><div class="bottom"><span>亭</span> <span>U+1B06E</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁯</div><div class="bottom"><span>低</span> <span>U+1B06F</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁰</div><div class="bottom"><span>傳</span> <span>U+1B070</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁱</div><div class="bottom"><span>天</span> <span>U+1B071</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁲</div><div class="bottom"><span>天</span> <span>U+1B072</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁳</div><div class="bottom"><span>天</span> <span>U+1B073</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁴</div><div class="bottom"><span>帝</span> <span>U+1B074</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁵</div><div class="bottom"><span>弖</span> <span>U+1B075</span></div></div>
+<div class="char"><div class="top"><span>て</span></div><div class="main">𛁶</div><div class="bottom"><span>轉</span> <span>U+1B076</span></div></div>
+<div class="char"><div class="top"><span>と</span></div><div class="main">𛁷</div><div class="bottom"><span>土</span> <span>U+1B077</span></div></div>
+<div class="char"><div class="top"><span>と</span></div><div class="main">𛁸</div><div class="bottom"><span>度</span> <span>U+1B078</span></div></div>
+<div class="char"><div class="top"><span>と</span></div><div class="main">𛁹</div><div class="bottom"><span>東</span> <span>U+1B079</span></div></div>
+<div class="char"><div class="top"><span>と</span></div><div class="main">𛁺</div><div class="bottom"><span>登</span> <span>U+1B07A</span></div></div>
+<div class="char"><div class="top"><span>と</span></div><div class="main">𛁻</div><div class="bottom"><span>登</span> <span>U+1B07B</span></div></div>
+<div class="char"><div class="top"><span>と</span></div><div class="main">𛁼</div><div class="bottom"><span>砥</span> <span>U+1B07C</span></div></div>
+<div class="char"><div class="top"><span>と</span> <span>ら</span></div><div class="main">𛁽</div><div class="bottom"><span>等</span> <span>U+1B07D</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛁾</div><div class="bottom"><span>南</span> <span>U+1B07E</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛁿</div><div class="bottom"><span>名</span> <span>U+1B07F</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂀</div><div class="bottom"><span>奈</span> <span>U+1B080</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂁</div><div class="bottom"><span>奈</span> <span>U+1B081</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂂</div><div class="bottom"><span>奈</span> <span>U+1B082</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂃</div><div class="bottom"><span>菜</span> <span>U+1B083</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂄</div><div class="bottom"><span>那</span> <span>U+1B084</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂅</div><div class="bottom"><span>那</span> <span>U+1B085</span></div></div>
+<div class="char"><div class="top"><span>な</span></div><div class="main">𛂆</div><div class="bottom"><span>難</span> <span>U+1B086</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂇</div><div class="bottom"><span>丹</span> <span>U+1B087</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂈</div><div class="bottom"><span>二</span> <span>U+1B088</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂉</div><div class="bottom"><span>仁</span> <span>U+1B089</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂊</div><div class="bottom"><span>兒</span> <span>U+1B08A</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂋</div><div class="bottom"><span>爾</span> <span>U+1B08B</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂌</div><div class="bottom"><span>爾</span> <span>U+1B08C</span></div></div>
+<div class="char"><div class="top"><span>に</span></div><div class="main">𛂍</div><div class="bottom"><span>耳</span> <span>U+1B08D</span></div></div>
+<div class="char"><div class="top"><span>に</span> <span>て</span></div><div class="main">𛂎</div><div class="bottom"><span>而</span> <span>U+1B08E</span></div></div>
+<div class="char"><div class="top"><span>ぬ</span></div><div class="main">𛂏</div><div class="bottom"><span>努</span> <span>U+1B08F</span></div></div>
+<div class="char"><div class="top"><span>ぬ</span></div><div class="main">𛂐</div><div class="bottom"><span>奴</span> <span>U+1B090</span></div></div>
+<div class="char"><div class="top"><span>ぬ</span></div><div class="main">𛂑</div><div class="bottom"><span>怒</span> <span>U+1B091</span></div></div>
+<div class="char"><div class="top"><span>ね</span></div><div class="main">𛂒</div><div class="bottom"><span>年</span> <span>U+1B092</span></div></div>
+<div class="char"><div class="top"><span>ね</span></div><div class="main">𛂓</div><div class="bottom"><span>年</span> <span>U+1B093</span></div></div>
+<div class="char"><div class="top"><span>ね</span></div><div class="main">𛂔</div><div class="bottom"><span>年</span> <span>U+1B094</span></div></div>
+<div class="char"><div class="top"><span>ね</span></div><div class="main">𛂕</div><div class="bottom"><span>根</span> <span>U+1B095</span></div></div>
+<div class="char"><div class="top"><span>ね</span></div><div class="main">𛂖</div><div class="bottom"><span>熱</span> <span>U+1B096</span></div></div>
+<div class="char"><div class="top"><span>ね</span></div><div class="main">𛂗</div><div class="bottom"><span>禰</span> <span>U+1B097</span></div></div>
+<div class="char"><div class="top"><span>ね</span> <span>こ</span></div><div class="main">𛂘</div><div class="bottom"><span>子</span> <span>U+1B098</span></div></div>
+<div class="char"><div class="top"><span>の</span></div><div class="main">𛂙</div><div class="bottom"><span>乃</span> <span>U+1B099</span></div></div>
+<div class="char"><div class="top"><span>の</span></div><div class="main">𛂚</div><div class="bottom"><span>濃</span> <span>U+1B09A</span></div></div>
+<div class="char"><div class="top"><span>の</span></div><div class="main">𛂛</div><div class="bottom"><span>能</span> <span>U+1B09B</span></div></div>
+<div class="char"><div class="top"><span>の</span></div><div class="main">𛂜</div><div class="bottom"><span>能</span> <span>U+1B09C</span></div></div>
+<div class="char"><div class="top"><span>の</span></div><div class="main">𛂝</div><div class="bottom"><span>農</span> <span>U+1B09D</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂞</div><div class="bottom"><span>八</span> <span>U+1B09E</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂟</div><div class="bottom"><span>半</span> <span>U+1B09F</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂠</div><div class="bottom"><span>婆</span> <span>U+1B0A0</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂡</div><div class="bottom"><span>波</span> <span>U+1B0A1</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂢</div><div class="bottom"><span>盤</span> <span>U+1B0A2</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂣</div><div class="bottom"><span>盤</span> <span>U+1B0A3</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂤</div><div class="bottom"><span>破</span> <span>U+1B0A4</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂥</div><div class="bottom"><span>者</span> <span>U+1B0A5</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂦</div><div class="bottom"><span>者</span> <span>U+1B0A6</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂧</div><div class="bottom"><span>葉</span> <span>U+1B0A7</span></div></div>
+<div class="char"><div class="top"><span>は</span></div><div class="main">𛂨</div><div class="bottom"><span>頗</span> <span>U+1B0A8</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂩</div><div class="bottom"><span>悲</span> <span>U+1B0A9</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂪</div><div class="bottom"><span>日</span> <span>U+1B0AA</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂫</div><div class="bottom"><span>比</span> <span>U+1B0AB</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂬</div><div class="bottom"><span>避</span> <span>U+1B0AC</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂭</div><div class="bottom"><span>非</span> <span>U+1B0AD</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂮</div><div class="bottom"><span>飛</span> <span>U+1B0AE</span></div></div>
+<div class="char"><div class="top"><span>ひ</span></div><div class="main">𛂯</div><div class="bottom"><span>飛</span> <span>U+1B0AF</span></div></div>
+<div class="char"><div class="top"><span>ふ</span></div><div class="main">𛂰</div><div class="bottom"><span>不</span> <span>U+1B0B0</span></div></div>
+<div class="char"><div class="top"><span>ふ</span></div><div class="main">𛂱</div><div class="bottom"><span>婦</span> <span>U+1B0B1</span></div></div>
+<div class="char"><div class="top"><span>ふ</span></div><div class="main">𛂲</div><div class="bottom"><span>布</span> <span>U+1B0B2</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂳</div><div class="bottom"><span>倍</span> <span>U+1B0B3</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂴</div><div class="bottom"><span>弊</span> <span>U+1B0B4</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂵</div><div class="bottom"><span>弊</span> <span>U+1B0B5</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂶</div><div class="bottom"><span>遍</span> <span>U+1B0B6</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂷</div><div class="bottom"><span>邊</span> <span>U+1B0B7</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂸</div><div class="bottom"><span>邊</span> <span>U+1B0B8</span></div></div>
+<div class="char"><div class="top"><span>へ</span></div><div class="main">𛂹</div><div class="bottom"><span>部</span> <span>U+1B0B9</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛂺</div><div class="bottom"><span>保</span> <span>U+1B0BA</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛂻</div><div class="bottom"><span>保</span> <span>U+1B0BB</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛂼</div><div class="bottom"><span>報</span> <span>U+1B0BC</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛂽</div><div class="bottom"><span>奉</span> <span>U+1B0BD</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛂾</div><div class="bottom"><span>寶</span> <span>U+1B0BE</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛂿</div><div class="bottom"><span>本</span> <span>U+1B0BF</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛃀</div><div class="bottom"><span>本</span> <span>U+1B0C0</span></div></div>
+<div class="char"><div class="top"><span>ほ</span></div><div class="main">𛃁</div><div class="bottom"><span>豐</span> <span>U+1B0C1</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃂</div><div class="bottom"><span>万</span> <span>U+1B0C2</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃃</div><div class="bottom"><span>末</span> <span>U+1B0C3</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃄</div><div class="bottom"><span>末</span> <span>U+1B0C4</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃅</div><div class="bottom"><span>滿</span> <span>U+1B0C5</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃆</div><div class="bottom"><span>滿</span> <span>U+1B0C6</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃇</div><div class="bottom"><span>萬</span> <span>U+1B0C7</span></div></div>
+<div class="char"><div class="top"><span>ま</span></div><div class="main">𛃈</div><div class="bottom"><span>麻</span> <span>U+1B0C8</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃉</div><div class="bottom"><span>三</span> <span>U+1B0C9</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃊</div><div class="bottom"><span>微</span> <span>U+1B0CA</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃋</div><div class="bottom"><span>美</span> <span>U+1B0CB</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃌</div><div class="bottom"><span>美</span> <span>U+1B0CC</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃍</div><div class="bottom"><span>美</span> <span>U+1B0CD</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃎</div><div class="bottom"><span>見</span> <span>U+1B0CE</span></div></div>
+<div class="char"><div class="top"><span>み</span></div><div class="main">𛃏</div><div class="bottom"><span>身</span> <span>U+1B0CF</span></div></div>
+<div class="char"><div class="top"><span>む</span></div><div class="main">𛃐</div><div class="bottom"><span>武</span> <span>U+1B0D0</span></div></div>
+<div class="char"><div class="top"><span>む</span></div><div class="main">𛃑</div><div class="bottom"><span>無</span> <span>U+1B0D1</span></div></div>
+<div class="char"><div class="top"><span>む</span></div><div class="main">𛃒</div><div class="bottom"><span>牟</span> <span>U+1B0D2</span></div></div>
+<div class="char"><div class="top"><span>む</span></div><div class="main">𛃓</div><div class="bottom"><span>舞</span> <span>U+1B0D3</span></div></div>
+<div class="char"><div class="top"><span>め</span></div><div class="main">𛃔</div><div class="bottom"><span>免</span> <span>U+1B0D4</span></div></div>
+<div class="char"><div class="top"><span>め</span></div><div class="main">𛃕</div><div class="bottom"><span>面</span> <span>U+1B0D5</span></div></div>
+<div class="char"><div class="top"><span>め</span> <span>ま</span></div><div class="main">𛃖</div><div class="bottom"><span>馬</span> <span>U+1B0D6</span></div></div>
+<div class="char"><div class="top"><span>も</span></div><div class="main">𛃗</div><div class="bottom"><span>母</span> <span>U+1B0D7</span></div></div>
+<div class="char"><div class="top"><span>も</span></div><div class="main">𛃘</div><div class="bottom"><span>毛</span> <span>U+1B0D8</span></div></div>
+<div class="char"><div class="top"><span>も</span></div><div class="main">𛃙</div><div class="bottom"><span>毛</span> <span>U+1B0D9</span></div></div>
+<div class="char"><div class="top"><span>も</span></div><div class="main">𛃚</div><div class="bottom"><span>毛</span> <span>U+1B0DA</span></div></div>
+<div class="char"><div class="top"><span>も</span></div><div class="main">𛃛</div><div class="bottom"><span>茂</span> <span>U+1B0DB</span></div></div>
+<div class="char"><div class="top"><span>も</span></div><div class="main">𛃜</div><div class="bottom"><span>裳</span> <span>U+1B0DC</span></div></div>
+<div class="char"><div class="top"><span>や</span></div><div class="main">𛃝</div><div class="bottom"><span>也</span> <span>U+1B0DD</span></div></div>
+<div class="char"><div class="top"><span>や</span></div><div class="main">𛃞</div><div class="bottom"><span>也</span> <span>U+1B0DE</span></div></div>
+<div class="char"><div class="top"><span>や</span></div><div class="main">𛃟</div><div class="bottom"><span>屋</span> <span>U+1B0DF</span></div></div>
+<div class="char"><div class="top"><span>や</span></div><div class="main">𛃠</div><div class="bottom"><span>耶</span> <span>U+1B0E0</span></div></div>
+<div class="char"><div class="top"><span>や</span></div><div class="main">𛃡</div><div class="bottom"><span>耶</span> <span>U+1B0E1</span></div></div>
+<div class="char"><div class="top"><span>や</span> <span>よ</span></div><div class="main">𛃢</div><div class="bottom"><span>夜</span> <span>U+1B0E2</span></div></div>
+<div class="char"><div class="top"><span>ゆ</span></div><div class="main">𛃣</div><div class="bottom"><span>游</span> <span>U+1B0E3</span></div></div>
+<div class="char"><div class="top"><span>ゆ</span></div><div class="main">𛃤</div><div class="bottom"><span>由</span> <span>U+1B0E4</span></div></div>
+<div class="char"><div class="top"><span>ゆ</span></div><div class="main">𛃥</div><div class="bottom"><span>由</span> <span>U+1B0E5</span></div></div>
+<div class="char"><div class="top"><span>ゆ</span></div><div class="main">𛃦</div><div class="bottom"><span>遊</span> <span>U+1B0E6</span></div></div>
+<div class="char"><div class="top"><span>よ</span></div><div class="main">𛃧</div><div class="bottom"><span>代</span> <span>U+1B0E7</span></div></div>
+<div class="char"><div class="top"><span>よ</span></div><div class="main">𛃨</div><div class="bottom"><span>余</span> <span>U+1B0E8</span></div></div>
+<div class="char"><div class="top"><span>よ</span></div><div class="main">𛃩</div><div class="bottom"><span>與</span> <span>U+1B0E9</span></div></div>
+<div class="char"><div class="top"><span>よ</span></div><div class="main">𛃪</div><div class="bottom"><span>與</span> <span>U+1B0EA</span></div></div>
+<div class="char"><div class="top"><span>よ</span></div><div class="main">𛃫</div><div class="bottom"><span>與</span> <span>U+1B0EB</span></div></div>
+<div class="char"><div class="top"><span>よ</span></div><div class="main">𛃬</div><div class="bottom"><span>餘</span> <span>U+1B0EC</span></div></div>
+<div class="char"><div class="top"><span>ら</span></div><div class="main">𛃭</div><div class="bottom"><span>羅</span> <span>U+1B0ED</span></div></div>
+<div class="char"><div class="top"><span>ら</span></div><div class="main">𛃮</div><div class="bottom"><span>良</span> <span>U+1B0EE</span></div></div>
+<div class="char"><div class="top"><span>ら</span></div><div class="main">𛃯</div><div class="bottom"><span>良</span> <span>U+1B0EF</span></div></div>
+<div class="char"><div class="top"><span>ら</span></div><div class="main">𛃰</div><div class="bottom"><span>良</span> <span>U+1B0F0</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃱</div><div class="bottom"><span>利</span> <span>U+1B0F1</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃲</div><div class="bottom"><span>利</span> <span>U+1B0F2</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃳</div><div class="bottom"><span>李</span> <span>U+1B0F3</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃴</div><div class="bottom"><span>梨</span> <span>U+1B0F4</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃵</div><div class="bottom"><span>理</span> <span>U+1B0F5</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃶</div><div class="bottom"><span>里</span> <span>U+1B0F6</span></div></div>
+<div class="char"><div class="top"><span>り</span></div><div class="main">𛃷</div><div class="bottom"><span>離</span> <span>U+1B0F7</span></div></div>
+<div class="char"><div class="top"><span>る</span></div><div class="main">𛃸</div><div class="bottom"><span>流</span> <span>U+1B0F8</span></div></div>
+<div class="char"><div class="top"><span>る</span></div><div class="main">𛃹</div><div class="bottom"><span>留</span> <span>U+1B0F9</span></div></div>
+<div class="char"><div class="top"><span>る</span></div><div class="main">𛃺</div><div class="bottom"><span>留</span> <span>U+1B0FA</span></div></div>
+<div class="char"><div class="top"><span>る</span></div><div class="main">𛃻</div><div class="bottom"><span>留</span> <span>U+1B0FB</span></div></div>
+<div class="char"><div class="top"><span>る</span></div><div class="main">𛃼</div><div class="bottom"><span>累</span> <span>U+1B0FC</span></div></div>
+<div class="char"><div class="top"><span>る</span></div><div class="main">𛃽</div><div class="bottom"><span>類</span> <span>U+1B0FD</span></div></div>
+<div class="char"><div class="top"><span>れ</span></div><div class="main">𛃾</div><div class="bottom"><span>禮</span> <span>U+1B0FE</span></div></div>
+<div class="char"><div class="top"><span>れ</span></div><div class="main">𛃿</div><div class="bottom"><span>禮</span> <span>U+1B0FF</span></div></div>
+<div class="char"><div class="top"><span>れ</span></div><div class="main">𛄀</div><div class="bottom"><span>連</span> <span>U+1B100</span></div></div>
+<div class="char"><div class="top"><span>れ</span></div><div class="main">𛄁</div><div class="bottom"><span>麗</span> <span>U+1B101</span></div></div>
+<div class="char"><div class="top"><span>ろ</span></div><div class="main">𛄂</div><div class="bottom"><span>呂</span> <span>U+1B102</span></div></div>
+<div class="char"><div class="top"><span>ろ</span></div><div class="main">𛄃</div><div class="bottom"><span>呂</span> <span>U+1B103</span></div></div>
+<div class="char"><div class="top"><span>ろ</span></div><div class="main">𛄄</div><div class="bottom"><span>婁</span> <span>U+1B104</span></div></div>
+<div class="char"><div class="top"><span>ろ</span></div><div class="main">𛄅</div><div class="bottom"><span>樓</span> <span>U+1B105</span></div></div>
+<div class="char"><div class="top"><span>ろ</span></div><div class="main">𛄆</div><div class="bottom"><span>路</span> <span>U+1B106</span></div></div>
+<div class="char"><div class="top"><span>ろ</span></div><div class="main">𛄇</div><div class="bottom"><span>露</span> <span>U+1B107</span></div></div>
+<div class="char"><div class="top"><span>わ</span></div><div class="main">𛄈</div><div class="bottom"><span>倭</span> <span>U+1B108</span></div></div>
+<div class="char"><div class="top"><span>わ</span></div><div class="main">𛄉</div><div class="bottom"><span>和</span> <span>U+1B109</span></div></div>
+<div class="char"><div class="top"><span>わ</span></div><div class="main">𛄊</div><div class="bottom"><span>和</span> <span>U+1B10A</span></div></div>
+<div class="char"><div class="top"><span>わ</span></div><div class="main">𛄋</div><div class="bottom"><span>王</span> <span>U+1B10B</span></div></div>
+<div class="char"><div class="top"><span>わ</span></div><div class="main">𛄌</div><div class="bottom"><span>王</span> <span>U+1B10C</span></div></div>
+<div class="char"><div class="top"><span>ゐ</span></div><div class="main">𛄍</div><div class="bottom"><span>井</span> <span>U+1B10D</span></div></div>
+<div class="char"><div class="top"><span>ゐ</span></div><div class="main">𛄎</div><div class="bottom"><span>井</span> <span>U+1B10E</span></div></div>
+<div class="char"><div class="top"><span>ゐ</span></div><div class="main">𛄏</div><div class="bottom"><span>居</span> <span>U+1B10F</span></div></div>
+<div class="char"><div class="top"><span>ゐ</span></div><div class="main">𛄐</div><div class="bottom"><span>爲</span> <span>U+1B110</span></div></div>
+<div class="char"><div class="top"><span>ゐ</span></div><div class="main">𛄑</div><div class="bottom"><span>遺</span> <span>U+1B111</span></div></div>
+<div class="char"><div class="top"><span>ゑ</span></div><div class="main">𛄒</div><div class="bottom"><span>惠</span> <span>U+1B112</span></div></div>
+<div class="char"><div class="top"><span>ゑ</span></div><div class="main">𛄓</div><div class="bottom"><span>衞</span> <span>U+1B113</span></div></div>
+<div class="char"><div class="top"><span>ゑ</span></div><div class="main">𛄔</div><div class="bottom"><span>衞</span> <span>U+1B114</span></div></div>
+<div class="char"><div class="top"><span>ゑ</span></div><div class="main">𛄕</div><div class="bottom"><span>衞</span> <span>U+1B115</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄖</div><div class="bottom"><span>乎</span> <span>U+1B116</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄗</div><div class="bottom"><span>乎</span> <span>U+1B117</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄘</div><div class="bottom"><span>尾</span> <span>U+1B118</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄙</div><div class="bottom"><span>緒</span> <span>U+1B119</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄚</div><div class="bottom"><span>越</span> <span>U+1B11A</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄛</div><div class="bottom"><span>遠</span> <span>U+1B11B</span></div></div>
+<div class="char"><div class="top"><span>を</span></div><div class="main">𛄜</div><div class="bottom"><span>遠</span> <span>U+1B11C</span></div></div>
+<div class="char"><div class="top"><span>ん</span> <span>む</span> <span>も</span></div><div class="main">𛄝</div><div class="bottom"><span>无</span> <span>U+1B11D</span></div></div>
+<div class="char"><div class="top"><span>ん</span> <span>む</span> <span>も</span></div><div class="main">𛄞</div><div class="bottom"><span>无</span> <span>U+1B11E</span></div></div>
+<!--
+<p>
+      変体仮名の表示には、国立国語研究所が作成した<a href="https://cid.ninjal.ac.jp/kana/font">NINJAL変体仮名フォント</a>のWebフォントを利用しています。
+    </p>
+-->
+</article></section></div></div>
+
+</div>
+<!-- <footer><div class="wrap">
+<div class="header">
+<h2><a href="/"><img src="codh/logo_w.png" width="364" height="34" alt="ROIS-DS人文学オープンデータ共同利用センター(CODH)"></a></h2>
+<nav><ul class="lang">
+<li>日本語</li>
+<li>
+	    English
+	  </li>
+</ul></nav>
+</div>
+<nav class="sitemap"><ul>
+<li>
+<h3>各種情報</h3>
+<ul>
+<li><a href="/">ホーム</a></li>
+<li><a href="/about/">概要</a></li>
+<li><a href="/about/#member">メンバー</a></li>
+<li><a href="/news/">ニュース</a></li>
+<li><a href="/collaboration/">共同研究</a></li>
+<li><a href="/recruit/">採用情報</a></li>
+<li><a href="/event/">イベント</a></li>
+<li><a href="/seminar/">セミナー</a></li>
+<li><a href="/symposium/">シンポジウム</a></li>
+<li><a href="/workshop/">ワークショップ</a></li>
+<li><a href="/tutorial/">チュートリアル</a></li>
+<li><a href="/sig/">研究会</a></li>
+<li><a href="/competition/">コンペティション</a></li>
+<li><a href="/conference/">コンファレンス</a></li>
+<li><a href="/exhibition/">展示</a></li>
+<li><a href="/outreach/">アウトリーチ</a></li>
+<li><a href="/policy/">利用規約</a></li>
+<li><a href="/feedback/">お問い合わせ</a></li>
+<li><a href="https://twitter.com/rois_codh"><i class="fa fa-twitter"></i>
+	Twitter
+      </a></li>
+<li><a href="https://www.facebook.com/ROIS.CODH"><i class="fa fa-facebook-square"></i>
+	Facebook
+      </a></li>
+<li><a href="https://www.youtube.com/channel/UCD_RQdMon7gz1E2AQUSDtcA"><i class="fa fa-youtube-play"></i>
+	YouTube
+      </a></li>
+<li><a href="https://github.com/rois-codh"><i class="fa fa-github"></i>
+	Github
+      </a></li>
+</ul>
+</li>
+<li>
+<h3>データセット／データベース</h3>
+<ul>
+<li><a href="/pmjt/">日本古典籍データセット</a></li>
+<li><a href="/char-shape/">日本古典籍くずし字データセット</a></li>
+<li><a href="/kmnist/">KMNISTデータセット</a></li>
+<li><a href="/edo-cooking/">江戸料理レシピデータセット</a></li>
+<li><a href="/bukan/">武鑑全集</a></li>
+<li><a href="/edo-maps/">江戸マップβ版</a></li>
+<li><a href="/edo-shops/">江戸買物案内</a></li>
+<li><a href="/edo-spots/">江戸観光案内</a></li>
+<li><a href="/face/">顔貌コレクション</a></li>
+<li><a href="/curation/">IIIFグローバルキュレーション</a></li>
+<li><a href="/modern-magazine/">近代雑誌データセット</a></li>
+<li><a href="/tensho/">篆書字体データセット</a></li>
+<li><a href="https://geoshape.ex.nii.ac.jp/">Geoshapeリポジトリ</a></li>
+<li><a href="https://geolod.ex.nii.ac.jp/">GeoLOD</a></li>
+</ul>
+</li>
+<li>
+<h3>ソフトウェア</h3>
+<ul>
+<li><a href="/iiif/">IIIF (International Image Interoperability Framework)</a></li>
+<li><a href="/icp/">IIIF Curation Platform</a></li>
+<li><a href="/software/iiif-curation-viewer/">IIIF Curation Viewer</a></li>
+<li><a href="/software/iiif-curation-viewer-embedded/">IIIF Curation Viewer Embedded</a></li>
+<li><a href="/software/iiif-curation-finder/">IIIF Curation Finder</a></li>
+<li><a href="/software/iiif-curation-manager/">IIIF Curation Manager</a></li>
+<li><a href="/software/iiif-curation-editor/">IIIF Curation Editor</a></li>
+<li><a href="/software/iiif-curation-player/">IIIF Curation Player</a></li>
+<li><a href="/software/iiif-curation-board/">IIIF Curation Board</a></li>
+<li><a href="/software/kuronet-text-editor/">KuroNet Text Editor</a></li>
+<li><a href="/software/vdiffjs/">vdiff.js</a></li>
+<li><a href="/software/vdiffseqjs/">vdiff-seq.js</a></li>
+<li><a href="/software/jsonkeeper/">JSONkeeper</a></li>
+<li><a href="/software/canvas-indexer/">Canvas Indexer</a></li>
+<li><a href="/software/curation-tracer/">Curation Tracer</a></li>
+<li><a href="/software/icp-docker/">ICP Docker</a></li>
+<li><a href="/software/kindai-ocr/">Kindai-OCR</a></li>
+</ul>
+</li>
+<li>
+<h3>プロジェクト／リソース</h3>
+<ul>
+<li><a href="/kuronet/">KuroNetくずし字認識サービス</a></li>
+<li><a href="/miwo/">みを（miwo）</a></li>
+<li><a href="/tsukushi/">つくし</a></li>
+<li><a href="/soan/">そあん（soan）</a></li>
+<li><a href="/kuzushiji-challenge/">くずし字チャレンジ！</a></li>
+<li><a href="/historical-big-data/">歴史ビッグデータ</a></li>
+<li><a href="/edo+150/">Edo+150プロジェクト</a></li>
+<li><a href="/edomi/">edomi</a></li>
+<li><a href="/historical-gis/">歴史GIS</a></li>
+<li><a href="/historical-gis/nihu-map/">歴史地名マップ</a></li>
+<li><a href="https://geonlp.ex.nii.ac.jp/">GeoNLP</a></li>
+<li><a href="/differential-reading/">画像照合サービス</a></li>
+<li><a href="/rksk/">れきすけ</a></li>
+<li><a href="/north-china-railway/">華北交通アーカイブ</a></li>
+<li><a href="http://dsr.nii.ac.jp/">ディジタル・シルクロード</a></li>
+<li><a href="https://mp.ex.nii.ac.jp/">メモリーグラフ</a></li>
+<li><a href="https://codh.repo.nii.ac.jp/">人文学研究データリポジトリ</a></li>
+<li><a href="/knowledge/">まめ知識</a></li>
+</ul>
+</li>
+</ul></nav><p id="copyright"><a href="/">Center for Open Data in the Humanities (CODH)</a>
+      @
+      <a href="https://ds.rois.ac.jp/">ROIS-DS</a>.
+      CC BY-SA 4.0.
+    </p>
+</div></footer>
+</div>
+-->
+
+<div id="components_container">
+
+<div class="content_head"><div class="wrap"><h2>Grouped by Similar Components</h2></div></div>
+<div class="block"><div class="wrap"><section><article id="components_div">
+[left components]
+氵=simple left component for general radical e.g. 氵彡亻彳:にほはけ𛀁𛀮𛀾𛁃𛁐𛁑𛁘𛁫𛁭𛂚𛂠𛂡𛂻𛃅𛃣𛃸𛄓
+木=left component for radical 示禾木方:ねれわ𛀉𛂕𛄅𛀔𛀕𛂼𛃣𛃦
+亻=left component for radical 亻:𛀇𛀗𛀯𛀽𛁯𛁰𛂉𛂳𛂺𛃧𛄈
+禾=left/top component for radical 禾:𛃲𛃱𛃴𛄉𛀠𛀜
+阝=left component for radical 阝:𛀄𛀖
+言=left component for radical 彳言足:𛃊𛀺𛀶𛀻𛄆𛄇
+礻=left component for radical 示:𛂗𛃾𛃿𛀨𛁉
+糸=left component for radical 糸車耳:𛄙𛀐𛂛𛃓𛃽𛁶𛃭𛃠𛃡
+土=left/top component for radical 土走:𛁷𛁣𛁭𛀪𛄚
+石=left component for radical 石:ろ𛁼𛂤𛂬𛃕
+食=left component for radical 食:𛃬
+余=left component for complex component:𛀱𛁂𛁕𛃢
+[top components]
+宀=top component for radical 宀肀:𛀂𛀢𛁫
+宀=top component for radical 宀覀:う𛀊𛀋𛀓𛂾
+亠=top component for radical 亠:え𛀑
+立=top component for radical 立:𛀈𛁮𛁴
+大=top component for radical 𠂇:み𛃍ゐ𛀌𛀍
+尸=top component for radical 尸:𛃟𛄏𛄘
+广=top component for radical 广:𛁸𛃈
+大=top component for radical 大:たな𛂀
+八=top component for radical 人八:𛀲𛀳𛂞
+夕=top component for radical 𠂊夕夂:𛁟𛁿𛃔𛄆𛄇
+雨=top component for radical 雨虍:𛀎𛄇𛁝
+門=top component for radical 門罒:𛀟𛃭
+士=top component for radical 士左:さ𛀿𛀽𛀛𛀣𛁈𛂳𛂦
+半=top component for complex part e.g. 中申幾:𛀥𛀩𛄑𛀷𛄄𛄅𛁌
+小=top component for radical ⺌卯:𛂟𛂴𛂵𛃜𛁡𛃑𛃹𛃺
+廿=top component for radical 廿艹䒑曲:𛀮𛂆𛁜𛂧𛂃𛃇𛃌𛃓𛂚𛂝𛃾
+廿=top component for part 䒑口:そ𛁁ろ𛄃
+春=top component for radical 春寿:𛁎𛁋
+癶=top component for complex part:𛁺𛂢
+車=top component for part like 十:𛁹𛂽𛃀𛃛
+末=top component for part like 丰:きもま𛃃
+[main/bottom components]
+月=right/bottom component for radical 月皿口:𛀻𛀍𛂣𛄃𛄂
+阝=right component for radical 阝:𛁬𛂄𛃡𛂹へ𛃠
+二=component for part 二己⺀:に𛂉𛂈こた𛀕𛀔
+工=component for part 工:𛀁
+⺀=bottom component for simplified part e.g. 貝灬工疋皿:𛀃𛀎𛀩𛀰𛀯𛀮𛀿𛀽𛁀𛁛𛃑𛁇𛂢𛀏𛁏
+豆=bottom component for radical 豆:𛁺𛁻𛃁𛃾
+貝=bottom component for radical 頁:𛁑𛂨𛃽𛀈𛁲
+己=component for part 己:𛀪
+⻌=bottom component for radical ⻌:を𛄛𛄜𛀷𛁨𛂬𛂶𛂷𛃦𛄑𛄀𛂸
+人=bottom component for part 人 e.g. 天久欠貝:てく𛀬𛁳𛁄𛀫𛁱𛀝𛁐𛀞
+儿=bottom component for part 儿:ん𛄞え𛂊𛃎𛃔𛄝
+乚=component for part 乚:れ𛃿
+夂=right component for radical 夂殳:𛀹𛃊𛂴𛂵𛁖
+又=component for simplified part:𛀆𛀨𛁕𛂖𛂾𛄕𛀋𛀤
+乍=component for part 乍:𛀼𛂭
+三=component for part 三 etc:𛃉𛃙𛄗𛀅𛄀𛄔𛂯𛀵𛀖
+矢=component for part 矢 etc:ち𛁦𛁥𛁤𛀾𛁉𛁎𛂛𛄏
+大=component for part 大:𛂵𛂾𛃋
+美=component for part 大 as in 美:み𛃌
+少=component for part 少:𛁃
+刂=component for part ||:り𛃱𛃴𛀲𛂎
+耳=component for part 耳:𛁖𛂍
+于=component for part like 十 e.g. 于子乎午千尔:𛀊𛀺𛁢𛂌ね𛂘𛃣𛃦𛃳𛄖
+十=component for part 十:け𛀶𛁂
+小=bottom component for part 小:ふ𛂁𛃸𛃼𛂀𛂋𛂗𛂺
+木=bottom component for part 木 (detached):𛀟𛁹𛃃𛂧𛃴
+木=bottom component for part 木 (connected):𛀧𛂃𛃳
+木=bottom component for part 木小 (quick):な𛂂ね𛀱ほま𛃄
+木=component for part like 丰 (first 丨 then 二) e.g. 木禾年半辛聿丰:𛀵𛁜𛁨𛁫𛂓𛂒𛂔𛂟𛂬𛂻𛂽𛃁𛃊𛃨𛃬𛄈
+牛=component for part like 丰 (first 二 then 丨) e.g. 牛舛尹乎:𛀇𛃒𛃓𛄗𛁾𛂿
+毛=component for part 毛:も𛃘𛄘
+林=component for double part:𛃈𛄁
+口=component for part 口:𛀘𛄉𛁥𛁤𛁿𛂳𛂺𛄂𛀸
+女=component for part 女:めぬ𛂱𛁍あ𛀂𛀓𛄄𛄅𛂠𛄈𛃗
+田=component for complex part:𛀉𛀏𛁟𛁡𛁴𛂇𛂱𛃅𛃆𛃹𛄒
+戈=component for part 戈世 etc:𛄚𛃛𛁒𛁓𛂧𛁛𛀴
+弋=component for part 弋 etc:𛃧𛁽
+日=component for part 日田目:る𛃺𛃻ゑ𛀠𛁤𛂪𛁙𛀰𛀯
+甲=top component for part 甲:𛃶𛃵𛃼
+馬=bottom component for part 馬与 etc:ゐ𛄐𛃖𛀡𛃪𛂷
+古=component for part like 古:𛀹𛃷
+曾=component for part 曾氏弓 etc:そ𛁙𛁚𛁯𛁼𛁵
+又=right/bottom component for part 又支皮攵 etc:ぬ𛂐𛂏𛂑𛁸𛀦は𛂠𛂡𛂤𛂨𛁁𛁌𛁧𛁝
+丁=bottom component for part 丁:𛁆𛁮
+心=bottom omponent for part 心 + something:𛀌𛀖
+可=component for part 可:𛀄𛀙𛀚
+寸=component for part 寸:す𛁋𛁰𛁶
+土=bottom component for part 土止 with dot:む𛃐𛀗𛃟𛂮𛂯
+土=bottom component for part 土:𛁞𛃶𛃵
+王=bottom component for part 王 etc:𛄋𛄌𛃵𛂾𛁧𛂖𛁀
+隹=right component for radical 隹:𛂆𛃭𛃷
+由=component for part 由:ゆ𛃤𛃥
+巿=component for complex part:𛀃𛃇
+㣺=component for simplified part 㣺:𛀐𛀜𛀢𛁗𛁻𛂊𛂩𛄔
+幺=component for part 幺:𛀤
+心=bottom component for radical 心:ゑ𛀅𛁈𛂑𛄒
+衣=bottom component for part 衣:𛀑𛃜𛂚𛂝𛂰𛃜𛄁
+者=component for part 者:𛁘𛂥𛄙𛁬
+艮=component for part 艮 etc:𛂕𛂼𛃎𛃮𛃯ら𛃰
+以=component for part 以:い𛀆
+力=component for part 力:か𛀘𛀛𛀞𛀡𛁕𛂏𛃏
+与=component for part 与:よ𛃩𛃪𛃫𛀝
+巾=component for part 巾:𛀴𛂲
+也=component for part 也:や𛃞𛃝𛁣𛄊
+那=component for part 那:𛂄𛂅
+川=component for part like 川:𛁊𛁔𛁩𛁪
+廾=component for part like 廾:𛂴𛂶𛄍𛄎
+南=component for part like 南:𛁾𛃅
+刀=component for part like 刀:の𛂸𛂙𛃂𛀭
+匕=component for part 匕:ひ𛂫𛂜
+仒=component for part like 仒:お𛄓
+左=component for part 左:さ𛁠
+之=component for part 之:し𛁅𛃚𛀒
+[hiragana]
+=:あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをん
+</article></section></div></div>
+
+</div>
+
+</body>
+</html>
+
+<!-- Bert: duplicate characters -->
+<script>
+
+// build original kanji dict
+org_dict = {};
+org_dict['あ']='安';	org_dict['い']='以';	org_dict['う']='宇';	org_dict['え']='衣';	org_dict['お']='於';
+org_dict['か']='加';	org_dict['き']='幾';	org_dict['く']='久';	org_dict['け']='計';	org_dict['こ']='己';
+org_dict['さ']='左';	org_dict['し']='之';	org_dict['す']='寸';	org_dict['せ']='世';	org_dict['そ']='曽';
+org_dict['た']='太';	org_dict['ち']='知';	org_dict['つ']='川';	org_dict['て']='天';	org_dict['と']='止';
+org_dict['な']='奈';	org_dict['に']='仁';	org_dict['ぬ']='奴';	org_dict['ね']='祢';	org_dict['の']='乃';
+org_dict['は']='波';	org_dict['ひ']='比';	org_dict['ふ']='不';	org_dict['へ']='部';	org_dict['ほ']='保';
+org_dict['ま']='末';	org_dict['み']='美';	org_dict['む']='武';	org_dict['め']='女';	org_dict['も']='毛';
+org_dict['や']='也';	org_dict['ゆ']='由';	org_dict['よ']='与';
+org_dict['ら']='良';	org_dict['り']='利';	org_dict['る']='留';	org_dict['れ']='礼';	org_dict['ろ']='呂';
+org_dict['わ']='和';	org_dict['ゐ']='爲';	org_dict['ゑ']='恵';	org_dict['を']='遠';	org_dict['ん']='无';
+
+// build unicode - koseki dict, from https://glyphwiki.org/wiki/Group:変体仮名Unicode-戸籍統一文字代替
+koseki_dict = {};
+koseki_dict['3041']='904480';  koseki_dict['3042']='904490';  koseki_dict['3043']='904500';  koseki_dict['3044']='904510';
+koseki_dict['3045']='904520';  koseki_dict['3046']='904530';  koseki_dict['3047']='904540';  koseki_dict['3048']='904550';
+koseki_dict['3049']='904560';  koseki_dict['304A']='904570';  koseki_dict['304B']='904580';  koseki_dict['304C']='904590';
+koseki_dict['304D']='904600';  koseki_dict['304E']='904610';  koseki_dict['304F']='904620';  koseki_dict['3050']='904630';
+koseki_dict['3051']='904640';  koseki_dict['3052']='904650';  koseki_dict['3053']='904660';  koseki_dict['3054']='904670';
+koseki_dict['3055']='904680';  koseki_dict['3056']='904690';  koseki_dict['3057']='904700';  koseki_dict['3058']='904710';
+koseki_dict['3059']='904720';  koseki_dict['305A']='904730';  koseki_dict['305B']='904740';  koseki_dict['305C']='904750';
+koseki_dict['305D']='904760';  koseki_dict['305E']='904770';  koseki_dict['305F']='904780';  koseki_dict['3060']='904790';
+koseki_dict['3061']='904800';  koseki_dict['3062']='904810';  koseki_dict['3063']='904820';  koseki_dict['3064']='904830';
+koseki_dict['3065']='904840';  koseki_dict['3066']='904850';  koseki_dict['3067']='904860';  koseki_dict['3068']='904870';
+koseki_dict['3069']='904880';  koseki_dict['306A']='904890';  koseki_dict['306B']='904900';  koseki_dict['306C']='904910';
+koseki_dict['306D']='904920';  koseki_dict['306E']='904930';  koseki_dict['306F']='904940';  koseki_dict['3070']='904950';
+koseki_dict['3071']='904960';  koseki_dict['3072']='904970';  koseki_dict['3073']='904980';  koseki_dict['3074']='904990';
+koseki_dict['3075']='905000';  koseki_dict['3076']='905010';  koseki_dict['3077']='905020';  koseki_dict['3078']='905030';
+koseki_dict['3079']='905040';  koseki_dict['307A']='905050';  koseki_dict['307B']='905060';  koseki_dict['307C']='905070';
+koseki_dict['307D']='905080';  koseki_dict['307E']='905090';  koseki_dict['307F']='905100';  koseki_dict['3080']='905110';
+koseki_dict['3081']='905120';  koseki_dict['3082']='905130';  koseki_dict['3083']='905140';  koseki_dict['3084']='905150';
+koseki_dict['3085']='905160';  koseki_dict['3086']='905170';  koseki_dict['3087']='905180';  koseki_dict['3088']='905190';
+koseki_dict['3089']='905200';  koseki_dict['308A']='905210';  koseki_dict['308B']='905220';  koseki_dict['308C']='905230';
+koseki_dict['308D']='905240';  koseki_dict['308E']='905250';  koseki_dict['308F']='905260';  koseki_dict['3090']='905270';
+koseki_dict['3091']='905280';  koseki_dict['3092']='905290';  koseki_dict['3093']='905300';
+koseki_dict['1B001']='900110';
+koseki_dict['1B002']='900010';  koseki_dict['1B003']='900030';  koseki_dict['1B004']='900020';  koseki_dict['1B006']='900040';
+koseki_dict['1B007']='900050';  koseki_dict['1B008']='900060';  koseki_dict['1B00B']='900070';  koseki_dict['1B00D']='900080';
+koseki_dict['1B00E']='900090';  koseki_dict['1B00F']='900120';  koseki_dict['1B011']='900100';  koseki_dict['1B014']='900130';
+koseki_dict['1B015']='900140';  koseki_dict['1B016']='901530';  koseki_dict['1B018']='900150';  koseki_dict['1B019']='900160';
+koseki_dict['1B01B']='900180';  koseki_dict['1B01F']='900170';  koseki_dict['1B025']='900210';  koseki_dict['1B026']='900200';
+koseki_dict['1B029']='901540';  koseki_dict['1B02A']='900190';  koseki_dict['1B02C']='900220';  koseki_dict['1B02D']='900240';
+koseki_dict['1B030']='900230';  koseki_dict['1B032']='900260';  koseki_dict['1B033']='900270';  koseki_dict['1B034']='900250';
+koseki_dict['1B035']='900280';  koseki_dict['1B038']='900290';  koseki_dict['1B039']='900310';  koseki_dict['1B03A']='900300';
+koseki_dict['1B03D']='900330';  koseki_dict['1B03F']='900320';  koseki_dict['1B041']='900340';  koseki_dict['1B043']='901550';
+koseki_dict['1B044']='900360';  koseki_dict['1B045']='900350';  koseki_dict['1B048']='900370';  koseki_dict['1B049']='901560';
+koseki_dict['1B04B']='900400';  koseki_dict['1B04D']='900410';  koseki_dict['1B04F']='900380';  koseki_dict['1B051']='900390';
+koseki_dict['1B052']='900430';  koseki_dict['1B054']='900420';  koseki_dict['1B055']='900440';  koseki_dict['1B057']='900460';
+koseki_dict['1B05B']='900450';  koseki_dict['1B05D']='900470';  koseki_dict['1B05E']='900500';  koseki_dict['1B05F']='900490';
+koseki_dict['1B060']='900480';  koseki_dict['1B062']='900530';  koseki_dict['1B065']='900520';  koseki_dict['1B066']='900510';
+koseki_dict['1B068']='900540';  koseki_dict['1B069']='900550';  koseki_dict['1B06B']='900560';  koseki_dict['1B06C']='901570';
+koseki_dict['1B06D']='900570';  koseki_dict['1B06E']='900600';  koseki_dict['1B070']='900590';  koseki_dict['1B072']='900580';
+koseki_dict['1B078']='901580';  koseki_dict['1B079']='900630';  koseki_dict['1B07A']='900620';  koseki_dict['1B07B']='900610';
+koseki_dict['1B080']='900650';  koseki_dict['1B081']='900640';  koseki_dict['1B084']='900660';  koseki_dict['1B086']='900670';
+koseki_dict['1B087']='900700';  koseki_dict['1B08B']='900690';  koseki_dict['1B08C']='900680';  koseki_dict['1B08D']='900710';
+koseki_dict['1B08F']='900740';  koseki_dict['1B090']='900720';  koseki_dict['1B091']='900730';  koseki_dict['1B092']='900760';
+koseki_dict['1B093']='900770';  koseki_dict['1B095']='901590';  koseki_dict['1B097']='900750';  koseki_dict['1B099']='900780';
+koseki_dict['1B09B']='900800';  koseki_dict['1B09C']='900790';  koseki_dict['1B09D']='900810';  koseki_dict['1B09E']='900830';
+koseki_dict['1B0A3']='900840';  koseki_dict['1B0A6']='900820';  koseki_dict['1B0A7']='900850';  koseki_dict['1B0A9']='900880';
+koseki_dict['1B0AB']='900860';  koseki_dict['1B0AD']='900890';  koseki_dict['1B0AE']='900870';  koseki_dict['1B0B0']='900900';
+koseki_dict['1B0B1']='900910';  koseki_dict['1B0B2']='900920';  koseki_dict['1B0B4']='900960';  koseki_dict['1B0B6']='900930';
+koseki_dict['1B0B7']='900950';  koseki_dict['1B0B8']='900940';  koseki_dict['1B0BA']='901000';  koseki_dict['1B0BB']='900970';
+koseki_dict['1B0C0']='900980';  koseki_dict['1B0C1']='900990';  koseki_dict['1B0C2']='901030';  koseki_dict['1B0C4']='901010';
+koseki_dict['1B0C5']='901020';  koseki_dict['1B0C7']='901040';  koseki_dict['1B0C9']='901060';  koseki_dict['1B0CC']='901070';
+koseki_dict['1B0CE']='901050';  koseki_dict['1B0CF']='901600';  koseki_dict['1B0D0']='901610';  koseki_dict['1B0D1']='901080';
+koseki_dict['1B0D2']='901090';  koseki_dict['1B0D3']='901100';  koseki_dict['1B0D4']='901110';  koseki_dict['1B0D5']='901130';
+koseki_dict['1B0D6']='901120';  koseki_dict['1B0D9']='901140';  koseki_dict['1B0DB']='901150';  koseki_dict['1B0DC']='901160';
+koseki_dict['1B0DF']='901170';  koseki_dict['1B0E0']='901190';  koseki_dict['1B0E2']='901180';  koseki_dict['1B0E3']='901620';
+koseki_dict['1B0E4']='901200';  koseki_dict['1B0E6']='901210';  koseki_dict['1B0E7']='901240';  koseki_dict['1B0E8']='901630';
+koseki_dict['1B0E9']='901230';  koseki_dict['1B0EB']='901220';  koseki_dict['1B0ED']='901260';  koseki_dict['1B0EE']='901270';
+koseki_dict['1B0EF']='901250';  koseki_dict['1B0F1']='901280';  koseki_dict['1B0F4']='901640';  koseki_dict['1B0F5']='901300';
+koseki_dict['1B0F6']='901290';  koseki_dict['1B0F8']='901320';  koseki_dict['1B0FA']='901310';  koseki_dict['1B0FD']='901330';
+koseki_dict['1B0FE']='901650';  koseki_dict['1B0FF']='901350';  koseki_dict['1B100']='901340';  koseki_dict['1B101']='901360';
+koseki_dict['1B102']='901370';  koseki_dict['1B105']='901390';  koseki_dict['1B106']='901380';  koseki_dict['1B107']='901660';
+koseki_dict['1B108']='901670';  koseki_dict['1B109']='901400';  koseki_dict['1B10B']='901410';  koseki_dict['1B10C']='901420';
+koseki_dict['1B10D']='901430';  koseki_dict['1B10F']='901680';  koseki_dict['1B110']='901440';  koseki_dict['1B111']='901450';
+koseki_dict['1B112']='901460';  koseki_dict['1B115']='901470';  koseki_dict['1B116']='901500';  koseki_dict['1B11A']='901490';
+koseki_dict['1B11B']='901480';  koseki_dict['1B11D']='901520';  koseki_dict['1B11E']='901510';
+
+// build char element dict
+var char_dict = {};
+var es = document.getElementsByClassName("char");
+for (var i = 0; i < es.length; i++) {
+	var e = es.item(i);
+	var e2 = e.getElementsByClassName("main")[0];
+	var id = e2.innerHTML;
+	char_dict[id] = e;
+}
+
+// build component list
+var div2 = document.getElementById("components_div");
+var st = div2.innerHTML;
+var st2 = "";
+var ch1 = "";
+var stage = 0;
+// st = st.split("\n").join("<br>\n");
+for (var i = 0; i < st.length; i++) {
+	var ch = st[i];
+	if (ch.charCodeAt(0) == 0xd82c) {
+		ch1 = ch;
+		continue;
+	}
+	if (ch1 != "") {
+		var ch2 = ch1 + ch;
+		if (ch2 in char_dict) {
+			st2 += char_dict[ch2].outerHTML + "\n";
+		} else {
+			st2 += ch2;
+		}
+		ch1 = "";
+		continue;
+	}
+	if (ch == "\n") {
+		st2 += "<br><hr style='height:5px; background-color:#999; border:none;'>\n";
+		stage = 0;
+	} else if (ch == "=") {
+		stage = 1;
+	} else if (ch == ":") {
+		st2 += "<br>\n";
+		stage = 2;
+	} else if (ch == "[") {
+		st2 += "<h2>";
+		stage = 1;
+	} else if (ch == "]") {
+		st2 += "</h2>";
+		stage = 1;
+	} else if (stage == 0) {
+		st2 += "<div class='main2'>"+ch+"</div>";
+	} else if (stage == 1) {
+		st2 += ch;
+	} else if (stage == 2) {
+		st2 += "<div class='char'><div class='top'><span>"+ch+"</span></div><div class='main'>"+ch+"</div><div class='bottom'><span>"+org_dict[ch]+"</span> <span>U+"+ch.charCodeAt(0).toString(16).toUpperCase()+"</span></div></div>";
+	}
+}
+// st1 = st.replace(/\=.*\:/g, ":").replace(/\[.*\]\n/g, "");
+// st1 = st1.split('\n').join(" | \n");
+// st1 = "<div class='sans' style='font-size:1.2em;'>" + st1 + "</div>";
+// div2.innerHTML = st1 + st2;
+div2.innerHTML = st2;
+
+// duplicate char for various fonts
+var es = document.getElementsByClassName("main");
+for (var i = 0; i < es.length; i++) {
+	var e = es.item(i);
+	var ch = e.innerHTML;
+	e.innerHTML = "<span class='serif' title='NINJAL Serif'>" + ch + "</span>";
+	var e2 = e.parentElement.children[2].children[1];
+	var unicode = e2.innerHTML.substring(2).toUpperCase();
+	var unicode_lower = unicode.toLowerCase();
+	if (unicode in koseki_dict) {
+		code = "koseki-" + koseki_dict[unicode];
+		e.innerHTML += "<a target='_blank' href='https://glyphwiki.org/wiki/" + code + "'><img src='https://glyphwiki.org/glyph/" + code + ".svg' class='glyph glyph1' title='Glyphwiki koseki'></a>";
+	} else {
+		e.innerHTML += "<img class='glyph glyph1'>";
+	}
+	code = "fitzgerald_u-" + unicode_lower;
+	if (unicode.startsWith("1B")) {
+		e.innerHTML += "<a target='_blank' href='https://glyphwiki.org/wiki/" + code + "'><img src='https://glyphwiki.org/glyph/" + code + ".svg' class='glyph glyph2' title='Glyphwiki fitzgerald'></a>";
+	} else {
+		e.innerHTML += "<span class='org_sans glyph2' title='Noto Sans'>" + ch + "</span>";
+	}
+	e.innerHTML += "<span class='sans' title='Noto Sans (WIP)'>" + ch + "</span>";
+	// e.innerHTML += "<span class='font1' title='KiCho sans'>" + ch + "</span>";
+	// code = "sz_u" + unicode_lower + "-gothic";
+	// e.innerHTML += "<a target='_blank' href='https://glyphwiki.org/wiki/" + code + "'><img src='https://glyphwiki.org/glyph/" + code + ".svg' class='glyph glyph2' title='Glyphwiki sz sans'></a>";
+	// var e2 = e.parentElement.getElementsByClassName("top")[0];
+	// var ch2 = e2.innerText[0];
+	// e.innerHTML += "<span class='yuji1'>" + ch2 + "</span>";
+	// e.innerHTML += "<span class='yuji2'>" + ch2 + "</span>";
+}
+
+list_container.style.display=''; components_container.style.display='none';
+
+function showAll(name, isShow) {
+	es = document.getElementsByClassName(name, isShow);
+	for (var i = 0; i < es.length; i++) {
+		var e = es.item(i);
+		e.style.display = isShow ? '' : 'none';
+	}
+}
+</script>
