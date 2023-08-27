@@ -1,0 +1,22 @@
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="font/GoogleSansCJK.woff2.css">
+<style>
+@font-face { font-family: Hentaikana; src: url('font/ninjal_hentaigana.woff2') format('woff2'); }
+.main { font-family: Hentaikana, 'Noto Serif JP', serif; font-size: 2em; width: 100%; height: 100% }
+.sans { font-family: GoogleSansCJK, 'Noto Sans JP', sans-serif; }
+</style>
+
+<table style="width:100%; height:100%"><tr><td>
+<textarea id="serif" class="main" oninput="copytext('serif', 'sans')"></textarea>
+</td><td>
+<textarea id="sans" class="main sans" oninput="copytext('sans', 'serif')"></textarea>
+</td></tr></table>
+
+<script>
+function copytext(src, dst) {
+    var e1 = document.getElementById(src);
+    var e2 = document.getElementById(dst);
+    e2.value = e1.value;
+}
+</script>
