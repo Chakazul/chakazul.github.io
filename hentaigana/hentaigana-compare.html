@@ -93,6 +93,7 @@ show part:
 <input type="radio" name="part" id="show_comp" onclick="list_container.style.display='none'; components_container.style.display='';"><label for="show_comp"> Grouped by components</label>
 <br>
 display glyphs:
+<input type="checkbox" name="glyphs" id="show_kanji" checked onclick="showAll('kanji', this.checked);"><label for="show_kanji"> Kanji</label>
 <input type="checkbox" name="glyphs" id="show_serif" checked onclick="showAll('serif', this.checked);"><label for="show_serif"> NINJAL Serif</label>
 <input type="checkbox" name="glyphs" id="show_glyph1" checked onclick="showAll('glyph1', this.checked);"><label for="show_glyph1"> Glyphwiki Koseki</label>
 <input type="checkbox" name="glyphs" id="show_glyph2" checked onclick="showAll('glyph2', this.checked);"><label for="show_glyph2"> Glyphwiki fitzgerald</label>
@@ -798,9 +799,10 @@ var es = document.getElementsByClassName("main");
 for (var i = 0; i < es.length; i++) {
 	var e = es.item(i);
 	var ch = e.innerHTML;
-	e.innerHTML = "<span class='serif' title='NINJAL Serif'>" + ch + "</span>";
-	var e2 = e.parentElement.children[2].children[1];
-	var unicode = e2.innerHTML.substring(2).toUpperCase();
+	var kanji = e.parentElement.children[2].children[0].innerHTML;
+	e.innerHTML = "<span class='kanji' title='NINJAL Serif'>" + kanji + "</span>";
+	e.innerHTML += "<span class='serif' title='NINJAL Serif'>" + ch + "</span>";
+	var unicode = e.parentElement.children[2].children[1].innerHTML.substring(2).toUpperCase();
 	var unicode_lower = unicode.toLowerCase();
 	if (unicode in koseki_dict) {
 		code = "koseki-" + koseki_dict[unicode];
