@@ -222,9 +222,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     if (iFrame == 0 || (iMouse.z > 0. && d <= R/iResolution.x*2.))
     {
         vec3 noiseRGB = vec3(
-            noise(fragCoord/R/2./samplingDist + vec2(sin(iDate.w)*2., sin(iDate.w*0.7)*3.)),
-            noise(fragCoord/R/2./samplingDist + vec2(cos(iDate.w)*2., cos(iDate.w*0.7)*3.)),
-            noise(fragCoord/R/2./samplingDist + vec2(mod(iDate.w,0.7)*2., mod(iDate.w*0.7,0.7)*3.)) );
+            noise(fragCoord/R/2./samplingDist + vec2(sin(iDate.w)*5., sin(iDate.w*0.7)*7.)),
+            noise(fragCoord/R/2./samplingDist + vec2(cos(iDate.w)*5., cos(iDate.w*0.7)*7.)),
+            noise(fragCoord/R/2./samplingDist + vec2(mod(iDate.w,0.7)*5., mod(iDate.w*0.7,0.7)*7.)) );
         rgb = baseNoise + noiseRGB;
     }
 
