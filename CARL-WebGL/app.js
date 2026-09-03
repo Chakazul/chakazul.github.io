@@ -105,7 +105,7 @@ let pendingAction = null;
 // The 90deg rotation the soliton spawns with. Rolled once per maze, not per spawn, so Respawn
 // re-runs the same starting configuration instead of quietly changing the soliton's heading.
 let spawnRotation = 0;
-let sps = 15, stepAcc = 0, lastT = 0, measSps = 0, rateSteps = 0, rateTime = 0;
+let sps = 60, stepAcc = 0, lastT = 0, measSps = 0, rateSteps = 0, rateTime = 0;
 // Higher than the CPU demo's cap: with the convolution on the GPU a frame can absorb far more
 // steps before it stops keeping up, and the measured rate readout shows where the real ceiling
 // lands on a given machine.
