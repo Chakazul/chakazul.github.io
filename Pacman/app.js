@@ -16,6 +16,24 @@
 // ============================================================================================
 
 // ====================================================================================
+//  Feature switches -- both default on, overridable via URL param (e.g. ?sound=0, ?dots=0).
+// ====================================================================================
+// "0"/"false" turns a switch off; anything else, or the param being absent, leaves the default.
+function boolParam(name, def) {
+  const v = new URLSearchParams(location.search).get(name);
+  return v === null ? def : v !== '0' && v.toLowerCase() !== 'false';
+}
+// Sound effects + the death beat. Off: no start jingle (the game begins the instant the soliton
+// spawns instead of waiting on one), no eat_dot chomp, and a death just holds+respawns in silence
+// instead of playing the death jingle first.
+const SOUND_ENABLED = boolParam('sound', true);
+// The pellet (channel-2) soliton field -- its rule, its stamps, its rendering. Off: placeDots()
+// never calls SimGL.setRule2()/uploadState2(), so ch2Kernel stays null and sim.glsl's per-step
+// channel-2 pass and its contribution to the drawn board are both skipped -- only the Pac-Man
+// channel moves.
+const DOTS_ENABLED = boolParam('dots', true);
+
+// ====================================================================================
 //  CONFIG -- locked to the canonical direction run (models/meta_direction.json)
 // ====================================================================================
 const CFG = {
@@ -446,6 +464,7 @@ function stampSoliton(arr, entry, tr, tc, rotation) {
 // never sees this channel and never acts on it -- it just runs. Rebuilt whenever the agent's
 // soliton is placed, so Restart and toggling the maze restore the full set of dots.
 function placeDots() {
+  if (!DOTS_ENABLED) return;
   // No dots in the layout means no second channel at all: leaving its rule unset is what keeps
   // SimGL.step() from paying for a second convolution over an empty board.
   const entry = maze.dots.length ? bank.find(b => b.name === CFG.channel2RuleName) : null;
@@ -476,7 +495,7 @@ function placeSoliton(entry, resetDots = true) {
 
   clearTimeout(deathTimer);
   stopEatingSound();
-  steps = 0; actions = 0; courseChanges = 0; solitonDead = false;
+  steps = 0; actions = 0; courseChanges = 0; solitonDead = false; deathStrikes = 0;
   lastAction = null; lastQ = null;
   actionTrail.length = 0;
   pendingAction = null;
@@ -503,6 +522,7 @@ function placeSoliton(entry, resetDots = true) {
 // page's actual first gesture (a click, a tap, any key), then retry -- that attempt is inside a
 // real gesture, so it succeeds -- before starting the game.
 function playStartSound() {
+  if (!SOUND_ENABLED) { setRunning(true); return; }
   setRunning(false);
   introPlaying = true;
   const attempt = () => { sndStart.currentTime = 0; return sndStart.play(); };
@@ -647,20 +667,31 @@ async function agentStep() {
   finishStep(rb);
 }
 
+// Some mobile GPU/browser WebGL2 stacks occasionally return a zeroed readPixels() result on the
+// very first read of a just-created float framebuffer, even though the board texture itself (and
+// so the rendered frame) is unaffected -- SimGL.readback() has no way to tell that apart from a
+// real "no soliton left" result. A genuine death develops over several steps as mass drains or
+// floods in, so requiring the same verdict on DEATH_STRIKES consecutive steps before acting on it
+// costs nothing on a real death and filters out a one-off misread. Critically, lastCoM is *not*
+// nulled until a death is actually confirmed: agentStep() stops stepping for good the instant
+// lastCoM goes null, so nulling it on the first bad reading would freeze the run before a second
+// readback ever got a chance to correct the first one.
+const DEATH_STRIKES = 3;
+let deathStrikes = 0;
+
 // Bookkeeping shared by both actors: take the soliton's freshly computed center of mass and
 // decide whether the episode has ended.
 function finishStep(rb) {
   if (rb.eaten > EAT_SOUND_MIN_MASS) noteEating();
-  if (!rb.valid) {
-    lastCoM = null;
-    if (!solitonDead) handleDeath();
-    return;
+  if (rb.valid) {
+    lastCoM = [rb.row, rb.col, rb.mass];
+    comHistory.push([rb.row, rb.col]); if (comHistory.length > CFG.windowSize) comHistory.shift();
   }
-  lastCoM = [rb.row, rb.col, rb.mass];
-  comHistory.push([rb.row, rb.col]); if (comHistory.length > CFG.windowSize) comHistory.shift();
-  if (!solitonDead) {
-    if (rb.mass > CFG.massExplodeLimit) handleDeath();
-    else if (rb.mass < CFG.massDeathFraction * initialMass) handleDeath();
+  const strike = !rb.valid || rb.mass > CFG.massExplodeLimit || rb.mass < CFG.massDeathFraction * initialMass;
+  deathStrikes = strike ? deathStrikes + 1 : 0;
+  if (!solitonDead && deathStrikes >= DEATH_STRIKES) {
+    lastCoM = null;
+    handleDeath();
   }
 }
 // Ignore floating-point noise from the reduction -- SimGL.readback().eaten is an exact sum of
@@ -673,6 +704,7 @@ const EAT_SOUND_MIN_MASS = 1e-4;
 // sample -- so it always finishes the sample already playing rather than cutting one off, and
 // there is never a moment where a fresh start and an old tail could both be sounding at once.
 function noteEating() {
+  if (!SOUND_ENABLED) return;
   eatDeadline = performance.now() + CFG.eatSoundGraceMs;
   if (!eatActive) { eatActive = true; playNextEatSound(); }
 }
@@ -697,6 +729,7 @@ function stopEatingSound() {
 const DEATH_PAUSE_MS = 1000;
 function handleDeath() {
   solitonDead = true;
+  if (!SOUND_ENABLED) { deathTimer = setTimeout(respawnAfterDeath, DEATH_PAUSE_MS); return; }
   sndDeath.currentTime = 0;
   // The pause is timed off the jingle actually ending, not off starting it -- if playback is
   // blocked for some reason, fall back to the pause alone rather than never respawning.
