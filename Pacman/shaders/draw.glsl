@@ -6,6 +6,7 @@
 // orientation the overlay canvas (arrows, action discs) and the mouse handlers assume.
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uState;
 uniform sampler2D uState2;   // second Lenia channel, stepped but never steered

@@ -495,7 +495,7 @@ function placeSoliton(entry, resetDots = true) {
 
   clearTimeout(deathTimer);
   stopEatingSound();
-  steps = 0; actions = 0; courseChanges = 0; solitonDead = false; deathStrikes = 0;
+  steps = 0; actions = 0; courseChanges = 0; solitonDead = false;
   lastAction = null; lastQ = null;
   actionTrail.length = 0;
   pendingAction = null;
@@ -667,31 +667,20 @@ async function agentStep() {
   finishStep(rb);
 }
 
-// Some mobile GPU/browser WebGL2 stacks occasionally return a zeroed readPixels() result on the
-// very first read of a just-created float framebuffer, even though the board texture itself (and
-// so the rendered frame) is unaffected -- SimGL.readback() has no way to tell that apart from a
-// real "no soliton left" result. A genuine death develops over several steps as mass drains or
-// floods in, so requiring the same verdict on DEATH_STRIKES consecutive steps before acting on it
-// costs nothing on a real death and filters out a one-off misread. Critically, lastCoM is *not*
-// nulled until a death is actually confirmed: agentStep() stops stepping for good the instant
-// lastCoM goes null, so nulling it on the first bad reading would freeze the run before a second
-// readback ever got a chance to correct the first one.
-const DEATH_STRIKES = 3;
-let deathStrikes = 0;
-
 // Bookkeeping shared by both actors: take the soliton's freshly computed center of mass and
 // decide whether the episode has ended.
 function finishStep(rb) {
   if (rb.eaten > EAT_SOUND_MIN_MASS) noteEating();
-  if (rb.valid) {
-    lastCoM = [rb.row, rb.col, rb.mass];
-    comHistory.push([rb.row, rb.col]); if (comHistory.length > CFG.windowSize) comHistory.shift();
-  }
-  const strike = !rb.valid || rb.mass > CFG.massExplodeLimit || rb.mass < CFG.massDeathFraction * initialMass;
-  deathStrikes = strike ? deathStrikes + 1 : 0;
-  if (!solitonDead && deathStrikes >= DEATH_STRIKES) {
+  if (!rb.valid) {
     lastCoM = null;
-    handleDeath();
+    if (!solitonDead) handleDeath();
+    return;
+  }
+  lastCoM = [rb.row, rb.col, rb.mass];
+  comHistory.push([rb.row, rb.col]); if (comHistory.length > CFG.windowSize) comHistory.shift();
+  if (!solitonDead) {
+    if (rb.mass > CFG.massExplodeLimit) handleDeath();
+    else if (rb.mass < CFG.massDeathFraction * initialMass) handleDeath();
   }
 }
 // Ignore floating-point noise from the reduction -- SimGL.readback().eaten is an exact sum of

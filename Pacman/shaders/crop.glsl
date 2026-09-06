@@ -13,6 +13,7 @@
 // does not have to wait for the CPU to learn where the soliton is.
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uF0;    // oldest state  (model channel k=0)
 uniform sampler2D uF1;

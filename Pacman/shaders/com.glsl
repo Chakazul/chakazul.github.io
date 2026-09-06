@@ -9,6 +9,7 @@
 // and the CPU picks up the CoM and the crop together in one readback.
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uRed0;
 uniform sampler2D uRed1;

@@ -18,6 +18,7 @@
 // Five accumulators do not fit one RGBA target, hence the two attachments.
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uState;
 uniform ivec2 uSize;    // board (W, H)

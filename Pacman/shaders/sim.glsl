@@ -14,6 +14,7 @@
 // tiny kernel stays resident in texture cache.
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uState;    // R = cell value in [0,1]
 uniform sampler2D uWall;     // R > 0.5 where the maze wall is

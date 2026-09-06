@@ -9,6 +9,7 @@
 // also pick up channel 2's own, unrelated, growth fluctuation).
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uDots;      // channel 2 (dots), pre-step
 uniform sampler2D uPacman;    // channel 1 (Pac-Man), post-step

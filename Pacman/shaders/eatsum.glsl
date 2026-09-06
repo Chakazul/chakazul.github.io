@@ -5,6 +5,7 @@
 // boolean threshold rather than a precise mass count.
 precision highp float;
 precision highp sampler2D;
+precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uRed;
 

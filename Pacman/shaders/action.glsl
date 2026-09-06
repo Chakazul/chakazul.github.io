@@ -9,6 +9,14 @@
 // entirely on no-op steps.
 precision highp float;
 precision highp sampler2D;
+// Not optional, and not just tidiness: GLSL ES 3.00's *fragment* language defaults int to
+// mediump, which is only guaranteed to hold +-2^15. The squared distance below reaches
+// (W/2)^2 = 275^2 = 75625 on this board, so on a GPU that implements mediump int as a real
+// 16-bit type (i.e. most mobile ones -- desktop drivers hand out 32 bits and hide this) it
+// wraps mod 65536, and the "<= uRadius^2" test then also passes on a circle of radius
+// sqrt(65536) = 256 around the action: a board-sized ring of injected mass, which explodes
+// the soliton on the first step CARL acts.
+precision highp int;
 
 uniform sampler2D uState;
 uniform ivec2 uSize;      // board (W, H)
