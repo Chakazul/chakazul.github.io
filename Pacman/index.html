@@ -220,7 +220,7 @@
       <div class="transport">
         <button id="play">Pause</button>
         <button id="step1">Step</button>
-        <button id="actor" title="Who intervenes on the soliton. Switch to You and CARL stops acting -- you make the nudges instead, with the mouse.">CARL acts</button>
+        <button id="actor" title="Who intervenes on the soliton. Click to cycle: CARL acts sometimes (only for a while after you steer -- fastest), CARL acts always (queries CARL every step), You act (CARL is idle -- you make the nudges instead, with the mouse).">CARL acts sometimes</button>
         <div class="reset-group">
           <button id="respawn" title="Re-place the current soliton at the maze start">Restart</button>
         </div>
@@ -255,6 +255,13 @@
           </span>
           <input type="range" id="spd" min="1" max="480" step="1" value="60">
           <b id="v-spd">60/s</b>
+        </label>
+        <label class="mini" title="Only used in 'CARL acts sometimes' mode.">
+          <span>sometimes window
+            <span class="info-badge" tabindex="0" role="note" title="" aria-label="In 'CARL acts sometimes' mode, CARL only runs for this many steps after the episode starts or after you last changed direction, then goes idle until you steer again. A shorter window means CARL runs less often (faster, but slower to react); a longer one keeps it closer to 'CARL acts always'." data-tip="In 'CARL acts sometimes' mode, CARL only runs for this many steps after the episode starts or after you last changed direction, then goes idle until you steer again. A shorter window means CARL runs less often (faster, but slower to react); a longer one keeps it closer to 'CARL acts always'.">?</span>
+          </span>
+          <input type="range" id="window" min="10" max="500" step="10" value="100">
+          <b id="v-window">100</b>
         </label>
       </div>
     </div>

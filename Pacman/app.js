@@ -158,9 +158,16 @@ let mazeEnabled = true;
 // Chrome on/off: the control deck and CARL's overlay (direction arrows, intervention discs) hide
 // together, so the board can be watched as a game rather than as an instrumented demo.
 let showOverlay = true;
-// Who intervenes on the soliton. When true CARL's policy is never queried: the sim still
-// advances, but the only actions on the board are the ones the user clicks in.
-let humanActs = false;
+// Who intervenes on the soliton, one of 'sometimes' (default), 'always', or 'human'. In 'human'
+// mode CARL's policy is never queried: the sim still advances, but the only actions on the board
+// are the ones the user clicks in. 'sometimes' is the performance mode: CARL is only queried for
+// sometimesWindow steps after an episode starts or after the user steers, then goes idle (no
+// inference, no action) until the next steer -- inference is the expensive part of a step, so this
+// is much cheaper to run than 'always' while looking the same whenever the player is engaged.
+let actorMode = 'sometimes';
+let humanActs = false;                 // derived from actorMode === 'human', kept for readability
+let sometimesWindow = 100;             // configurable steps CARL stays active for in 'sometimes' mode
+let sometimesRemaining = 0;            // steps left in the current active window ('sometimes' mode only)
 // The user's queued action, {gx,gy,sign}, or null. At most one is ever held: a step consumes it
 // exactly where agentAct() would have run, so a human turn and a CARL turn are the same turn.
 let pendingAction = null;
@@ -510,6 +517,7 @@ function placeSoliton(entry, resetDots = true) {
   clearTimeout(deathTimer);
   stopEatingSound();
   steps = 0; actions = 0; courseChanges = 0; solitonDead = false;
+  sometimesRemaining = sometimesWindow;
   lastAction = null; lastQ = null;
   actionTrail.length = 0;
   pendingAction = null;
@@ -676,8 +684,14 @@ async function agentStep() {
   if (!lastCoM) return;
   let action = null;
   if (humanActs) { lastMs = 0; action = takePendingAction(); }   // no inference -- readout shows "--"
+  else if (actorMode === 'sometimes' && sometimesRemaining <= 0) {
+    lastMs = 0; lastQ = null; lastAction = null;      // CARL idle this step -- no inference, no action
+  }
   else if (!session) return;
-  else action = await agentAct();
+  else {
+    action = await agentAct();
+    if (actorMode === 'sometimes') sometimesRemaining--;
+  }
 
   // Action, step, wall mask, CoM reduction and the next input crop, queued back to back with no
   // synchronization; the single readback below is the only point where the CPU waits on the GPU.
@@ -890,6 +904,7 @@ function steerTo(dy, dx) {
   const ny = dy / n, nx = dx / n;
   if (ny * dir[0] + nx * dir[1] < 0.9999) courseChanges++;
   dir = [ny, nx];
+  sometimesRemaining = sometimesWindow;    // a fresh steer wakes CARL up again in 'sometimes' mode
   render();
 }
 cv.addEventListener('click', e => {
@@ -965,15 +980,22 @@ cv.addEventListener('pointerdown', e => {
 // Right- and middle-click are actions here, not browser gestures.
 cv.addEventListener('contextmenu', e => { if (humanActs) e.preventDefault(); });
 cv.addEventListener('auxclick', e => { if (humanActs) e.preventDefault(); });
-$('actor').addEventListener('click', () => {
-  humanActs = !humanActs;
-  $('actor').textContent = humanActs ? 'You act' : 'CARL acts';
+const ACTOR_MODES = ['sometimes', 'always', 'human'];
+const ACTOR_LABELS = { sometimes: 'CARL acts sometimes', always: 'CARL acts always', human: 'You act' };
+function setActorMode(mode) {
+  actorMode = mode;
+  humanActs = mode === 'human';
+  $('actor').textContent = ACTOR_LABELS[mode];
   $('actor').classList.toggle('on', humanActs);
   $('human-hint').hidden = !humanActs;
   $('legend-target').hidden = humanActs;         // no blue arrow on the board, no key for it
   cv.classList.toggle('human', humanActs);
+  if (mode === 'sometimes') sometimesRemaining = sometimesWindow;   // fresh window on entering the mode
   lastMs = 0; lastQ = null; lastAction = null; pendingAction = null;
   render();
+}
+$('actor').addEventListener('click', () => {
+  setActorMode(ACTOR_MODES[(ACTOR_MODES.indexOf(actorMode) + 1) % ACTOR_MODES.length]);
 });
 $('respawn').addEventListener('click', respawnCurrentSoliton);
 $('shuffle').addEventListener('click', () => {
@@ -997,6 +1019,10 @@ function setActionCost(v) {
 }
 $('cost').addEventListener('input', e => setActionCost(+e.target.value));
 $('spd').addEventListener('input', e => { sps = +e.target.value; $('v-spd').textContent = sps + '/s'; });
+$('window').addEventListener('input', e => {
+  sometimesWindow = +e.target.value;
+  $('v-window').textContent = sometimesWindow;
+});
 
 // Chrome toggle: the deck and CARL's overlay go together. The button itself stays put, since it
 // is the only way back to the controls.
