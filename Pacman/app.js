@@ -546,20 +546,27 @@ function playStartSound() {
     .catch(() => {
       showStartPrompt();
       const start = () => {
-        window.removeEventListener('pointerdown', onPointer);
+        window.removeEventListener('pointerup', onPointer);
         window.removeEventListener('keydown', onKey);
         hideStartPrompt();
         attempt()
           .then(() => sndStart.addEventListener('ended', finish, { once: true }))
           .catch(finish);   // blocked even inside a gesture -- give up silently, but still start
       };
+      // pointerup, not pointerdown: iOS Safari (and other strict mobile browsers) only counts a
+      // *completed* tap -- touchend/pointerup/click -- as the gesture that unlocks audio, not the
+      // touch-start. Listening on pointerdown consumed the one-shot listener on the down-phase,
+      // attempt() failed again for the same reason as the very first (gestureless) call, and it
+      // fell straight through to the catch(finish) below -- silently starting the game with no
+      // jingle on a tap, while every other spawn path (Restart, etc.) plays fine because a button
+      // click is a real completed gesture on any browser.
       const onPointer = () => start();
       // Modifier keys (and Escape) don't count as a real "user activation" for autoplay purposes
       // -- a bare Alt/Ctrl/Shift/CapsLock press would otherwise fall straight through to the
       // catch() above and start the game silently. Keep listening past those instead of consuming
       // the one-shot gesture on them.
       const onKey = e => { if (!NON_ACTIVATING_KEYS.has(e.key)) start(); };
-      window.addEventListener('pointerdown', onPointer, { once: true });
+      window.addEventListener('pointerup', onPointer, { once: true });
       window.addEventListener('keydown', onKey);
     });
 }

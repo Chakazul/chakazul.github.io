@@ -65,8 +65,12 @@ board, then step, then locate, then judge — because the policy is sensitive to
 
 ## Differences on purpose
 
-- The FPS slider goes to 480 (was 120) and a frame absorbs up to 16 steps (was 6). The `rate`
-  readout shows the rate actually achieved, which is where the real ceiling shows up.
+- The FPS slider goes to 480 (was 120), and a frame absorbs as many steps as fit a wall-clock
+  budget (`?budget=`, 10ms) rather than a fixed count. A fixed count is wrong here because a step
+  costs wildly different amounts in the two actor modes: pure GPU work while you are acting, plus
+  a policy inference while CARL is. Sixteen of the latter ran for most of a second before the one
+  repaint at the end of the batch, which read as the board freezing. The `rate` readout shows the
+  rate actually achieved, which is where the real ceiling shows up.
 - No inline fallback soliton. The CPU demo carried one for the `file://` case; this version
   fetches shaders too, so that case cannot arise.
 
