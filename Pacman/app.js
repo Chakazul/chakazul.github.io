@@ -694,9 +694,9 @@ const GHOST_WINDOW = SimGL.GHOST_WIN;   // the tile edge the engine allocates
 
 let ghosts = [];              // one entry per 'M'; [] means there are none to judge or steer
 
-function newGhost(r, c, cellIdx) {
+function newGhost(r, c, cellIdx, home = [r, c]) {
   return {
-    home: [r, c],               // its 'M' cell, to be put back on when it dies
+    home,                        // its own numbered cell -- where a non-eaten respawn goes back to
     y: r, x: c,                 // last known board CoM
     origin: [Math.round(r) - (GHOST_WINDOW >> 1), Math.round(c) - (GHOST_WINDOW >> 1)],
     shift: [0, 0],              // whole cells its tile slides next step, to re-centre it
@@ -825,18 +825,27 @@ function ghostDied(g, s) {
   return !s.valid || s.mass > CFG.massExplodeLimit || s.mass < CFG.massDeathFraction * g.spawnMass;
 }
 
-// Puts one ghost back in its house, leaving the rest of the pack running. Rewriting its tile is
+// Puts one ghost back on the board, leaving the rest of the pack running. Rewriting its tile is
 // also the whole of the cleanup after an explosion: a tile has hard edges, so however far the mess
 // spread it is still inside that one tile, and the board-space texture everything downstream reads
 // is rebuilt from the tiles every step rather than accumulated -- so there is nowhere else for
 // debris to have got to, and nothing else to scrub.
-function respawnGhost(i) {
+//
+// `eaten` (a frightened-mode kill, as opposed to an explosion) sends it to symbol '1''s cell -- the
+// one actual ghost house, inside the centre room -- rather than back to its own numbered spawn: the
+// numbered cells are scattered around the maze (see MAZE_LAYOUT), not all of them a "house" a ghost
+// could plausibly walk out of again. Its own numbered cell is passed through as `home` regardless,
+// so a later non-eaten respawn (or a future level filtering it back out and back in) still knows
+// where it actually belongs.
+function respawnGhost(i, eaten) {
   const entry = bank.find(b => b.name === CFG.channel3RuleName);
   if (!entry) return;
-  const [r, c] = ghosts[i].home;
-  const g = newGhost(r, c, maze.cellIndexAt(r, c));
+  const home = ghosts[i].home;
+  const house = maze.ghosts.find(([, , id]) => id === 1);
+  const [r, c] = eaten && house ? house : home;
+  const g = newGhost(r, c, maze.cellIndexAt(r, c), home);
   ghosts[i] = g;
-  pushGhostTiles();          // its origin is back at the house before the tile is written
+  pushGhostTiles();          // its origin is back at the spawn point before the tile is written
   const { tile, mass } = buildGhostTile(entry, g);
   g.spawnMass = mass;
   SimGL.uploadGhostTile(i, tile);
@@ -901,7 +910,7 @@ function steerGhosts(rb) {
     if (!s) continue;
     if (ghostDied(ghosts[i], s)) {
       const eaten = ghosts[i].frightened;   // dissolved while frightened -- Pac-Man ate it
-      respawnGhost(i);                      // just this one; the rest run on
+      respawnGhost(i, eaten);               // just this one; the rest run on
       if (eaten) handleGhostEaten();
       continue;
     }
