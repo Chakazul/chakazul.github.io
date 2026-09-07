@@ -170,6 +170,7 @@ const COLORS = {
     [ 90, 160, 255],            // Inky blue
     [ 80, 230, 120],            // Clyde green
     [255, 170,  60],            // amber
+    [124,  58, 237],            // purple -- same hue as the CSS --easy accent
   ],
   wall:       [33, 33, 180],    // dark arcade blue
   background: [0, 0, 0],
@@ -213,6 +214,14 @@ let levelWon = false;
 // carries the same life count into the next board, like an arcade level clear -- see handleWin()).
 const STARTING_LIVES = 3;
 let lives = STARTING_LIVES;
+// The level system: level N spawns the maze's ghosts numbered 1..N (see placeGhosts()), so the
+// starting level is also the starting ghost count. Advances by one every win (see
+// respawnAfterWin()) and resets on a genuine new game the same way lives do (placeSoliton()'s
+// `resetLevel`, defaulting to `resetLives`) -- not on an ordinary death-respawn or on clearing the
+// board, which is what makes the game harder round over round instead of every death. ?level=N to
+// start somewhere other than 3 -- also what a reset falls back to, so it holds across a Restart.
+const STARTING_LEVEL = intParam('level', 3);
+let level = STARTING_LEVEL;
 // The pending auto-restart from clearing the board, same shape as deathTimer.
 let winTimer = 0;
 // Frightened is tracked per ghost (see newGhost()'s `frightened` field), not as one global mode:
@@ -339,13 +348,15 @@ function toroidalDelta(ny, nx, oy, ox) {
 //  is impossible to satisfy -- corner posts are always wall -- and is ignored.
 //
 //  Characters:
-//    on a cell slot:  'C' Pac-Man's spawn · 'M' a ghost's spawn (see placeGhosts()) · '#' solid
-//                     (filled) cell · 'O' a power pellet -- same channel-2 soliton as a '.'/'+' dot,
-//                     under the same shared rule, just recoloured (see placeDots()'s power mask):
-//                     the rule fixes one equilibrium size for everything in that channel, so a
-//                     bigger *stamp* would just relax back down to ordinary dot size rather than
-//                     stay distinct · anything else (' ', '-', '^') is open floor, no dot. 'C' and
-//                     'M' are open floor too; they only mark what spawns on the tile.
+//    on a cell slot:  'C' Pac-Man's spawn · '1'-'9' a numbered ghost's spawn (see placeGhosts()
+//                     and CFG/`level` below -- the current level only spawns ghosts numbered at or
+//                     below it) · '#' solid (filled) cell · 'O' a power pellet -- same channel-2
+//                     soliton as a '.'/'+' dot, under the same shared rule, just recoloured (see
+//                     placeDots()'s power mask): the rule fixes one equilibrium size for everything
+//                     in that channel, so a bigger *stamp* would just relax back down to ordinary
+//                     dot size rather than stay distinct · anything else (' ', '-', '^') is open
+//                     floor, no dot. 'C' and a digit are open floor too; they only mark what spawns
+//                     on the tile.
 //    on a wall slot:  '#' (or '|') wall · anything else (' ', '-', '^', '.', '+', 'O') is an open
 //                     passage between the two neighbouring cells -- including on the outer
 //                     ring (row/col 0 and row/col 2R/2C): the sim wraps toroidally regardless
@@ -370,10 +381,10 @@ const MAZE_WALL_CHARS = '#|';
 // rotation it was stamped with; it is read back off its own motion (see ghostHeading()).
 const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 // Cells the ghost is allowed to change direction on. These are the same characters that already
-// mean "dot" ('+'), "open" ('-', '^'), "ghost spawn" ('M') and "power pellet" ('O'), doing double
-// duty as turn markers -- which costs nothing, because in this layout they land on exactly the 32
-// corner/junction cells and on no straight corridor cell at all.
-const GHOST_TURN_CHARS = '+-MO^';
+// mean "dot" ('+'), "open" ('-', '^'), "ghost spawn" ('1'-'9') and "power pellet" ('O'), doing
+// double duty as turn markers -- which costs nothing, because in this layout they land on exactly
+// the 32 corner/junction cells and on no straight corridor cell at all.
+const GHOST_TURN_CHARS = '+-O^123456789';
 // ...and the one that does not leave the choice open: a ghost reaching it is sent north.
 const GHOST_NORTH_CHAR = '^';
 // Wall thickness and outer border, in pixels -- matches the randomized generator this replaced
@@ -385,15 +396,15 @@ const MAZE_WW = 9, MAZE_EDGE = 9;
 // half reflected, except that 'C' is not duplicated -- the soliton spawns on the left only.
 const MAZE_LAYOUT = [
   "####### ####### #######",
-  "#O...+#+.......+#+...O#",
+  "#O...9#+.......+#7...O#",
   "#.###.#.#######.#.###.#",
-  "#M#+.+.+...+...+.+.+#.#",
+  "#.#+.+.+...3...+.+.+#.#",
   "#.#.###.##   ##.###.#.#",
-  " +.+...+#M ^ -#+...+.+ ",
+  " +.4...+#1 ^ 2#+...5.+ ",
   "#.#.###.#######.###.#.#",
-  "#.#+.+.+.. C ..+.+.+#M#",
+  "#.#+.+.+.. C ..+.+.+#.#",
   "#.###.#.#######.#.###.#",
-  "#O...+#+.......+#+...O#",
+  "#O...6#+.......+#8...O#",
   "####### ####### #######",
 ];
 
@@ -439,14 +450,19 @@ function layoutMaze(layout, bh, bw, enableWalls) {
   };
 
   let startCell = null;
-  const ghostCells = [];
+  const ghostCells = [];      // {r, c, id}, id from the layout digit -- see placeGhosts()'s level filter
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const ch = at(2 * r + 1, 2 * c + 1);
     if (ch === 'C' && !startCell) startCell = [r, c];
-    if (ch === 'M') ghostCells.push([r, c]);
+    if (ch >= '1' && ch <= '9') ghostCells.push({ r, c, id: +ch });
     if (isWall(ch)) continue;                                   // solid cell: leave it filled
     if (enableWalls) carve(cellTop(r), cellLeft(c), cellTop(r) + cwY, cellLeft(c) + cwX);
   }
+  // Sorted by id, not left in the row-major scan order above -- ghostCells.map(cellCenter) below
+  // feeds maze.ghosts to placeGhosts() in this order, and that order is what fixes which array
+  // index (and so which colour, see render()'s ghostColors) a given numbered ghost always gets,
+  // regardless of which levels include it.
+  ghostCells.sort((a, b) => a.id - b.id);
 
   // Dots and power pellets are read off the whole doubled grid, cell slots and wall slots alike,
   // since '.'/'+'/'O' are all valid on either (see the layout comment above). Kept as two separate
@@ -543,7 +559,10 @@ function layoutMaze(layout, bh, bw, enableWalls) {
 
   return {
     wall: wallArr, start: cellCenter(startCell), dots: dotPos, power: powerPos,
-    ghosts: ghostCells.map(cellCenter), cells, cellIndexAt,
+    // [y, x, id] per ghost -- id is the layout digit, which placeGhosts() filters the current
+    // level's spawns against.
+    ghosts: ghostCells.map(g => [...cellCenter([g.r, g.c]), g.id]),
+    cells, cellIndexAt,
     cellX: cwX, cellY: cwY,
   };
 }
@@ -735,12 +754,17 @@ function placeGhosts() {
   ghosts = [];
   SimGL.setGhostTiles([], []);
   if (!GHOSTS_ENABLED) return;
-  const entry = maze.ghosts.length ? bank.find(b => b.name === CFG.channel3RuleName) : null;
-  if (!entry) return;      // no 'M' in the layout: leaving the rule unset skips the whole channel
+  // The level system: level N spawns every numbered ghost at or below N, so level 3 (the starting
+  // level) is ghosts 1-3, level 4 adds ghost 4, and so on -- and a level past the highest number
+  // the layout actually has just spawns all of them, since the filter below has nothing left to
+  // exclude (see updateLevel()'s comment for "if level number is higher than the max ghost").
+  const spawns = maze.ghosts.filter(([, , id]) => id <= level);
+  const entry = spawns.length ? bank.find(b => b.name === CFG.channel3RuleName) : null;
+  if (!entry) return;      // no ghost spawn at or below this level: leave the whole channel unset
   SimGL.setRule3({ mu: entry.mu, sigma: entry.sigma, betas: entry.betas, R: CFG.R,
                    dt: CFG.dt * CFG.channel3Speed });
 
-  for (const [r, c] of maze.ghosts) ghosts.push(newGhost(r, c, maze.cellIndexAt(r, c)));
+  for (const [r, c] of spawns) ghosts.push(newGhost(r, c, maze.cellIndexAt(r, c)));
   pushGhostTiles();        // origins must be current before any tile is written
   ghosts.forEach((g, i) => {
     const { tile, mass } = buildGhostTile(entry, g);
@@ -975,9 +999,13 @@ function steerGhost(g, idx, s, rb) {
 // exception is handleWin() clearing the board: that's still a fresh spawn (dots refilled, jingle
 // played) but not a new *game* -- clearing the board carries the player's remaining lives into the
 // next one, same as a level clear would in the arcade original -- so it passes false explicitly.
-function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = playIntro) {
+function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = playIntro, resetLevel = resetLives) {
   mu = entry.mu; sig = entry.sigma; betas = entry.betas.slice();
   SimGL.setRule({ mu, sigma: sig, betas, R: CFG.R, dt: CFG.dt * CFG.channel1Speed });
+  // Resolved before placeGhosts() below, which reads `level` to decide which numbered ghosts to
+  // spawn -- respawnAfterWin() has already bumped it by the time this runs, and a reset here must
+  // land before that same call, not after it.
+  if (resetLevel) level = STARTING_LEVEL;
 
   // Built once on the CPU and uploaded; from here on the board only exists on the GPU.
   const arr = new Float32Array(N);
@@ -1098,8 +1126,12 @@ function respawnCurrentSoliton() { placeSoliton(bank[currentIndex]); }
 // The death-triggered respawn -- same spawn, but leaves the dots channel alone (see placeSoliton).
 function respawnAfterDeath() { placeSoliton(bank[currentIndex], false, false); }
 // The win-triggered respawn -- a full fresh spawn like respawnCurrentSoliton(), except lives carry
-// over into the next board rather than refilling (see placeSoliton()'s `resetLives`).
-function respawnAfterWin() { placeSoliton(bank[currentIndex], true, true, false); }
+// over into the next board rather than refilling (see placeSoliton()'s `resetLives`), and the
+// level advances by one first, so placeGhosts() -- called from inside placeSoliton() -- spawns the
+// next level's ghost count. `level` isn't clamped to the layout's highest numbered ghost here: the
+// filter in placeGhosts() (`id <= level`) just has nothing left to exclude once level passes it,
+// so a level with no matching digit is silently a no-op rather than needing special-casing.
+function respawnAfterWin() { level++; placeSoliton(bank[currentIndex], true, true, false); }
 
 // ====================================================================================
 //  Agent step
@@ -1208,7 +1240,7 @@ function finishStep(rb) {
   lastCoM = [rb.row, rb.col, rb.mass];
   comHistory.push([rb.row, rb.col]); if (comHistory.length > CFG.windowSize) comHistory.shift();
   if (!solitonDead) {
-    if (rb.mass > CFG.massExplodeLimit) handleDeath();
+    if (rb.mass > CFG.massExplodeLimit) handleDeath(true);
     else if (rb.mass < CFG.massDeathFraction * initialMass) handleDeath();
   }
 }
@@ -1246,9 +1278,13 @@ function stopEatingSound() {
 // its own (lives left) or the whole game restarts (see the `next` pick below), same as a manual
 // Restart in the latter case.
 const DEATH_PAUSE_MS = 1000;
-function handleDeath() {
+// `exploded`, when true, is a mass-runaway death (rb.mass > CFG.massExplodeLimit) rather than an
+// ordinary dissolve or ghost kill -- see finishStep(). That one doesn't cost a life: it isn't
+// something the player could have steered around the way running into a ghost is, so it just
+// respawns the soliton in place, same beat and jingle otherwise.
+function handleDeath(exploded = false) {
   solitonDead = true;
-  lives = Math.max(0, lives - 1);
+  if (!exploded) lives = Math.max(0, lives - 1);
   // Lives run out: a full restart (placeSoliton()'s playIntro path) rather than the ordinary
   // death-respawn -- refills the dots, replays the start jingle, and resets lives right back to
   // STARTING_LIVES, same as hitting Restart by hand.

@@ -18,7 +18,7 @@ precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
-#define MAX_GHOSTS 8
+#define MAX_GHOSTS 9   // must match glsim.js's MAX_GHOSTS
 
 uniform sampler2D uAtlas;    // source atlas, R = cell value
 uniform sampler2D uWall;     // board wall mask

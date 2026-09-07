@@ -43,7 +43,7 @@ const SimGL = (function () {
   // the pattern. It is also what bounds the cost: a tile is 9216 cells against the board's 137500,
   // so several ghosts together come to a fraction of one whole-board pass.
   const GHOST_WIN = 96;
-  const MAX_GHOSTS = 8;
+  const MAX_GHOSTS = 9;   // must match the #define in draw.glsl, ghostblit.glsl and ghostsim.glsl
   // Pac-Man's own window. Wider than a ghost's, and for a reason a ghost does not have: he takes
   // interventions. CARL picks a cell anywhere in its netSize view -- 48px off his centre of mass --
   // and lays down a disc of actionRadius on top, so real mass can arrive 55px out. A 96 window

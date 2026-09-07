@@ -24,7 +24,7 @@ uniform vec3  uSoliton2RGB;  // 0..1, the colour an ordinary dot reaches
 uniform vec3  uPelletRGB;    // 0..1, the colour a power pellet reaches
 // One colour per ghost. Which one applies is read straight out of the composited texture rather
 // than re-derived from ghost positions here, so it stays exact even where two tiles overlap.
-#define MAX_GHOSTS 8
+#define MAX_GHOSTS 9   // must match glsim.js's MAX_GHOSTS
 uniform vec3  uGhostRGB[MAX_GHOSTS];
 uniform vec3  uSoliton3RGB;  // 0..1, fallback for mass with no owner recorded
 uniform vec3  uBackRGB;      // 0..1, the colour mass 0 sits at
