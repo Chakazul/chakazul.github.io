@@ -16,12 +16,17 @@
 // ============================================================================================
 
 // ====================================================================================
-//  Feature switches -- both default on, overridable via URL param (e.g. ?sound=0, ?dots=0).
+//  URL params and feature switches -- e.g. ?sound=0&dots=0&net=96
 // ====================================================================================
 // "0"/"false" turns a switch off; anything else, or the param being absent, leaves the default.
 function boolParam(name, def) {
   const v = new URLSearchParams(location.search).get(name);
   return v === null ? def : v !== '0' && v.toLowerCase() !== 'false';
+}
+// Positive integers only -- absent, unparseable or <= 0 all leave the default.
+function intParam(name, def) {
+  const v = parseInt(new URLSearchParams(location.search).get(name), 10);
+  return v > 0 ? v : def;
 }
 // Sound effects + the death beat. Off: no start jingle (the game begins the instant the soliton
 // spawns instead of waiting on one), no eat_dot chomp, and a death just holds+respawns in silence
@@ -39,11 +44,15 @@ const DOTS_ENABLED = boolParam('dots', true);
 const CFG = {
   K: 4,                       // frame stack
   R: 18,                      // kernel radius (fixed -- all 48 training solitons share it)
-  netSize: 96,                 // the model was trained on 96x96 toroidal grids with no mazes --
+  netSize: intParam('net', 72), // the model was trained on 96x96 toroidal grids with no mazes --
                                 // every inference call crops a 96x96 toroidal window centered on
                                 // the soliton's CoM out of the (larger) maze board, so the model
                                 // always sees input matching its training distribution regardless
-                                // of the selected board size, and runs faster to boot.
+                                // of the selected board size, and runs faster to boot. ?net=N
+                                // overrides the window edge for experiments: the policy is fully
+                                // convolutional so a different N still runs, but it is off the
+                                // distribution the model was trained on, and N also sets how much
+                                // the one readback per step has to carry (N*N*4 floats).
   dt: 0.1,
   actionValue: [0.3, -0.3, 0.0],  // add / remove / no-op (output channel order)
   actionRadius: 7,
