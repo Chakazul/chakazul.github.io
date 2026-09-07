@@ -168,10 +168,15 @@ let pendingAction = null;
 // re-runs the same starting configuration instead of quietly changing the soliton's heading.
 let spawnRotation = 0;
 let sps = 60, stepAcc = 0, lastT = 0, measSps = 0, rateSteps = 0, rateTime = 0;
-// Higher than the CPU demo's cap: with the convolution on the GPU a frame can absorb far more
-// steps before it stops keeping up, and the measured rate readout shows where the real ceiling
-// lands on a given machine.
-const MAX_STEPS_PER_FRAME = 16;
+// A batch of steps yields once it has spent this much of the frame, rather than running a fixed
+// number of steps. The fixed cap this replaces (16) was sized for a step that is pure GPU work,
+// which is what a step costs while *you* are acting. With CARL acting every step also pays for an
+// inference -- tens of milliseconds on a phone -- so 16 of them ran back to back for most of a
+// second, and since render() only lands after the batch, the board visibly froze between repaints
+// even though the step rate itself was tolerable. Budgeting by wall-clock time instead spends the
+// same frame on however many steps actually fit: the sim runs slower on a slow device rather than
+// in lurches, and the rate readout reports what was really achieved. ?budget=N to tune on a device.
+const FRAME_BUDGET_MS = intParam('budget', 10);
 const MAX_TRAIL = 48;            // hard cap on the intervention trail (the fade usually ends it first)
 
 const cv = document.getElementById('maze');
@@ -838,16 +843,22 @@ async function loop() {
     lastT = now;
     stepAcc += elapsed * sps;
     let want = Math.floor(stepAcc); stepAcc -= want;
-    const n = Math.min(want, MAX_STEPS_PER_FRAME);
+    // Steps the budget could not afford are dropped here rather than carried over -- rolling them
+    // into the next frame would only make the following batch longer, and so on downwards. The
+    // budget is checked after a step, not before, so a device where one step alone blows the whole
+    // budget still advances by one instead of stalling forever.
+    let done = 0;
     try {
-      for (let k = 0; k < n; k++) {
+      for (let k = 0; k < want; k++) {
         if (solitonDead) break;    // holding for the death jingle -- handleDeath() respawns it
         await agentStep();
+        done++;
+        if (performance.now() - now >= FRAME_BUDGET_MS) break;
       }
     } finally { busy = false; }
-    rateSteps += n; rateTime += elapsed;
+    rateSteps += done; rateTime += elapsed;
     if (rateTime >= 0.5) { measSps = rateSteps / rateTime; rateSteps = 0; rateTime = 0; }
-    if (n > 0) render();
+    if (done > 0) render();
   }
   requestAnimationFrame(loop);
 }
