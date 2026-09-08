@@ -48,16 +48,14 @@ const DOTS_ENABLED = boolParam('dots', true);
 // are skipped -- its own per-step sim pass, and the eat check that erases Pac-Man where a ghost
 // overlaps him. So this is also the switch for "nothing can kill Pac-Man but himself".
 const GHOSTS_ENABLED = boolParam('ghost', true);
-// Execution provider for the policy net: 'wasm' (default) or '?ep=webgpu' to try GPU compute
-// instead. WebGPU can't remove the CPU roundtrip in agentStep() -- the sim runs in a separate
-// WebGL2 context with no memory sharing with WebGPU, so the crop still crosses through CPU
-// either way -- but it can still speed up the net's own conv work (a real 4x96x96 CNN, not a
-// toy MLP) on a device with a capable, well-supported GPU. Mobile WebGPU support is newer and
-// patchier than WASM SIMD+threads (older Android drivers, iOS Safari, in-app webviews), so this
-// is a knob for A/B testing on real devices rather than a default change. 'webgpu' is listed
-// with a 'wasm' fallback so any op the WebGPU EP doesn't support still lands on wasm.
-const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'webgpu'
-  ? ['webgpu', 'wasm'] : ['wasm'];
+// Execution provider for the policy net: WebGPU by default (measured faster than WASM on the
+// mobile devices this was tuned on), with 'wasm' listed as a fallback so any op the WebGPU EP
+// doesn't support still lands on wasm. WebGPU can't remove the CPU roundtrip in agentStep() --
+// the sim runs in a separate WebGL2 context with no memory sharing with WebGPU, so the crop
+// still crosses through CPU either way -- but it does speed up the net's own conv work (a real
+// 4x96x96 CNN, not a toy MLP). `?ep=wasm` forces CPU-only, for re-comparing on a new device.
+const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'wasm'
+  ? ['wasm'] : ['webgpu', 'wasm'];
 
 // ====================================================================================
 //  CONFIG -- locked to the canonical direction run (models/meta_direction.json)
