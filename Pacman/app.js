@@ -178,7 +178,11 @@ const COLORS = {
     [ 90, 160, 255],            // Inky blue
     [ 80, 230, 120],            // Clyde green
     [255, 170,  60],            // amber
-    [124,  58, 237],            // purple -- same hue as the CSS --easy accent
+    [124,  58, 237],            // purple
+    [255, 105, 180],            // pink
+    [188,   0, 211],            // violet
+    [  0, 100,   0],            // dark green
+    [ 30,  30,  30],            // dark grey
   ],
   wall:       [33, 33, 180],    // dark arcade blue
   background: [0, 0, 0],
@@ -218,9 +222,11 @@ let levelWon = false;
 // Game-over lives, shown as 💛 in the title row (see render()). Reset only on a genuine new game
 // (placeSoliton()'s `resetLives` -- Restart, maze toggle, soliton picker, initial load, and the
 // full restart handleDeath() falls back to once lives run out), not on the ordinary death-respawn
-// in between (which is what makes them count down across deaths) or on clearing the board (which
-// carries the same life count into the next board, like an arcade level clear -- see handleWin()).
+// in between (which is what makes them count down across deaths). Clearing the board carries the
+// life count into the next board rather than resetting it, and adds one on top (capped at
+// MAX_LIVES) as the reward for the win -- see handleWin().
 const STARTING_LIVES = 3;
+const MAX_LIVES = 5;
 let lives = STARTING_LIVES;
 // The level system: level N spawns the maze's ghosts numbered 1..N (see placeGhosts()), so the
 // starting level is also the starting ghost count. Advances by one every win (see
@@ -412,7 +418,7 @@ const MAZE_LAYOUT = [
   "#.#.###.#######.###.#.#",
   "#.#+.+.+.. C ..+.+.+#.#",
   "#.###.#.#######.#.###.#",
-  "#O...6#+.......+#8...O#",
+  "#O...6#+...O...+#8...O#",
   "####### ####### #######",
 ];
 
@@ -1081,29 +1087,12 @@ function playStartSound() {
     .then(() => sndStart.addEventListener('ended', finish, { once: true }))
     .catch(() => {
       showStartPrompt();
-      const start = () => {
-        window.removeEventListener('pointerup', onPointer);
-        window.removeEventListener('keydown', onKey);
+      waitForGesture(() => {
         hideStartPrompt();
         attempt()
           .then(() => sndStart.addEventListener('ended', finish, { once: true }))
           .catch(finish);   // blocked even inside a gesture -- give up silently, but still start
-      };
-      // pointerup, not pointerdown: iOS Safari (and other strict mobile browsers) only counts a
-      // *completed* tap -- touchend/pointerup/click -- as the gesture that unlocks audio, not the
-      // touch-start. Listening on pointerdown consumed the one-shot listener on the down-phase,
-      // attempt() failed again for the same reason as the very first (gestureless) call, and it
-      // fell straight through to the catch(finish) below -- silently starting the game with no
-      // jingle on a tap, while every other spawn path (Restart, etc.) plays fine because a button
-      // click is a real completed gesture on any browser.
-      const onPointer = () => start();
-      // Modifier keys (and Escape) don't count as a real "user activation" for autoplay purposes
-      // -- a bare Alt/Ctrl/Shift/CapsLock press would otherwise fall straight through to the
-      // catch() above and start the game silently. Keep listening past those instead of consuming
-      // the one-shot gesture on them.
-      const onKey = e => { if (!NON_ACTIVATING_KEYS.has(e.key)) start(); };
-      window.addEventListener('pointerup', onPointer, { once: true });
-      window.addEventListener('keydown', onKey);
+      });
     });
 }
 // Keys the HTML spec excludes from counting as a "user activation" gesture: the UI Events
@@ -1113,18 +1102,51 @@ const NON_ACTIVATING_KEYS = new Set([
   'Alt', 'AltGraph', 'CapsLock', 'Control', 'Fn', 'FnLock', 'Hyper', 'Meta', 'NumLock', 'OS',
   'ScrollLock', 'Shift', 'Super', 'Symbol', 'SymbolLock', 'Escape',
 ]);
-// Reuses the (otherwise unused) result banner element for a "waiting for the first click/key"
-// notice -- same spot, same look.
+// Waits for the page's next "real" gesture, then runs `cb` once. Shared by playStartSound()'s
+// autoplay-blocked fallback on first load and showGameOverPrompt().
+function waitForGesture(cb) {
+  const start = () => {
+    window.removeEventListener('pointerup', onPointer);
+    window.removeEventListener('keydown', onKey);
+    cb();
+  };
+  // pointerup, not pointerdown: iOS Safari (and other strict mobile browsers) only counts a
+  // *completed* tap -- touchend/pointerup/click -- as the gesture that unlocks audio, not the
+  // touch-start. Listening on pointerdown consumed the one-shot listener on the down-phase,
+  // attempt() failed again for the same reason as the very first (gestureless) call, and it
+  // fell straight through to the catch(finish) below -- silently starting the game with no
+  // jingle on a tap, while every other spawn path (Restart, etc.) plays fine because a button
+  // click is a real completed gesture on any browser.
+  const onPointer = () => start();
+  // Modifier keys (and Escape) don't count as a real "user activation" for autoplay purposes
+  // -- a bare Alt/Ctrl/Shift/CapsLock press would otherwise fall straight through to the
+  // catch() above and start the game silently. Keep listening past those instead of consuming
+  // the one-shot gesture on them.
+  const onKey = e => { if (!NON_ACTIVATING_KEYS.has(e.key)) start(); };
+  window.addEventListener('pointerup', onPointer, { once: true });
+  window.addEventListener('keydown', onKey);
+}
+// Reuses the (otherwise unused) result banner element for the "waiting for a gesture" notice --
+// same spot, same look, shown both on the very first page load and on game over.
 function showStartPrompt() {
   const el = $('result');
   el.className = 'result';
-  el.innerHTML = '<b>Click, tap, or press a key to start</b>';
+  el.innerHTML = '<b>Start</b>';
   el.hidden = false;
 }
 function hideStartPrompt() {
   const el = $('result');
   el.hidden = true;
   el.innerHTML = '';
+}
+// Game over (lives ran out, see handleDeath()): hold on the "Start" prompt instead of restarting
+// under the player -- same paused, waiting-for-a-gesture presentation as the very first page
+// load. respawnCurrentSoliton() runs inside the resulting gesture, so its own playStartSound()
+// call plays the start jingle immediately rather than needing a second prompt.
+function showGameOverPrompt() {
+  setRunning(false);
+  showStartPrompt();
+  waitForGesture(() => { hideStartPrompt(); respawnCurrentSoliton(); });
 }
 
 function newMaze() {
@@ -1143,12 +1165,15 @@ function respawnCurrentSoliton() { placeSoliton(bank[currentIndex]); }
 // The death-triggered respawn -- same spawn, but leaves the dots channel alone (see placeSoliton).
 function respawnAfterDeath() { placeSoliton(bank[currentIndex], false, false); }
 // The win-triggered respawn -- a full fresh spawn like respawnCurrentSoliton(), except lives carry
-// over into the next board rather than refilling (see placeSoliton()'s `resetLives`), and the
-// level advances by one first, so placeGhosts() -- called from inside placeSoliton() -- spawns the
-// next level's ghost count. `level` isn't clamped to the layout's highest numbered ghost here: the
-// filter in placeGhosts() (`id <= level`) just has nothing left to exclude once level passes it,
-// so a level with no matching digit is silently a no-op rather than needing special-casing.
-function respawnAfterWin() { level++; placeSoliton(bank[currentIndex], true, true, false); }
+// over into the next board rather than refilling (see placeSoliton()'s `resetLives` -- the life
+// gained for the win itself is already applied, in handleWin(), ahead of the intermission jingle),
+// and the level advances by one first, so placeGhosts() -- called from inside placeSoliton() --
+// spawns the next level's ghost count. `level` isn't clamped to the layout's highest numbered
+// ghost here: the filter in placeGhosts() (`id <= level`) just has nothing left to exclude once
+// level passes it, so a level with no matching digit is silently a no-op rather than needing
+// special-casing. `playIntro` is false: the intermission jingle just finished, so the next board
+// should start running immediately rather than layering the start jingle on top of it.
+function respawnAfterWin() { level++; placeSoliton(bank[currentIndex], true, false, false); }
 
 // ====================================================================================
 //  Agent step
@@ -1289,11 +1314,11 @@ function stopEatingSound() {
   eatActive = false;
   for (const snd of sndEat) { snd.pause(); snd.currentTime = 0; }
 }
-// Death is a beat, not a stop: no "Fail" screen and the Play/Pause button never flips, so the
-// game never visibly pauses -- the sim just holds (loop() stops stepping while solitonDead)
-// through the death jingle, then a further second of silence, then either the soliton respawns on
-// its own (lives left) or the whole game restarts (see the `next` pick below), same as a manual
-// Restart in the latter case.
+// Death is a beat, not a stop: while lives remain, no "Fail" screen and the Play/Pause button
+// never flips, so the game never visibly pauses -- the sim just holds (loop() stops stepping
+// while solitonDead) through the death jingle, then a further second of silence, then the soliton
+// respawns on its own (see the `next` pick below). Once lives run out it's game over instead: see
+// showGameOverPrompt().
 const DEATH_PAUSE_MS = 1000;
 // `exploded`, when true, is a mass-runaway death (rb.mass > CFG.massExplodeLimit) rather than an
 // ordinary dissolve or ghost kill -- see finishStep(). That one doesn't cost a life: it isn't
@@ -1302,10 +1327,11 @@ const DEATH_PAUSE_MS = 1000;
 function handleDeath(exploded = false) {
   solitonDead = true;
   if (!exploded) lives = Math.max(0, lives - 1);
-  // Lives run out: a full restart (placeSoliton()'s playIntro path) rather than the ordinary
-  // death-respawn -- refills the dots, replays the start jingle, and resets lives right back to
-  // STARTING_LIVES, same as hitting Restart by hand.
-  const next = lives > 0 ? respawnAfterDeath : respawnCurrentSoliton;
+  // Lives run out: hold on the "Start" prompt (showGameOverPrompt()) rather than restarting
+  // immediately -- the player chooses when the next game begins, same as the very first page
+  // load. respawnCurrentSoliton() (a full restart, refilled dots, lives back to STARTING_LIVES,
+  // start jingle) runs once they give it that gesture.
+  const next = lives > 0 ? respawnAfterDeath : showGameOverPrompt;
   if (!SOUND_ENABLED) { deathTimer = setTimeout(next, DEATH_PAUSE_MS); return; }
   sndDeath.currentTime = 0;
   // The pause is timed off the jingle actually ending, not off starting it -- if playback is
@@ -1318,12 +1344,16 @@ function handleDeath(exploded = false) {
 
 // Clearing the board is also a beat rather than a stop: the sim holds (loop() stops stepping
 // while levelWon) through the intermission jingle, then a further second of silence, then a fresh
-// spawn -- same path as a manual Restart (start jingle, refilled dots channel; see
-// placeSoliton()), except lives carry over rather than refilling, since this is a level clear, not
-// a new game -- see respawnAfterWin().
+// spawn -- same path as a manual Restart (refilled dots channel, no start jingle; see
+// respawnAfterWin()), except lives carry over rather than refilling, since this is a level clear,
+// not a new game.
 const WIN_PAUSE_MS = 1000;
 function handleWin() {
   levelWon = true;
+  // Awarded immediately, ahead of the intermission jingle rather than after it, so the 💛 count
+  // in the title row updates (render() runs right after this step -- see loop()) before the
+  // reward beat even starts playing, not once it's over.
+  lives = Math.min(MAX_LIVES, lives + 1);
   stopEatingSound();      // the last dot's chomp shouldn't bleed into the intermission jingle
   if (!SOUND_ENABLED) { winTimer = setTimeout(respawnAfterWin, WIN_PAUSE_MS); return; }
   sndIntermission.currentTime = 0;
@@ -1408,8 +1438,10 @@ function drawGhostEyes(sc) {
   // touches it, always to a low-alpha rgba() for its fading action markers, and never sets it back
   // afterward. Without setting it here too, fillText() would inherit that leftover alpha instead
   // of drawing opaque, which is exactly why the eyes faded whenever CARL had recently acted.
-  octx.fillStyle = '#fff';
-  for (const g of ghosts) octx.fillText('👀', g.x * sc, g.y * sc);
+  for (const g of ghosts) {
+    octx.fillStyle = g.frightened ? '#fff7' : '#ffff';
+    octx.fillText('👀', g.x * sc, g.y * sc);
+  }
 }
 
 // The queued-but-not-yet-applied action, as a hollow dashed ring.

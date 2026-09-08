@@ -154,9 +154,14 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
 - **Sound and lives.** A start jingle plays on spawn (deferred, if needed, to the page's first
   click/tap/key, per browser autoplay rules); dying — mass below `massDeathFraction` of spawn mass
   or above `massExplodeLimit`, same thresholds as `CARL-WebGL` — plays a death jingle, holds the
-  board for `DEATH_PAUSE_MS`, then auto-respawns the same soliton with no confirmation, so the game
-  never shows a "Game Over" screen. `?sound=0` disables all of it (jingles, chomp, and the death
-  pause — a death just holds silently and respawns).
+  board for `DEATH_PAUSE_MS`, then auto-respawns the same soliton (no confirmation) while lives
+  remain. Once they run out, the board holds on a "Start" prompt instead of respawning — same
+  paused, wait-for-a-gesture presentation as the very first page load — and only restarts (fresh
+  lives, refilled dots, start jingle) once the player gives it one. Clearing a level adds a life
+  back (capped at `MAX_LIVES`) immediately, ahead of the intermission jingle, then carries the
+  updated count into the next board — no start jingle on top of it, since the board is already
+  running. `?sound=0` disables all of it (jingles, chomp, and the death pause — a death just holds
+  silently and respawns; game over still holds on the prompt, just silently).
 - **Three actor modes**, cycled by the one button: **CARL acts sometimes** (default) only queries
   the policy for a configurable window of steps after the episode starts or after you last steer,
   then goes idle — same per-step cost as **You act** the rest of the time, which matters because
@@ -192,7 +197,7 @@ shader passes.
 | ghost 90° turn | n/a (no ghost channel) | `shaders/rotate.glsl` |
 | policy input window | JS crop of 4 stored boards | `shaders/crop.glsl` |
 | board rendering (walls, all three channels) | per-pixel JS + `putImageData` | `shaders/draw.glsl` |
-| **policy network** | onnxruntime-web (WASM) | **unchanged** |
+| **policy network** | onnxruntime-web (WASM) | onnxruntime-web (WebGPU by default, falling back to WASM per-op; `?ep=wasm` forces CPU-only) |
 | maze layout, episode logic, overlay, UI, sound | JS | unchanged shape, new content (`app.js`) |
 
 ## The one synchronization point
@@ -217,6 +222,12 @@ policy is fed a 4-frame stack and all four frames must be cropped at the *same* 
 each frame at the CoM it had when captured would show a stationary soliton and destroy the velocity
 signal the policy depends on. A step overwrites the four-steps-ago frame, which is exactly the one
 falling out of the stack, so four slots is the whole requirement.
+
+The policy's own compute runs on onnxruntime-web's WebGPU execution provider by default (measured
+faster than WASM on the mobile devices this was tuned on; `?ep=wasm` forces CPU-only for
+re-comparing on a new device). This does not remove the synchronization point above: the sim runs
+in a WebGL2 context, and WebGL2 and WebGPU share no GPU memory, so the crop still has to cross
+through the CPU to reach the net either way. WebGPU only speeds up the net's own conv work.
 
 ## Fidelity to the CPU version
 
@@ -273,5 +284,5 @@ board, then step, then locate, then judge — because the policy is sensitive to
   `M`s it would return the midpoint between them — a point generally inside a wall and belonging
   to neither — and `steerGhost()` bails out rather than act on it. They would still spawn, run and
   eat; they just would not turn. More than one needs per-soliton segmentation, a much bigger job.
-- No lives counter or score — death is an infinite respawn loop, and eaten dots don't come back
-  (until Restart/New Maze/soliton change resets the dots channel).
+- No score — lives are tracked (see Sound and lives, above) but nothing counts points. Eaten dots
+  don't come back until Restart/New Maze/soliton change resets the dots channel.
