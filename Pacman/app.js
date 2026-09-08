@@ -48,6 +48,16 @@ const DOTS_ENABLED = boolParam('dots', true);
 // are skipped -- its own per-step sim pass, and the eat check that erases Pac-Man where a ghost
 // overlaps him. So this is also the switch for "nothing can kill Pac-Man but himself".
 const GHOSTS_ENABLED = boolParam('ghost', true);
+// Execution provider for the policy net: 'wasm' (default) or '?ep=webgpu' to try GPU compute
+// instead. WebGPU can't remove the CPU roundtrip in agentStep() -- the sim runs in a separate
+// WebGL2 context with no memory sharing with WebGPU, so the crop still crosses through CPU
+// either way -- but it can still speed up the net's own conv work (a real 4x96x96 CNN, not a
+// toy MLP) on a device with a capable, well-supported GPU. Mobile WebGPU support is newer and
+// patchier than WASM SIMD+threads (older Android drivers, iOS Safari, in-app webviews), so this
+// is a knob for A/B testing on real devices rather than a default change. 'webgpu' is listed
+// with a 'wasm' fallback so any op the WebGPU EP doesn't support still lands on wasm.
+const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'webgpu'
+  ? ['webgpu', 'wasm'] : ['wasm'];
 
 // ====================================================================================
 //  CONFIG -- locked to the canonical direction run (models/meta_direction.json)
@@ -1729,10 +1739,6 @@ function updateSolitonSelection() {
     btn.classList.toggle('sel', +btn.dataset.index === currentIndex);
   });
 }
-// Forced to WASM (CPU) -- WebGPU is disabled regardless of browser support, carried over from
-// the CPU demo. Note that moving inference to the WebGPU backend would not remove the readback
-// in agentStep(): the simulation above lives in a WebGL2 context, and the two APIs do not share
-// GPU memory, so the crop would still have to travel through the CPU to reach it.
 async function loadModel() {
   ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
   // Multi-threaded WASM needs SharedArrayBuffer, which needs the cross-origin isolation the
@@ -1760,7 +1766,7 @@ async function loadModel() {
   };
 
   try {
-    session = await ort.InferenceSession.create(CFG.modelUrl, { executionProviders: ['wasm'] });
+    session = await ort.InferenceSession.create(CFG.modelUrl, { executionProviders: EXECUTION_PROVIDERS });
     await warmup(session);
   } catch (e) {
     console.error(e);
