@@ -140,7 +140,7 @@ const CFG = {
   // How often a ghost's turn is a deliberate move toward Pac-Man rather than a roll of the dice --
   // the difficulty dial. At 0 it wanders and only meets him by accident; at 1 it closes on him at
   // every junction that offers the option. ?chase=N (a whole percentage, 0-100) to retune.
-  chaseBias: pctParam('chase', 0.7),
+  chaseBias: pctParam('chase', 0.6),
   easyRuleCount: 5,            // leading entries flagged as easy-to-steer -- one picker row
   actionFadeSeconds: 0.85,     // how long an intervention marker takes to fade out, in sim time
   // How long a gap with nothing eaten is allowed before the eat_dot_0/1 "waka waka" loop stops.
