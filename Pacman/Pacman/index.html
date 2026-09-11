@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Injects COOP/COEP response headers via a service worker so the page becomes cross-origin
+     isolated -- required for real SharedArrayBuffer support, which onnxruntime-web's threaded
+     WASM backend needs to run inference across multiple cores instead of one. Neither a plain
+     static file server nor GitHub Pages can set those headers directly, hence the client-side
+     workaround. First-ever visit triggers one extra reload while the service worker activates.
+     Only the policy network needs this -- the simulation itself runs in WebGL and is unaffected. -->
+<script src="coi-serviceworker.js"></script>
+<script>try{if(localStorage.getItem('carl-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Lenia Pac-man</title>
+<meta name="description" content="Steer a CARL soliton through a maze in real time. Click where you want it to go (or use arrow keys) and the trained direction-steering agent works out the low-level interventions -- exactly the human-in-the-loop setup from the paper's third experiment.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="css2" rel="stylesheet">
+<!-- ONNX Runtime Web: the trained net runs client-side (WASM / WebGPU) on the user's hardware -->
+<script src="ort.webgpu.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f3f7;--raised:#ffffff;--screen:#161019;--line:#e6dfe9;--line2:#d9cee0;
+    --ink:#241a2c;--muted:#6a5c76;--faint:#8f8298;--m4:#b85527;--accent:#c96a34;--accent2:#c02955;
+    --good:#1f8f52;--ramp:linear-gradient(90deg,rgba(184,85,39,.3),rgba(192,41,85,.3));
+    --glowA:rgba(222,73,104,.07);--glowB:rgba(59,15,112,.06);--shadow:0 20px 60px -30px rgba(60,20,40,.18);
+    --target:#3399ff;--current:#ff9900;--easy:#7c3aed;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b0710;--raised:#150c20;--screen:#070409;--line:#2a1d3a;--line2:#3b2a4d;
+    --ink:#ece6f3;--muted:#a195b4;--faint:#6c5f80;--m4:#fe9f6d;--accent:#fca96b;--accent2:#de4968;
+    --good:#53b979;--ramp:linear-gradient(90deg,rgba(254,159,109,.28),rgba(222,73,104,.28));
+    --glowA:rgba(222,73,104,.10);--glowB:rgba(59,15,112,.28);--shadow:0 30px 90px -40px rgba(222,73,104,.4);
+    --target:#5eb0ff;--current:#ffb84d;--easy:#b39dff;
+  }
+  *{box-sizing:border-box}
+  html{scrollbar-gutter:stable;background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Inter",system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased;line-height:1.5}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(60% 50% at 82% 4%,var(--glowA),transparent 60%),
+               radial-gradient(55% 45% at 6% 96%,var(--glowB),transparent 60%)}
+  .wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:18px 22px 16px}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.2em;
+           text-transform:uppercase;color:var(--faint)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .topbar-actions{display:flex;align-items:center;gap:6px}
+  .theme-toggle{width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;
+    font-size:14px;line-height:1;color:var(--muted);flex:0 0 auto}
+  .backlink{font-size:12.5px;color:var(--muted)}
+  .title-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;gap:10px}
+  h1{font-family:"Fraunces",serif;font-weight:600;font-size:clamp(22px,3vw,30px);margin:4px 0 0;
+     letter-spacing:-.01em;justify-self:start}
+  h1 em{font-style:italic;font-weight:500;color:var(--m4)}
+  /* Score, centered in the title row regardless of how wide the title/lives on either side are. */
+  #score{justify-self:center;font-family:"IBM Plex Mono",monospace;font-weight:600;
+    font-size:clamp(20px,2.6vw,28px);letter-spacing:.03em;font-variant-numeric:tabular-nums;
+    white-space:nowrap}
+  /* Remaining lives, upper right -- same row and font size as the title, one circle per life. */
+  #lives{font-size:clamp(22px,3vw,30px);line-height:1;letter-spacing:2px;white-space:nowrap;justify-self:end}
+  a{color:var(--accent)}
+
+  /* canvas screen -- the board is 11:5 (5 rows x 11 columns of maze cells), so it runs the full
+     width of the page as a banner, with every control gathered into one deck beneath it. */
+  .screen-wrap{background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:12px;
+    box-shadow:var(--shadow);margin-top:14px}
+  .canvas-box{position:relative;background:var(--screen);border-radius:10px;overflow:hidden;
+    aspect-ratio:11/5;width:100%;margin:0 auto;display:flex;align-items:center;justify-content:center}
+  #maze{width:100%;height:100%;image-rendering:pixelated;display:block;cursor:crosshair;touch-action:none}
+  #maze.human{cursor:cell}
+  #overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  /* "Click/tap/press a key to start" banner, centered over the board. */
+  .result{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:fit-content;max-width:85%;
+    display:block;text-align:center;
+    padding:10px 20px;border-radius:11px;background:rgba(12,7,17,.86);color:#fff;
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 24px -10px rgba(0,0,0,.8);
+    font-family:"IBM Plex Mono",monospace;font-size:24px;line-height:1.4;
+    font-variant-numeric:tabular-nums;pointer-events:none}
+  .result[hidden]{display:none}
+  .result b{display:block;font-weight:600;margin-bottom:1px}
+  /* Transient notice over the board -- currently only "that click was out of CARL's reach".
+     Never unmounted, just faded, so repeat offences re-show it without a layout flicker. */
+  .toast{position:absolute;top:8px;left:8px;right:8px;width:fit-content;margin:0 auto;
+    max-width:calc(100% - 16px);text-align:center;
+    padding:6px 11px;border-radius:9px;background:rgba(12,7,17,.9);color:#fff;
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 6px 24px -10px rgba(0,0,0,.8);
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;line-height:1.4;
+    opacity:0;transform:translateY(-5px);transition:opacity .16s,transform .16s;pointer-events:none}
+  .toast.show{opacity:1;transform:none}
+  .readout{display:flex;gap:4px 12px;flex-wrap:wrap;margin-top:10px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);
+    font-variant-numeric:tabular-nums;white-space:nowrap}
+  .readout>span{flex:0 0 auto}
+  .readout b{color:var(--ink);font-weight:500}
+  .readout .k{color:var(--faint)}
+  .readout .ok{color:var(--good)}
+
+  .transport{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
+  button{font-family:"Inter",sans-serif;font-size:13px;font-weight:500;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer;
+    transition:.14s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.on{background:var(--ramp);color:var(--ink);border:1px solid var(--accent2);font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .transport .reset-group{display:inline-flex;gap:6px;margin-left:auto;padding-left:10px;border-left:1px solid var(--line)}
+  @media(max-width:420px){.transport .reset-group{margin-left:0;padding-left:0;border-left:none}}
+
+  .playback{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;
+    padding-top:10px;border-top:1px solid var(--line)}
+  /* one slider per row, so simulation fps reads as sitting under action cost */
+  .playback .mini{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);flex:1 1 100%}
+  .playback .mini>span:first-child{flex:0 0 96px}
+  .playback .mini span{white-space:nowrap}
+  .playback .mini input[type=range]{flex:1;min-width:60px}
+  .playback .mini b{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent);
+    min-width:46px;text-align:right;font-weight:500}   /* fits "10.00*" without nudging the slider */
+  /* past CFG.costMax the conditioning value leaves the range the agent was trained on */
+  .playback .mini b.ood{color:var(--accent2)}
+  .playback .mini b.ood::after{content:"*"}
+
+  /* The single control deck under the board: everything that is not the board itself. Live
+     playback on the left, episode setup on the right, split by a rule rather than by a gap so
+     the two groups still read as one panel. */
+  .deck{background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:13px 16px;
+    box-shadow:var(--shadow);margin-top:14px;
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,336px);gap:18px 26px;align-items:start}
+  /* display:grid above would otherwise beat the UA's [hidden] rule */
+  .deck[hidden]{display:none}
+  .deck-play>:first-child{margin-top:0}
+  .deck-setup{border-left:1px solid var(--line);padding-left:26px}
+  @media(max-width:860px){
+    .deck{grid-template-columns:1fr;gap:14px}
+    .deck-setup{border-left:none;padding-left:0;border-top:1px solid var(--line);padding-top:14px}
+  }
+  .deck h3{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;
+    color:var(--m4);margin:0 0 10px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  label.field{display:block;margin:0 0 10px}
+  label.field:last-child{margin-bottom:0}
+  label.field .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  label.field .name{font-size:12.5px;color:var(--ink)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+    background:var(--line2);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:var(--accent);cursor:pointer;box-shadow:0 0 8px rgba(252,169,107,.6)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;
+    background:var(--accent);cursor:pointer}
+  select{width:100%;font-family:"Inter",sans-serif;font-size:12.5px;color:var(--ink);
+    background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 9px}
+  .pickrow{display:flex;gap:8px}
+  .pickrow select{flex:1;min-width:0}
+  .pickrow button{flex:0 0 auto}
+  label.field .row #shuffle{padding:3px 7px;font-size:13px;line-height:1;border-radius:7px}
+  .soliton-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+  .soliton-thumb{position:relative;padding:0;flex:none;aspect-ratio:1;border-radius:7px;overflow:hidden;
+    background:var(--screen);border:1px solid var(--line)}
+  .soliton-thumb:hover{border-color:var(--accent)}
+  /* First row -- the solitons that hold together best under steering. */
+  .soliton-thumb.easy{border-color:var(--easy);border-width:3px}
+  /* The tile behind the star is always dark (var(--screen)), so it uses a lighter tint of the
+     same hue than the border does in light mode. */
+  .soliton-thumb .star{position:absolute;top:-1px;right:2px;font-size:18px;line-height:1;
+    color:#b39dff;text-shadow:0 0 5px rgba(0,0,0,.95),0 0 2px rgba(0,0,0,.95);pointer-events:none}
+  .soliton-thumb.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+  .soliton-thumb img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;display:block}
+  .tip{font-size:11.5px;color:var(--muted);margin:8px 0 0;max-width:70ch}
+  .info-badge{position:relative;display:inline-flex;align-items:center;justify-content:center;
+    width:14px;height:14px;margin-left:3px;border-radius:50%;background:var(--line2);color:var(--muted);
+    font-family:"IBM Plex Mono",monospace;font-size:9.5px;font-weight:500;cursor:help;
+    vertical-align:2px}
+  .info-badge:hover,.info-badge:focus-visible{background:var(--m4);color:#fff;outline:none}
+  .info-badge::after{content:attr(data-tip);position:absolute;z-index:20;top:calc(100% + 10px);left:0;
+    width:210px;background:var(--raised);color:var(--ink);border:1px solid var(--line2);
+    border-radius:10px;box-shadow:var(--shadow);padding:10px 12px;
+    font-family:"Inter",sans-serif;font-size:11.5px;font-weight:400;line-height:1.5;
+    text-transform:none;letter-spacing:normal;white-space:normal;text-align:left;
+    opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-4px);
+    transition:opacity .15s ease,transform .15s ease}
+  .info-badge::before{content:"";position:absolute;z-index:21;top:100%;left:10px;margin-top:4px;
+    border:6px solid transparent;border-bottom-color:var(--raised);filter:drop-shadow(0 -1px 0 var(--line2));
+    opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease}
+  .info-badge:hover::after,.info-badge:focus-visible::after{opacity:1;visibility:visible;transform:translateY(0)}
+  .info-badge:hover::before,.info-badge:focus-visible::before{opacity:1;visibility:visible}
+
+  .board-legend{display:flex;flex-wrap:wrap;gap:5px 13px;justify-content:center;align-items:center;
+       font-size:10.5px;color:var(--muted);margin:10px 0 0;line-height:1.4}
+  .board-legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .board-legend span[hidden]{display:none}
+  .board-legend i{flex:none;display:inline-block}
+  .board-legend i.disc{width:12px;height:12px;border-radius:50%;border:2px solid}
+  .board-legend i.disc.add{border-color:rgb(83,185,121);background:rgba(83,185,121,.3)}
+  .board-legend i.disc.rem{border-color:rgb(222,73,104);background:rgba(222,73,104,.3)}
+  .board-legend svg{flex:none;display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="backlink" href="https://developmentalsystems.org/carl/">&larr; CARL</a>
+    <div class="topbar-actions">
+      <button id="ui-toggle" class="theme-toggle" title="Hide the controls and the agent overlay" aria-label="Toggle interface" aria-pressed="false">👁</button>
+      <button id="theme-toggle" class="theme-toggle" title="Switch to dark mode" aria-label="Toggle dark mode">🌙</button>
+    </div>
+  </div>
+  <div class="title-row">
+    <h1><b>Lenia</b> Pac-man</h1>
+    <div id="score" aria-label="Score">0</div>
+    <div id="lives" aria-label="Lives remaining"></div>
+  </div>
+
+  <div class="screen-wrap">
+    <div class="canvas-box">
+      <canvas id="maze"></canvas>
+      <canvas id="overlay"></canvas>
+      <div id="result" class="result" role="status" aria-live="polite" hidden></div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- One deck under the board: live playback on the left, episode setup on the right. -->
+  <div class="deck" id="deck">
+    <div class="deck-play">
+      <div class="readout">
+        <span><span class="k">mass</span> <b id="r-mass">0</b></span>
+        <span title="Simulation steps elapsed this episode"><span class="k">steps</span> <b id="r-step">0</b></span>
+        <span title="Agent actions this episode -- steps where CARL added or removed mass (no-ops are not counted)"><span class="k">actions</span> <b id="r-acts">0</b></span>
+        <span title="Times you have changed the target direction this episode"><span class="k">dir changes</span> <b id="r-course">0</b></span>
+        <span><span class="k">infer</span> <b id="r-ms">–</b></span>
+        <span><span class="k">rate</span> <b id="r-rate">–</b></span>
+      </div>
+      <div class="transport">
+        <button id="play">Pause</button>
+        <button id="step1">Step</button>
+        <button id="actor" title="Who intervenes on the soliton. Click to cycle: CARL acts sometimes (only for a while after you steer -- fastest), CARL acts always (queries CARL every step), You act (CARL is idle -- you make the nudges instead, with the mouse).">CARL acts sometimes</button>
+        <div class="reset-group">
+          <button id="respawn" title="Re-place the current soliton at the maze start">Restart</button>
+        </div>
+      </div>
+      <div class="board-legend">
+        <span><i class="disc add"></i>adding mass</span>
+        <span><i class="disc rem"></i>removing mass</span>
+        <span id="legend-target"><svg width="20" height="9" viewBox="0 0 20 9" style="color:var(--target)" aria-hidden="true"><path d="M0 4.5h12" stroke="currentColor" stroke-width="2"/><path d="M12 .8l6 3.7-6 3.7z" fill="currentColor"/></svg>target direction</span>
+        <span><svg width="20" height="9" viewBox="0 0 20 9" style="color:var(--current)" aria-hidden="true"><path d="M0 4.5h12" stroke="currentColor" stroke-width="2"/><path d="M12 .8l6 3.7-6 3.7z" fill="currentColor"/></svg>current direction</span>
+      </div>
+      <p class="tip" id="tip">
+        CARL is a goal-conditioned reinforcement learning agent that is able to guide the dynamics of
+        <a href="https://en.wikipedia.org/wiki/Lenia" target="_blank" rel="noopener"><b>Lenia</b></a> (continuous cellular automaton)
+        towards desired states through a sequence of local interventions.
+        In this demo, CARL was trained to steer <b>solitons</b> (local self-organized patterns) towards a target direction. At each step, CARL can select a spot on the board and either inject or erase mass there.
+        <b>Use arrow keys or click anywhere on the maze to change CARL's target direction.</b></p>
+      <p class="tip" id="human-hint" hidden><b>You are acting now.</b> CARL is idle; on the board,
+        <b>left-click adds mass</b>, <b>right-click removes it</b> and
+        <b>middle-click advances one step</b> (the Step button does the same).</p>
+
+      <div class="playback">
+        <label class="mini" title="">
+          <span>action cost
+            <span class="info-badge" tabindex="0" role="note" title="" aria-label="Action cost is the penalty CARL is told to expect for every intervention it makes on the soliton. A higher cost makes it act more sparingly and steer less aggressively; a lower cost lets it intervene more freely to correct course. CARL was trained on costs from 0 to 5 and responds smoothly across that range. Past 5 the value is still passed through faithfully, but it is outside anything CARL saw in training: rather than making it act even more sparingly, the effect flattens out and gets erratic." data-tip="Action cost is the penalty CARL is told to expect for every intervention it makes on the soliton. A higher cost makes it act more sparingly and steer less aggressively; a lower cost lets it intervene more freely to correct course. CARL was trained on costs from 0 to 5 and responds smoothly across that range. Past 5 the value is still passed through faithfully, but it is outside anything CARL saw in training: rather than making it act even more sparingly, the effect flattens out and gets erratic.">?</span>
+          </span>
+          <input type="range" id="cost" min="0" max="10" step="0.1" value="2.5">
+          <b id="v-cost">2.50</b>
+        </label>
+        <label class="mini" title="How fast the simulation runs, in target steps per second. The rate readout above shows the actual measured rate.">
+          <span>simulation fps
+            <span class="info-badge" tabindex="0" role="note" title="" aria-label="Setting the speed too high can make the simulation stutter. Try 15-30 steps/sec, and if it's still slow, switch your device to performance/high-power mode." data-tip="Setting the speed too high can make the simulation stutter. Try 15-30 steps/sec, and if it's still slow, switch your device to performance/high-power mode.">?</span>
+          </span>
+          <input type="range" id="spd" min="1" max="480" step="1" value="60">
+          <b id="v-spd">60/s</b>
+        </label>
+        <label class="mini" title="Only used in 'CARL acts sometimes' mode.">
+          <span>sometimes window
+            <span class="info-badge" tabindex="0" role="note" title="" aria-label="In 'CARL acts sometimes' mode, CARL only runs for this many steps after the episode starts or after you last changed direction, then goes idle until you steer again. A shorter window means CARL runs less often (faster, but slower to react); a longer one keeps it closer to 'CARL acts always'." data-tip="In 'CARL acts sometimes' mode, CARL only runs for this many steps after the episode starts or after you last changed direction, then goes idle until you steer again. A shorter window means CARL runs less often (faster, but slower to react); a longer one keeps it closer to 'CARL acts always'.">?</span>
+          </span>
+          <input type="range" id="window" min="10" max="500" step="10" value="100">
+          <b id="v-window">100</b>
+        </label>
+      </div>
+    </div>
+
+    <!-- Setup: the occasional choices, each of which restarts the episode. -->
+    <div class="deck-setup">
+      <h3>Setup (v1.01)</h3>
+      <label class="field" title="Pick which update rule's soliton to steer -- click a thumbnail">
+        <div class="row">
+          <span class="name">soliton
+            <span class="info-badge" tabindex="0" role="note" title="" aria-label="Solitons differ in their properties, such as size, speed and robustness. Those marked with a star (&#9733;) hold their shape and direction relatively well under CARL's interventions, and so are the easiest to control. The unstarred ones are worth trying too, but they may be brittle or move more chaotically." data-tip="Solitons differ in their properties, such as size, speed, and robustness. Those marked with a star (★) hold their shape and direction relatively well under CARL's nudges, and so are the easiest to control. The unstarred ones are worth trying too, but they may be brittle or move more chaotically.">?</span>
+          </span>
+          <button id="shuffle" title="Pick a random soliton">🎲</button>
+        </div>
+        <div id="soliton-grid" class="soliton-grid"></div>
+      </label>
+      <label class="field" style="margin-top:10px" title="Toggle the maze walls. When off, the grid is empty and the soliton moves freely.">
+        <div class="row"><span class="name">maze</span></div>
+        <button id="maze-toggle" class="on" style="width:100%">On</button>
+      </label>
+    </div>
+  </div>
+</div>
+
+<script src="glsim.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
