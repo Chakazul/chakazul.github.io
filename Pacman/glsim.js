@@ -24,7 +24,7 @@
 const SimGL = (function () {
   const SHADER_DIR = './shaders/';
   const NAMES = ['vertex', 'sim', 'action', 'reduce', 'com', 'crop', 'draw', 'eatreduce', 'eatsum',
-                 'rotate', 'ghostsim', 'ghostblit', 'tilered', 'tilecom'];
+                 'rotate', 'ghostsim', 'ghostblit', 'tilered', 'tilecom', 'dotsites'];
   const RING = 4;          // frames kept for the policy's frame stack
   const GRID = 16;         // stage-1 reduction output is GRID x GRID (see reduce.glsl)
   const EAT_THRESHOLD = 0.1;  // Pac-Man mass above this erases the dots channel at that cell
@@ -101,6 +101,11 @@ const SimGL = (function () {
   // The "how much dot mass did Pac-Man just eat" reduction -- same two-stage shape as
   // reduce.glsl -> com.glsl, just over a different pair of textures (see eatreduce.glsl).
   let eatRedTex = null, eatRedFbo = null, eatSumTex = null, eatSumFbo = null;
+  // Per-dot presence (see dotsites.glsl): one output texel per dot, the channel-2 mass left in a
+  // window around where it was stamped. The positions arrive as a texture rather than a uniform
+  // array because their count is whatever the layout holds, not a compile-time constant.
+  let siteTex = null, siteOutTex = null, siteOutFbo = null, siteCount = 0, siteRadius = 0;
+  let sitePix = null, siteMass = null;
   let cropTex = null, cropFbo = null;
   let vao = null;
 
@@ -235,7 +240,7 @@ const SimGL = (function () {
       })));
     const src = {}; NAMES.forEach((n, i) => src[n] = srcs[i]);
     ['sim', 'action', 'reduce', 'com', 'crop', 'draw', 'eatreduce', 'eatsum', 'rotate',
-     'ghostsim', 'ghostblit', 'tilered', 'tilecom']
+     'ghostsim', 'ghostblit', 'tilered', 'tilecom', 'dotsites']
       .forEach(n => prog[n] = link(src.vertex, src[n], n));
 
     vao = gl.createVertexArray();
@@ -348,6 +353,25 @@ const SimGL = (function () {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, W, H, 0, gl.RED, gl.UNSIGNED_BYTE, t);
   }
 
+  // Where each dot was stamped, as [row, col] board positions, plus the half-width of the square
+  // window summed around each. Called by placeDots() whenever the dots channel is (re)stamped;
+  // readback()'s dotSites comes back in this same order. An empty list turns the pass off.
+  function setDotSites(sites, radius) {
+    del(siteTex, false); del(siteOutTex, false); del(siteOutFbo, true);
+    siteTex = siteOutTex = siteOutFbo = null;
+    siteCount = sites.length; siteRadius = radius;
+    if (!siteCount) return;
+    if (siteCount > gl.getParameter(gl.MAX_TEXTURE_SIZE))
+      throw new Error(`${siteCount} dots exceed this GPU's texture width limit`);
+    const pos = new Float32Array(siteCount * 4);
+    sites.forEach(([r, c], i) => { pos[i * 4] = ((c % W) + W) % W; pos[i * 4 + 1] = ((r % H) + H) % H; });
+    siteTex = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, siteCount, 1, pos);
+    siteOutTex = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, siteCount, 1);
+    siteOutFbo = fbo([siteOutTex]);
+    sitePix = new Float32Array(siteCount * 4);
+    siteMass = new Float32Array(siteCount);
+  }
+
   function setRule(rule) {
     kR = rule.R;
     del(kernelTex, false);
@@ -458,8 +482,19 @@ const SimGL = (function () {
     drawQuad();
   }
 
+  // One texel per dot site -- see dotsites.glsl.
+  function runDotSites() {
+    const p = pass(prog.dotsites, siteOutFbo, siteCount, 1);
+    bind(p, 'uState', 0, ch2Tex[ch2Idx]);
+    bind(p, 'uSites', 1, siteTex);
+    gl.uniform2i(u(p, 'uSize'), W, H);
+    gl.uniform1i(u(p, 'uRadius'), siteRadius);
+    drawQuad();
+  }
+
   // reduce -> com again, over ch2Tex instead of the ring: how much dots-channel mass is left on
-  // the whole board right now. Queued alongside runAnalysis() with no readback in between.
+  // the whole board right now -- and, per dot site, around each dot. Queued alongside
+  // runAnalysis() with no readback in between.
   function runDotsAnalysis() {
     let p = pass(prog.reduce, dotsRedFbo, GRID, GRID);
     bind(p, 'uState', 0, ch2Tex[ch2Idx]);
@@ -472,6 +507,8 @@ const SimGL = (function () {
     bind(p, 'uRed1', 1, dotsRedTex1);
     gl.uniform2i(u(p, 'uSize'), W, H);
     drawQuad();
+
+    if (siteCount) runDotSites();
   }
 
   // A window near a board edge runs off it, and the board is a torus, so it comes back on the far
@@ -711,11 +748,20 @@ const SimGL = (function () {
       gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, dotsComPix);
       dotsMass = dotsComPix[2];
     }
+    // Every dot site in one row, same one-call shape as the ghosts above. Reused buffer: the caller
+    // reads it before the next readback() overwrites it.
+    let dotSites = null;
+    if (hasDots && siteCount) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, siteOutFbo);
+      gl.readPixels(0, 0, siteCount, 1, gl.RGBA, gl.FLOAT, sitePix);
+      for (let i = 0; i < siteCount; i++) siteMass[i] = sitePix[i * 4];
+      dotSites = siteMass;
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, cropFbo);
     gl.readPixels(0, 0, net, net, gl.RGBA, gl.FLOAT, cropPix);
     return {
       valid: comPix[3] > 0.5, row: comPix[0], col: comPix[1], mass: comPix[2], crop: cropPix, eaten,
-      pelletEaten, ghosts, hasDots, dotsMass,
+      pelletEaten, ghosts, hasDots, dotsMass, dotSites,
     };
   }
 
@@ -743,7 +789,7 @@ const SimGL = (function () {
   }
 
   return {
-    init, setBoard, setWall, setPowerMask, setRule, setRule2, setRule3,
+    init, setBoard, setWall, setPowerMask, setDotSites, setRule, setRule2, setRule3,
     uploadState, uploadState2, setGhostTiles, uploadGhostTile, rotateGhost,
     prime, step, readback, draw, GHOST_WIN,
   };

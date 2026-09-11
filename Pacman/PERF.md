@@ -138,7 +138,7 @@ This is very likely the largest mobile cost after the convolution itself.
     output texel, 1 state fetch + 4 weight fetches produce 16 MACs, against 32 fetches for the same
     16 MACs today. That is ~4.6× fewer fetches for ~1.7× more ALU, so call it 2–2.5× on a
     fetch-bound mobile GPU. The catch is that every pass reading the state texture has to change
-    with it — `crop`, `reduce`, `action`, `eatreduce`, `draw`, `rotate`, `ghostblit` — so it is a
+    with it — `crop`, `reduce`, `action`, `eatreduce`, `dotsites`, `draw`, `rotate`, `ghostblit` — so it is a
     rewrite, not an edit.
 
 11. **PBO async readback.**

@@ -164,13 +164,18 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
   silently and respawns; game over still holds on the prompt, just silently).
 - **Score**, shown centered in the title row: 10 per dot, 50 per power pellet, and 200 for a ghost
   eaten during a pellet's frightened window, doubling for every next ghost eaten in that same window
-  (200, 400, 800, ...) before resetting on the next pellet. Dots and pellets are counted off the
-  exact mass the engine reports erasing each step (`rb.eaten`/`rb.pelletEaten`, see
-  `shaders/eatreduce.glsl`), not off the dots channel's own live total mass — that total drifts with
-  the channel's free-running growth/decay independent of what's actually been eaten, so it would be
-  a noisy stand-in. The mass is banked per point value (`app.js`'s `dotMassPool`/`pelletMassPool`)
-  and only cashed in once it reaches one dot's worth, so a dot eaten gradually over a few steps still
-  counts once rather than several times or not at all. Persists across level wins and death
+  (200, 400, 800, ...) before resetting on the next pellet. Dots and pellets are counted per dot:
+  `shaders/dotsites.glsl` sums the channel-2 mass left in a small window around every dot's stamped
+  position (one texel per dot, read back with everything else), and a dot scores once, the step its
+  window drops below `CFG.dotGoneFraction` (40%) of what it held at stamping. That works because a
+  dot is bistable — measured on a CPU mirror of `sim.glsl`, an untouched or merely grazed dot never
+  falls below ~80% over its ~52-step breathing cycle, while one Pac-Man bites into dissolves all the
+  way to 0 within a few steps. Two cheaper signals were tried and don't work. Summing the mass erased
+  under Pac-Man (`rb.eaten`, `shaders/eatreduce.glsl`) misses the part of a bitten dot he never
+  covered, which then dissolves on its own, so it caught only 25–70% of each dot and many dots never
+  scored. The channel's total mass swings by ~15 dots' worth, because every dot breathes ±15% in
+  phase with every other. `rb.eaten`/`rb.pelletEaten` still drive the chomp sound and the frightened
+  window, which only need "was anything bitten this step". Persists across level wins and death
   respawns, resetting only on a genuine new game (Restart, New Maze, soliton change, or game over).
 - **Three actor modes**, cycled by the one button: **CARL acts sometimes** (default) only queries
   the policy for a configurable window of steps after the episode starts or after you last steer,
@@ -203,6 +208,7 @@ shader passes.
 | intervention (add/remove mass) | JS | `shaders/action.glsl` |
 | center of mass + total mass | JS sweep of the whole board | `shaders/reduce.glsl` → `shaders/com.glsl` |
 | eaten dot mass | n/a (no dots channel) | `shaders/eatreduce.glsl` → `shaders/eatsum.glsl` |
+| mass left per dot (scoring) | n/a (no dots channel) | `shaders/dotsites.glsl` |
 | ghost center of mass | n/a (no ghost channel) | `shaders/reduce.glsl` → `shaders/com.glsl`, own targets |
 | ghost 90° turn | n/a (no ghost channel) | `shaders/rotate.glsl` |
 | policy input window | JS crop of 4 stored boards | `shaders/crop.glsl` |
@@ -214,11 +220,12 @@ shader passes.
 
 The policy runs on the CPU, so something has to cross back from the GPU every step. Each step
 queues its passes with no readback between them — action, sim, reduce, com, eatreduce+eatsum,
-crop, plus the two free-running channels' own sim passes and the ghost reduction — and the CPU then
-collects everything it needs in a single `readback()`:
+dotsites, crop, plus the two free-running channels' own sim passes and the ghost reduction — and the
+CPU then collects everything it needs in a single `readback()`:
 
 - the **CoM** (a 1×1 texture: row, col, mass, valid) for the episode bookkeeping and the overlay
 - the **eaten-mass total** (a 1×1 texture), thresholded on the CPU into "something was eaten"
+- the **mass left per dot** (one row, one texel per dot) for the score
 - the **ghost CoM** (a 1×1 texture) for the turn logic — free, in that the stall has already
   happened by the time it is read
 - the **96×96×4 crop** the policy reads

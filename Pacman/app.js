@@ -154,6 +154,12 @@ const CFG = {
   // the rule's own growth/decay rather than only ever going down as they're eaten, and a fraction
   // of a stale spawn-time snapshot doesn't track that.
   dotsWinMass: 0.1,
+  // A dot counts as eaten, and scores, the step the channel-2 mass left in its own window (see
+  // placeDots() and dotsites.glsl) drops below this fraction of what that window held when stamped.
+  // The margin is wide both ways, measured on a CPU mirror of sim.glsl: an untouched dot never
+  // falls below ~80% over its ~52-step breathing cycle, nor does one Pac-Man only grazes, while one
+  // he bites into dissolves the rest of the way to exactly 0 within a few steps.
+  dotGoneFraction: 0.4,
   // How long a power pellet's frightened window stays open, in wall-clock ms -- same convention as
   // eatSoundGraceMs: about player-perceived time, not sim steps, so it doesn't scale with sim
   // speed. Eating another pellet while already frightened resets the clock rather than stacking.
@@ -258,16 +264,17 @@ let frightenedExpired = false;
 let ghostEatPause = false;
 // Score -- persists across level wins and death respawns within one game, and resets only on a
 // genuine new game (placeSoliton()'s `resetLives`, same as lives). Every dot is 10 points and every
-// power pellet 50, both counted off the exact mass the engine reports as *erased* each step
-// (rb.eaten/rb.pelletEaten -- see eatreduce.glsl) rather than off the dots channel's own live total
-// mass: that total drifts with the field's free-running growth/decay independent of what Pac-Man
-// has actually eaten, so it would make a noisy proxy. Fractional mass is banked per point value in
-// *MassPool and only cashed in once it reaches one dot's worth (dotUnitMass, set in placeDots()),
-// so a dot eaten gradually over a few steps -- or one whose mass has drifted from its spawn value by
-// the time it's eaten -- still counts as close to one dot rather than several or none.
+// power pellet 50, awarded once per dot, the step its own spot on the board is found empty
+// (rb.dotSites, see CFG.dotGoneFraction). Not counted off the mass erased under Pac-Man's pixels
+// (rb.eaten): a dot is a Lenia soliton, and the part of a bitten one he never covered dissolves on
+// its own afterwards, so erased mass came to only 25-70% of a dot and many never added up to a
+// score. Not off the dots channel's total mass either: every dot breathes +-15% in phase with every
+// other, so the total swings by ~15 dots' worth.
 let score = 0;
-let dotUnitMass = 0;
-let dotMassPool = 0, pelletMassPool = 0;
+// One entry per stamp placeDots() made, in the order it handed them to SimGL.setDotSites():
+// {r, c, points, spawnMass (what its window held at stamping), eaten}. Rebuilt only with the dots
+// field itself, so a death respawn keeps the dots already eaten counted.
+let dotSites = [];
 // Eating a ghost is worth 200, doubling for every next ghost eaten inside the same power pellet's
 // frightened window (200, 400, 800, ...), same as the arcade. Reset to 1 by a fresh power pellet
 // (updateScore(), even one eaten mid-window -- extending the timer resets the combo too) and by
@@ -686,7 +693,7 @@ function stampSoliton(arr, entry, tr, tc, rotation, mask) {
 // shared rule. CARL never sees this channel and never acts on it -- it just runs. Rebuilt whenever
 // the agent's soliton is placed, so Restart and toggling the maze restore the full set.
 function placeDots() {
-  dotUnitMass = 0;
+  dotSites = [];
   if (!DOTS_ENABLED) return;
   // No dots or pellets in the layout means no second channel at all: leaving its rule unset is
   // what keeps SimGL.step() from paying for a second convolution over an empty board.
@@ -696,9 +703,6 @@ function placeDots() {
   SimGL.setRule2({ mu: entry.mu, sigma: entry.sigma, betas: entry.betas, R: CFG.channel2R, dt: CFG.dt });
 
   const scaled = resizeSoliton(entry, CFG.channel2R / CFG.R);
-  // A dot and a power pellet are the same stamp (see below), so this one sum is the scoring unit
-  // for both -- see the `score` comment above.
-  for (let i = 0; i < scaled.flat.length; i++) dotUnitMass += scaled.flat[i] > 0 ? scaled.flat[i] : 0;
   const arr = new Float32Array(N);
   // 1 wherever a power pellet's stamp landed, so draw.glsl can colour it apart from a plain dot --
   // the two are otherwise the same mass under the same rule (see stampSoliton()).
@@ -708,6 +712,23 @@ function placeDots() {
   for (let i = 0; i < N; i++) if (wall[i]) { arr[i] = 0; power[i] = 0; }
   SimGL.uploadState2(arr);
   SimGL.setPowerMask(power);
+
+  // One scoring site per stamp -- see the `score` comment. The window reaches channel2R either
+  // side: a dot's mass stays within ~5px of its centre at channel2R=9, and neighbouring dots sit
+  // ~24px apart, so no window ever picks up a neighbour's mass. The baseline is summed off the
+  // board just uploaded, so a stamp a wall clipped is judged against what it actually started with.
+  const rad = CFG.channel2R;
+  const windowMass = (r, c) => {
+    let m = 0;
+    for (let y = r - rad; y <= r + rad; y++) {
+      const row = ((y % H) + H) % H * W;
+      for (let x = c - rad; x <= c + rad; x++) m += arr[row + ((x % W) + W) % W];
+    }
+    return m;
+  };
+  for (const [r, c] of maze.dots) dotSites.push({ r, c, points: 10, spawnMass: windowMass(r, c), eaten: false });
+  for (const [r, c] of maze.power) dotSites.push({ r, c, points: 50, spawnMass: windowMass(r, c), eaten: false });
+  SimGL.setDotSites(dotSites.map(s => [s.r, s.c]), rad);
 }
 
 // The ghost channel: one soliton on every 'M' of the layout, all under a single shared rule and,
@@ -938,20 +959,18 @@ function updateFrightened(rb) {
   }
 }
 
-// Dots and pellets score off the exact mass the engine just erased (see the `score` comment above),
-// banking the fractional remainder per point value until it reaches one dot's worth. rb.eaten
-// includes any pellet mass eaten (see eatreduce.glsl), so the pellet share is subtracted out first.
+// Dots and pellets score once each, the step their own window is found empty (see the `score`
+// comment above). The combo reset stays on the first bite of a pellet (rb.pelletEaten), same moment
+// updateFrightened() opens the window, rather than waiting the few steps the rest takes to dissolve.
 function updateScore(rb) {
-  if (!rb.hasDots || dotUnitMass <= 0) return;
-  const pelletMass = rb.pelletEaten, dotMass = rb.eaten - pelletMass;
-  if (dotMass > 0) {
-    dotMassPool += dotMass;
-    while (dotMassPool >= dotUnitMass) { score += 10; dotMassPool -= dotUnitMass; }
-  }
-  if (pelletMass > EAT_SOUND_MIN_MASS) {
-    ghostChainMultiplier = 1;   // a fresh energizer resets the ghost combo, even mid-window
-    pelletMassPool += pelletMass;
-    while (pelletMassPool >= dotUnitMass) { score += 50; pelletMassPool -= dotUnitMass; }
+  if (rb.pelletEaten > EAT_SOUND_MIN_MASS) ghostChainMultiplier = 1;   // even mid-window
+  // A length mismatch would mean a readback from before the last placeDots() -- nothing to judge.
+  if (!rb.dotSites || rb.dotSites.length !== dotSites.length) return;
+  for (let i = 0; i < dotSites.length; i++) {
+    const s = dotSites[i];
+    if (s.eaten || rb.dotSites[i] >= CFG.dotGoneFraction * s.spawnMass) continue;
+    s.eaten = true;
+    score += s.points;
   }
 }
 
@@ -1090,7 +1109,6 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   steps = 0; actions = 0; courseChanges = 0; solitonDead = false; levelWon = false; ghostEatPause = false;
   frightenedExpired = false;   // placeGhosts() above already gave every ghost a fresh, unfrightened newGhost()
   ghostChainMultiplier = 1;    // fresh ghosts (placeGhosts() above is unconditional): fresh combo too
-  if (resetDots) { dotMassPool = 0; pelletMassPool = 0; }  // tied to the dots field just (re)built above
   if (resetLives) lives = STARTING_LIVES;
   if (resetLives) score = 0;
   sometimesRemaining = sometimesWindow;
