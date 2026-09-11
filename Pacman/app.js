@@ -116,7 +116,7 @@ const CFG = {
     'rule60_mu0.2850_s0.0520_R18', 'rule23_mu0.2650_s0.0390_R18', 'rule81_mu0.2700_s0.0480_R18',
     'rule68_mu0.3050_s0.0580_R18', 'rule76_mu0.2850_s0.0290_R18', 'rule33_mu0.2100_s0.0250_R18',
     'rule37_mu0.2650_s0.0330_R18', 'rule7_mu0.3200_s0.0560_R18', 'rule21_mu0.2400_s0.0240_R18',
-    'rule46_mu0.2500_s0.0270_R18', 'rule63_mu0.3200_s0.0660_R18', 'rule0_mu0.3800_s0.0700_R18',
+    'rule46_mu0.2500_s0.0270_R18', 'rule63_mu0.3200_s0.0660_R18',
   ],
   defaultRuleName: 'rule74_mu0.2300_s0.0350_R18',  // or rule73_mu0.2250_s0.0250_R18
   // The dots channel's rule. One soliton of it is dropped on every '.' cell of the layout; they
@@ -136,7 +136,7 @@ const CFG = {
   // at, where rule74 leans only ~11deg. It being the same rule as defaultRuleName is deliberate
   // rather than incidental: it puts the ghost at exactly Pac-Man's own pace on the default pick,
   // so it closes only when it out-navigates him, not because it simply moves faster.
-  channel3RuleName: 'rule74_mu0.2300_s0.0350_R18',
+  channel3RuleName: 'rule74r_mu0.2300_s0.0350_R18',
   // How often a ghost's turn is a deliberate move toward Pac-Man rather than a roll of the dice --
   // the difficulty dial. At 0 it wanders and only meets him by accident; at 1 it closes on him at
   // every junction that offers the option. ?chase=N (a whole percentage, 0-100) to retune.
@@ -188,7 +188,7 @@ const COLORS = {
     [255, 105, 180],            // pink
     [188,   0, 211],            // violet
     [  0, 100,   0],            // dark green
-    [ 30,  30,  30],            // dark grey
+    [130, 130, 130],            // grey
   ],
   wall:       [33, 33, 180],    // dark arcade blue
   background: [0, 0, 0],
@@ -297,6 +297,10 @@ let introPlaying = false;
 // (and freezes mid-fade rather than vanishing when the run is paused).
 let actionTrail = [];
 let bank = [], currentIndex = 0;
+// Every usable entry in the JSON by name, whether or not the picker offers it. The free-running
+// channels (CFG.channel2RuleName, CFG.channel3RuleName) look their rules up here rather than in
+// `bank`, so a rule can drive the dots or the ghosts without also being a Pac-Man pick.
+let ruleBank = new Map();
 let mazeEnabled = true;
 // Chrome on/off: the control deck and CARL's overlay (direction arrows, intervention discs) hide
 // together, so the board can be watched as a game rather than as an instrumented demo.
@@ -698,7 +702,7 @@ function placeDots() {
   // No dots or pellets in the layout means no second channel at all: leaving its rule unset is
   // what keeps SimGL.step() from paying for a second convolution over an empty board.
   const entry = (maze.dots.length || maze.power.length)
-    ? bank.find(b => b.name === CFG.channel2RuleName) : null;
+    ? ruleBank.get(CFG.channel2RuleName) : null;
   if (!entry) return;
   SimGL.setRule2({ mu: entry.mu, sigma: entry.sigma, betas: entry.betas, R: CFG.channel2R, dt: CFG.dt });
 
@@ -815,7 +819,7 @@ function placeGhosts() {
   // the layout actually has just spawns all of them, since the filter below has nothing left to
   // exclude (see updateLevel()'s comment for "if level number is higher than the max ghost").
   const spawns = maze.ghosts.filter(([, , id]) => id <= level);
-  const entry = spawns.length ? bank.find(b => b.name === CFG.channel3RuleName) : null;
+  const entry = spawns.length ? ruleBank.get(CFG.channel3RuleName) : null;
   if (!entry) return;      // no ghost spawn at or below this level: leave the whole channel unset
   SimGL.setRule3({ mu: entry.mu, sigma: entry.sigma, betas: entry.betas, R: CFG.R,
                    dt: CFG.dt * CFG.channel3Speed });
@@ -894,7 +898,7 @@ function ghostDied(g, s) {
 // so a later non-eaten respawn (or a future level filtering it back out and back in) still knows
 // where it actually belongs.
 function respawnGhost(i, eaten) {
-  const entry = bank.find(b => b.name === CFG.channel3RuleName);
+  const entry = ruleBank.get(CFG.channel3RuleName);
   if (!entry) return;
   const home = ghosts[i].home;
   const house = maze.ghosts.find(([, , id]) => id === 1);
@@ -1793,14 +1797,13 @@ async function loadSolitonBank() {
     if (res.ok) raw = await res.json();
   } catch (e) { /* reported below */ }
   if (!raw) { fail('Could not load the soliton bank — serve this folder over http(s), not file://.'); return false; }
-  // The picker's order is CFG.allowedRuleNames', not the JSON's -- the leading entries are the
-  // ones we want on the top row, so sort the fetched entries back into that order.
-  raw = raw.filter(e => CFG.allowedRuleNames.includes(e.name))
-           .sort((a, b) => CFG.allowedRuleNames.indexOf(a.name) - CFG.allowedRuleNames.indexOf(b.name));
-  bank = raw.filter(e => Math.max(e.h, e.w) <= 80).map(e => ({
+  ruleBank = new Map(raw.filter(e => Math.max(e.h, e.w) <= 80).map(e => [e.name, {
     name: e.name, mu: e.mu, sigma: e.sigma, betas: e.betas, h: e.h, w: e.w,
     flat: Float32Array.from(e.state.flat()),
-  }));
+  }]));
+  // The picker's order is CFG.allowedRuleNames', not the JSON's -- the leading entries are the
+  // ones we want on the top row, so the bank is built in that order.
+  bank = CFG.allowedRuleNames.map(name => ruleBank.get(name)).filter(Boolean);
   if (!bank.length) { fail('The soliton bank loaded but contained no usable entries.'); return false; }
 
   const grid = $('soliton-grid'); grid.innerHTML = '';
