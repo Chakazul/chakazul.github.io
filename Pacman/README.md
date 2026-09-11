@@ -162,6 +162,16 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
   updated count into the next board — no start jingle on top of it, since the board is already
   running. `?sound=0` disables all of it (jingles, chomp, and the death pause — a death just holds
   silently and respawns; game over still holds on the prompt, just silently).
+- **Score**, shown centered in the title row: 10 per dot, 50 per power pellet, and 200 for a ghost
+  eaten during a pellet's frightened window, doubling for every next ghost eaten in that same window
+  (200, 400, 800, ...) before resetting on the next pellet. Dots and pellets are counted off the
+  exact mass the engine reports erasing each step (`rb.eaten`/`rb.pelletEaten`, see
+  `shaders/eatreduce.glsl`), not off the dots channel's own live total mass — that total drifts with
+  the channel's free-running growth/decay independent of what's actually been eaten, so it would be
+  a noisy stand-in. The mass is banked per point value (`app.js`'s `dotMassPool`/`pelletMassPool`)
+  and only cashed in once it reaches one dot's worth, so a dot eaten gradually over a few steps still
+  counts once rather than several times or not at all. Persists across level wins and death
+  respawns, resetting only on a genuine new game (Restart, New Maze, soliton change, or game over).
 - **Three actor modes**, cycled by the one button: **CARL acts sometimes** (default) only queries
   the policy for a configurable window of steps after the episode starts or after you last steer,
   then goes idle — same per-step cost as **You act** the rest of the time, which matters because
@@ -284,5 +294,4 @@ board, then step, then locate, then judge — because the policy is sensitive to
   `M`s it would return the midpoint between them — a point generally inside a wall and belonging
   to neither — and `steerGhost()` bails out rather than act on it. They would still spawn, run and
   eat; they just would not turn. More than one needs per-soliton segmentation, a much bigger job.
-- No score — lives are tracked (see Sound and lives, above) but nothing counts points. Eaten dots
-  don't come back until Restart/New Maze/soliton change resets the dots channel.
+- Eaten dots don't come back until Restart/New Maze/soliton change resets the dots channel.
