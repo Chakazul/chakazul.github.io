@@ -756,7 +756,7 @@ let ghosts = [];              // one entry per 'M'; [] means there are none to j
 
 function newGhost(r, c, cellIdx, home = [r, c]) {
   return {
-    home,                        // its own numbered cell -- where a non-eaten respawn goes back to
+    home,                        // its own numbered cell -- kept for a future level filter, unused by respawn
     y: r, x: c,                 // last known board CoM
     origin: [Math.round(r) - (GHOST_WINDOW >> 1), Math.round(c) - (GHOST_WINDOW >> 1)],
     shift: [0, 0],              // whole cells its tile slides next step, to re-centre it
@@ -891,18 +891,17 @@ function ghostDied(g, s) {
 // is rebuilt from the tiles every step rather than accumulated -- so there is nowhere else for
 // debris to have got to, and nothing else to scrub.
 //
-// `eaten` (a frightened-mode kill, as opposed to an explosion) sends it to symbol '1''s cell -- the
-// one actual ghost house, inside the centre room -- rather than back to its own numbered spawn: the
-// numbered cells are scattered around the maze (see MAZE_LAYOUT), not all of them a "house" a ghost
-// could plausibly walk out of again. Its own numbered cell is passed through as `home` regardless,
-// so a later non-eaten respawn (or a future level filtering it back out and back in) still knows
-// where it actually belongs.
+// Every death -- eaten while frightened or dissolved/exploded on its own -- sends the ghost back to
+// symbol '1''s cell, the one actual ghost house inside the centre room, rather than its own numbered
+// spawn: the numbered cells are scattered around the maze (see MAZE_LAYOUT), not all of them a
+// "house" a ghost could plausibly walk out of again. Its own numbered cell is still passed through
+// as `home`, so a future level filtering it back out and back in still knows where it belongs.
 function respawnGhost(i, eaten) {
   const entry = ruleBank.get(CFG.channel3RuleName);
   if (!entry) return;
   const home = ghosts[i].home;
   const house = maze.ghosts.find(([, , id]) => id === 1);
-  const [r, c] = eaten && house ? house : home;
+  const [r, c] = house || home;
   const g = newGhost(r, c, maze.cellIndexAt(r, c), home);
   ghosts[i] = g;
   pushGhostTiles();          // its origin is back at the spawn point before the tile is written
