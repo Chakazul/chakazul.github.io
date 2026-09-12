@@ -1,12 +1,8 @@
 #version 300 es
-// Stage 1 of the per-ghost centre of mass: each output texel sums one block of one tile.
-//
-// Plain sums, not the circular ones reduce.glsl uses. A tile is a private world with hard edges
-// rather than a torus, and the soliton is kept away from those edges, so there is no wrap for the
-// mean to have to cope with -- an arithmetic centroid is both correct and exact here.
-//
-// Output is 16x16 per tile, laid out side by side so one draw covers every ghost at once: tile i
-// writes x in [i*16, (i+1)*16).
+// Stage 1 of the per-ghost CoM: sums one block of one tile. Plain (not circular) sums -- a tile
+// has hard edges and the soliton is kept off them, so there's no wrap to average around. Output
+// is 16x16 per tile, laid side by side so one draw covers every ghost (tile i at x in
+// [i*16, (i+1)*16)).
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl

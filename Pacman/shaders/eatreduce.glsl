@@ -1,16 +1,9 @@
 #version 300 es
-// Stage 1 of the "how much dot mass did Pac-Man just eat" reduction -- same 16x16
-// block-tiling as reduce.glsl's CoM reduction, but summing a different quantity: the
-// dots-channel mass sitting at cells sim.glsl is about to erase this step (see its
-// `uEatEnabled`/`uEatThreshold` check). uDots is channel 2's state *before* this
-// step's growth/erasure and uPacman is channel 1's state *after* its own step, which
-// is exactly the pairing sim.glsl's own erase check uses -- so this measures the real
-// eat condition rather than inferring it from a before/after mass delta (which would
-// also pick up channel 2's own, unrelated, growth fluctuation).
-//
-// Also splits off how much of that was power-pellet mass specifically (uPower, see
-// glsim.js's setPowerMask()), which is what tells the CPU side to start the frightened
-// window -- into fragColor.g, alongside the total in .r, so both come back from one pass.
+// Stage 1 of "how much dot mass did Pac-Man just eat": same 16x16 block-tiling as reduce.glsl,
+// summing dots-channel mass (pre-step, uDots) at cells sim.glsl's own erase check will zero this
+// step (uPacman post-step vs uEatThreshold) -- the real eat condition, not a before/after mass
+// delta, which would also pick up channel 2's own unrelated growth noise. Also splits out
+// power-pellet mass (.g, via uPower) to trigger the frightened window.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl

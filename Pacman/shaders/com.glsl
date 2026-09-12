@@ -1,12 +1,8 @@
 #version 300 es
-// Stage 2 of the reduction: fold the 16x16 partial sums into one texel holding the
-// soliton's toroidal center of mass and total mass. Same circular-mean formula as
-// computeCoM() in the CPU demo.
-//
-// Writing this to a texture rather than reading the partials back is what keeps the
-// step down to a single GPU->CPU stall: crop.glsl reads the CoM straight out of this
-// texture, so the crop can be queued in the same batch as the step that produced it,
-// and the CPU picks up the CoM and the crop together in one readback.
+// Stage 2 of the CoM reduction: folds reduce.glsl's 16x16 partials into one texel with the
+// soliton's toroidal centre of mass and total mass (same formula as the CPU's computeCoM()).
+// Written to a texture rather than read back here, so crop.glsl can queue off it in the same
+// batch and the CPU collects CoM + crop together in one stall.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
@@ -29,9 +25,7 @@ void main() {
         }
     }
 
-    // Below this the board is empty and there is no soliton left to locate -- the JS
-    // side reads .w and treats the episode as a dissolve, matching computeCoM()
-    // returning null.
+    // Empty board: no soliton to report. JS reads .w=0 as a dissolve.
     if (mass < 1e-6) {
         fragColor = vec4(0.0, 0.0, 0.0, 0.0);
         return;

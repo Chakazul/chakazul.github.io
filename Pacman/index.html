@@ -2,12 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- Injects COOP/COEP response headers via a service worker so the page becomes cross-origin
-     isolated -- required for real SharedArrayBuffer support, which onnxruntime-web's threaded
-     WASM backend needs to run inference across multiple cores instead of one. Neither a plain
-     static file server nor GitHub Pages can set those headers directly, hence the client-side
-     workaround. First-ever visit triggers one extra reload while the service worker activates.
-     Only the policy network needs this -- the simulation itself runs in WebGL and is unaffected. -->
+<!-- Injects COOP/COEP headers via a service worker for cross-origin isolation, which
+     onnxruntime-web's threaded WASM backend needs for SharedArrayBuffer. Static hosting can't set
+     those headers directly, hence the client-side workaround (one extra reload on first visit). -->
 <script src="coi-serviceworker.js"></script>
 <script>try{if(localStorage.getItem('carl-theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -61,8 +58,7 @@
   #lives{font-size:clamp(22px,3vw,30px);line-height:1;letter-spacing:2px;white-space:nowrap;justify-self:end}
   a{color:var(--accent)}
 
-  /* canvas screen -- the board is 11:5 (5 rows x 11 columns of maze cells), so it runs the full
-     width of the page as a banner, with every control gathered into one deck beneath it. */
+  /* Board is 11:5 (5x11 maze cells), so it runs the full width as a banner above the deck. */
   .screen-wrap{background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:12px;
     box-shadow:var(--shadow);margin-top:14px}
   .canvas-box{position:relative;background:var(--screen);border-radius:10px;overflow:hidden;
@@ -80,8 +76,8 @@
     font-variant-numeric:tabular-nums;pointer-events:none}
   .result[hidden]{display:none}
   .result b{display:block;font-weight:600;margin-bottom:1px}
-  /* Transient notice over the board -- currently only "that click was out of CARL's reach".
-     Never unmounted, just faded, so repeat offences re-show it without a layout flicker. */
+  /* Transient notice over the board. Never unmounted, just faded, so repeats re-show without a
+     layout flicker. */
   .toast{position:absolute;top:8px;left:8px;right:8px;width:fit-content;margin:0 auto;
     max-width:calc(100% - 16px);text-align:center;
     padding:6px 11px;border-radius:9px;background:rgba(12,7,17,.9);color:#fff;
@@ -120,9 +116,8 @@
   .playback .mini b.ood{color:var(--accent2)}
   .playback .mini b.ood::after{content:"*"}
 
-  /* The single control deck under the board: everything that is not the board itself. Live
-     playback on the left, episode setup on the right, split by a rule rather than by a gap so
-     the two groups still read as one panel. */
+  /* Control deck: live playback on the left, episode setup on the right, split by a rule rather
+     than a gap so the two groups still read as one panel. */
   .deck{background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:13px 16px;
     box-shadow:var(--shadow);margin-top:14px;
     display:grid;grid-template-columns:minmax(0,1fr) minmax(0,336px);gap:18px 26px;align-items:start}
@@ -158,8 +153,7 @@
   .soliton-thumb:hover{border-color:var(--accent)}
   /* First row -- the solitons that hold together best under steering. */
   .soliton-thumb.easy{border-color:var(--easy);border-width:3px}
-  /* The tile behind the star is always dark (var(--screen)), so it uses a lighter tint of the
-     same hue than the border does in light mode. */
+  /* Tile behind the star is always dark, so the star uses a lighter tint than the border. */
   .soliton-thumb .star{position:absolute;top:-1px;right:2px;font-size:18px;line-height:1;
     color:#b39dff;text-shadow:0 0 5px rgba(0,0,0,.95),0 0 2px rgba(0,0,0,.95);pointer-events:none}
   .soliton-thumb.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}

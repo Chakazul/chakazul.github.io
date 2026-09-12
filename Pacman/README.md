@@ -2,8 +2,9 @@
 
 A Pac-Man skin on `../CARL-WebGL`: same GPU engine, same trained policy, but the free-form maze
 generator is replaced with a fixed, hand-authored Pac-Man-style level, and two further
-free-running Lenia channels play the parts of the dots and the ghosts. Serve the folder over
-http(s) and open `index.html` — it fetches its shaders and its model, so `file://` will not work.
+free-running Lenia channels play the parts of the dots/pellets and the ghosts. Serve the folder
+over http(s) and open `index.html` — it fetches its shaders and its model, so `file://` will not
+work.
 
 ## What's Pac-Man about it
 
@@ -17,45 +18,62 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
   authoring aliases, so a hand-edited row stays readable as ASCII art: `+` means exactly `.` (a
   dot) and `-` means exactly a space (open). `^` is open floor too, but a ghost standing on one is
   sent north rather than choosing for itself — that is what gives the centre room a one-way exit.
-  `O` in the layout (power pellets) is placed but not yet interpreted — see Known limits.
-- **The dots.** A second Lenia channel (`channel2RuleName`/`channel2R` in `CFG`), rendered in
-  white, gets one small free-running soliton dropped on every `.` in the layout and is never
+- **The dots and power pellets.** A second Lenia channel (`channel2RuleName`/`channel2R` in
+  `CFG`), rendered in white, gets one small free-running soliton dropped on every `.`/`+` in the
+  layout, and one on every `O` — the same soliton and rule, just recoloured (`setPowerMask()`),
+  since the shared channel-2 rule fixes one equilibrium size regardless of stamp size. Neither is
   steered by the policy. `shaders/eatsum.glsl` + `shaders/eatreduce.glsl` add a block-tiled
   reduction, alongside the CoM one, that measures how much dot mass sits under Pac-Man's channel
-  above `EAT_THRESHOLD` each step; `sim.glsl` erases that mass as part of the same step. Whether
-  anything was eaten comes back in the same readback as the CoM and crop, and drives the
-  `eat_dot_0`/`eat_dot_1` "waka waka" loop (`noteEating()`) — it keeps alternating for as long as
-  dots keep landing within `CFG.eatSoundGraceMs` of each other, so a good run reads as one
-  continuous chomp rather than discrete blips.
-- **The ghosts.** A third Lenia channel (`channel3RuleName` in `CFG`), rendered in red, gets one
-  full-size free-running soliton dropped on every `M` in the layout and, like the dots, is never
-  steered by the policy. It is the eating relationship run backwards: `sim.glsl`'s same
-  one-fetch-and-compare erases *Pac-Man's* mass wherever the ghost channel exceeds
-  `EAT_THRESHOLD`, so a ghost that catches him drains him below `massDeathFraction` and the
-  ordinary death path does the rest — no separate collision test. Unlike the dots, the ghosts are
-  re-placed on every spawn including death respawns, so they always restart in their house rather
-  than sitting on top of the returning Pac-Man, and unlike the dots they are wall-masked, since
-  they actually move. `?ghost=0` turns the channel off (as `?dots=0` does for the dots), which
-  also removes the only thing that can kill Pac-Man other than his own dynamics.
+  above `EAT_THRESHOLD` each step, split into total and power-pellet-only; `sim.glsl` erases that
+  mass as part of the same step. Whether anything (or any pellet) was eaten comes back in the same
+  readback as the CoM and crop, and drives the `eat_dot_0`/`eat_dot_1` "waka waka" loop
+  (`noteEating()`) and the frightened window (below).
+- **The ghosts.** A third Lenia channel (`channel3RuleName` in `CFG`), rendered per-ghost from
+  `COLORS.ghosts`, gets one full-size free-running soliton per numbered spawn (`1`-`9`) in the
+  layout, gated by the current `level` (level *N* spawns every ghost numbered at or below *N* —
+  see Levels and lives, below). Like the dots it's never steered by the policy. Ordinarily it's
+  the eating relationship run backwards: `sim.glsl`'s same one-fetch-and-compare erases *Pac-Man's*
+  mass wherever a non-frightened ghost overlaps him, draining him below `massDeathFraction` and
+  triggering the ordinary death path — no separate collision test. During a frightened window
+  (below) that reverses per-ghost. Ghosts are re-placed on every spawn, including death respawns,
+  so they always restart in their house. `?ghost=0` turns the whole channel off, which also
+  removes the only thing that can kill Pac-Man other than his own dynamics.
+- **Power pellets & frightened ghosts.** Eating an `O` starts (or, mid-window, extends) a shared
+  `frightenedDurationMs` window: every not-already-frightened ghost turns to flee, slows to
+  `GHOST_FRIGHTENED_SPEED` of normal, and can now be eaten by Pac-Man instead of the reverse — the
+  same one-fetch erase, just pointed the other way, per ghost tile (`uFrightened[i]` in
+  `ghostsim.glsl`). Any ghost that dies (dissolves or explodes, see Ghost death below) while
+  frightened is credited as eaten and scores 200, doubling for every next one credited in the same
+  window (200, 400, 800, ...) — there's no separate bite signal, but frightened dynamics are
+  dominated by the erase-on-touch effect, so a frightened death is Pac-Man's doing in practice. It
+  respawns in its house immediately, ending its own flight early while its still-frightened
+  packmates keep counting down theirs (`updateFrightened()`). A death while not frightened is an
+  ordinary ghost death (below): no score, same as always.
 - **Ghost death.** A ghost dies the same two ways Pac-Man does — dissolved below
   `massDeathFraction` of its spawn mass, or grown past `massExplodeLimit` — judged on the mass that
   already comes back in its tile's CoM readback. The consequence differs: no jingle, no held board,
   no episode end, and no effect on the other ghosts. It is put back in its own house, alone, while
   the rest of the pack keeps running.
 
-  Rewriting its tile is also the entire cleanup after an explosion. A tile has hard edges, so
-  however far the mess spread it is still inside that one tile; and the board-space texture
+  Rewriting its tile is also the entire cleanup after an explosion: a tile has hard edges, so
+  however far the mess spread it is still inside that one tile, and the board-space texture
   everything downstream reads is rebuilt from the tiles every step rather than accumulated, so
-  there is nowhere else for debris to have got to. Verified by wrecking a tile (mass 8342, well
-  past the 1500 explode limit) and rebuilding it: bit-identical to a fresh tile, zero residual
-  cells. The explode limit also stays meaningful inside a tile, which is not true of every
-  windowing scheme — 1500 is 16% of a 96-square tile's capacity, so a runaway trips it long before
-  it saturates. The spawn mass is summed off the stamp rather than
-  waited for from a readback, so the check is armed from the step the ghost appears; it stays
-  disarmed whenever the channel is empty, which is what stops "no ghost" reading as "dead ghost"
-  and respawning on a loop. The thresholds have room: a healthy `rule74` ghost oscillates between
-  90% and 146% of its spawn mass over 700 corridor steps, leaving it 3.0× clear of the dissolve
-  floor and 3.4× clear of the explode ceiling.
+  there is nowhere else for debris to have got to. The explode limit also stays meaningful inside
+  a tile, which is not true of every windowing scheme — 1000 is well under a 96-square tile's
+  9216-cell capacity, so a runaway trips it long before it saturates. Spawn mass is summed off the
+  stamp rather than waited for from a readback, so the check is armed from the step the ghost
+  appears, and stays disarmed whenever the channel is empty — what stops "no ghost" reading as
+  "dead ghost" and respawning on a loop.
+- **Levels and lives.** Lives start at `STARTING_LIVES` (3, capped at `MAX_LIVES` 5), shown as 💛
+  in the title row, and persist across death-respawns within a game — lost one per death (except
+  a mass-explosion, which isn't something the player could have steered around) and reset only on
+  a genuine new game (Restart, New Maze, soliton picker, or running out and choosing to play
+  again). Clearing the board (all dots and pellets gone) awards a life back, advances `level` by
+  one, and respawns everything — dots refilled, ghost count following the new level — after an
+  intermission jingle, carrying the current life count forward rather than resetting it. `?level=N`
+  picks a starting level other than the default 3 (also what a Restart falls back to). `?god=1`
+  keeps the death beat (jingle, pause, respawn) but stops it from costing a life, so a game over
+  never interrupts a run.
 - **Pac-Man is windowed too.** His simulation is confined to a 128-square patch that follows his
   centre of mass, taking his channel from 188M tap-iterations per step to 22M. Unlike the ghosts he
   keeps an ordinary board-sized texture and only the *step* is scissored, so the policy's frame
@@ -73,13 +91,13 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
 
   Total per-step cost with three ghosts: 803M before any of this, 276M with the ghosts windowed,
   110M with both. The dots are now the most expensive channel on the board.
-- **Several ghosts, one pass.** Each `M` spawns a ghost, and each ghost is simulated in a private
-  96×96 tile of one atlas texture (`shaders/ghostsim.glsl`) rather than in a shared board-sized
-  field. Two ghosts in one field are two Lenia solitons, and two Lenia solitons that meet
-  annihilate or blow up; tiles make them pass through each other the way arcade ghosts do. The
-  convolution refuses to read past its own tile's edge, so the isolation is structural — verified
-  by packing a neighbouring tile with mass right up against the shared boundary and confirming a
-  ghost's step is bit-identical either way.
+- **Several ghosts, one pass.** Each numbered spawn is simulated in a private 96×96 tile of one
+  atlas texture (`shaders/ghostsim.glsl`) rather than in a shared board-sized field. Two ghosts in
+  one field are two Lenia solitons, and two Lenia solitons that meet annihilate or blow up; tiles
+  make them pass through each other the way arcade ghosts do. The convolution refuses to read past
+  its own tile's edge, so the isolation is structural — verified by packing a neighbouring tile
+  with mass right up against the shared boundary and confirming a ghost's step is bit-identical
+  either way.
 
   A tile is a window onto the board, not a world of its own: it carries a board origin, so the wall
   lookup is a real maze lookup and ghosts still run the corridors. It slides by whole cells each
@@ -100,19 +118,20 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
   thing needing a decision is what happens at a corner or crossroad. Rather than steer the turn
   with the policy — a second inference on every step, and inference is what a step actually costs
   — `steerGhost()` rotates the ghost's own field a quarter turn about its centre of mass
-  (`shaders/rotate.glsl`). Turn cells are marked by the layout characters `+ - M O`, which in this
-  level land on exactly the 32 corner/junction cells and on no straight corridor. At one,
+  (`shaders/rotate.glsl`). Turn cells are marked by the layout characters `+ - O ^ 1-9`, which in
+  this level land on exactly the 32 corner/junction cells and on no straight corridor. At one,
   left/straight/right are filtered to whichever are open and one is chosen — never a reversal,
   unless it is a dead end and reversing is all there is. A `^` cell overrides the choice entirely
   and sends the ghost north.
-- **Chasing.** `CFG.chaseBias` (`?chase=N`, a whole percentage, default 40) is how often that
-  choice is the opening that closes on Pac-Man rather than a roll of the dice, scored by dot
-  product against the toroidal vector to him so a side tunnel is judged on where it comes out.
-  This is the difficulty dial, and biasing only the turns compounds, because every junction is
-  another chance to correct. Share of time spent within one tile of Pac-Man, over 24 runs against
-  a Pac-Man moving at the same speed (both on `rule74`):
+- **Chasing.** `CFG.chaseBias` (`?chase=N`, a whole percentage, default 60) is how often that
+  choice is the opening that closes on Pac-Man (or, frightened, opens away from him) rather than a
+  roll of the dice, scored by dot product against the toroidal vector to him so a side tunnel is
+  judged on where it comes out. This is the difficulty dial, and biasing only the turns compounds,
+  because every junction is another chance to correct. Share of time spent within one tile of
+  Pac-Man, over 24 runs against a Pac-Man moving at the same speed (both on `rule74`), measured
+  when the default was 40%:
 
-  | `chase` | 0% | 20% | 40% (default) | 70% | 100% |
+  | `chase` | 0% | 20% | 40% | 70% | 100% |
   |---|---|---|---|---|---|
   | time within a tile | 4.2% | 5.5% | 6.8% | 15.0% | 65.6% |
 
@@ -151,17 +170,14 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
   only ~0.5px (pivot rounding), and the result still travels at the full 0.45 px/step on the
   heading the turn count claims. Nothing else about the ghost is touched — not moved, not
   recentred, not reset — so a turn changes only which way it points.
-- **Sound and lives.** A start jingle plays on spawn (deferred, if needed, to the page's first
-  click/tap/key, per browser autoplay rules); dying — mass below `massDeathFraction` of spawn mass
-  or above `massExplodeLimit`, same thresholds as `CARL-WebGL` — plays a death jingle, holds the
-  board for `DEATH_PAUSE_MS`, then auto-respawns the same soliton (no confirmation) while lives
-  remain. Once they run out, the board holds on a "Start" prompt instead of respawning — same
-  paused, wait-for-a-gesture presentation as the very first page load — and only restarts (fresh
-  lives, refilled dots, start jingle) once the player gives it one. Clearing a level adds a life
-  back (capped at `MAX_LIVES`) immediately, ahead of the intermission jingle, then carries the
-  updated count into the next board — no start jingle on top of it, since the board is already
-  running. `?sound=0` disables all of it (jingles, chomp, and the death pause — a death just holds
-  silently and respawns; game over still holds on the prompt, just silently).
+- **Sound.** A start jingle plays on spawn (deferred, if needed, to the page's first click/tap/key,
+  per browser autoplay rules); dying plays a death jingle, holds the board for `DEATH_PAUSE_MS`,
+  then auto-respawns (no confirmation) while lives remain, or holds on a "Start" prompt once they
+  run out — same paused, wait-for-a-gesture presentation as the very first page load. Eating a
+  power pellet plays a fire-and-forget fright sound; eating a frightened ghost holds the board for
+  its own jingle, same beat as a death or a win but with no extra pause after. Clearing a level
+  plays an intermission jingle ahead of the next spawn. `?sound=0` disables all of it (jingles,
+  chomp, fright sound, and every pause — the sim just holds silently and moves on).
 - **Score**, shown centered in the title row: 10 per dot, 50 per power pellet, and 200 for a ghost
   eaten during a pellet's frightened window, doubling for every next ghost eaten in that same window
   (200, 400, 800, ...) before resetting on the next pellet. Dots and pellets are counted per dot:
@@ -176,7 +192,25 @@ http(s) and open `index.html` — it fetches its shaders and its model, so `file
   scored. The channel's total mass swings by ~15 dots' worth, because every dot breathes ±15% in
   phase with every other. `rb.eaten`/`rb.pelletEaten` still drive the chomp sound and the frightened
   window, which only need "was anything bitten this step". Persists across level wins and death
-  respawns, resetting only on a genuine new game (Restart, New Maze, soliton change, or game over).
+  respawns, resetting only on a genuine new game.
+- **Bonus fruit.** Twice a level, a bonus dot appears on Pac-Man's own spawn tile the moment the
+  level's dots-eaten fraction crosses each entry of `CFG.bonusFruitThresholds` (30%, then 70%),
+  drawn as an ordinary dot with an emoji over it. Left uneaten for `CFG.bonusFruitTimeout` steps
+  (500) it disappears instead — the level's other threshold, if not yet crossed, still arms in its
+  own time. Both which emoji and how much it's worth are keyed by the current `level` (1-9):
+  `🍊🍎🍒🍓🍉🍭🍄🍖💩` and 100/100/100/200/500/700/1000/2000/5000 respectively (`BONUS_FRUIT_EMOJIS` /
+  `BONUS_FRUIT_POINTS` in `app.js`) — both of a level's fruits are the same, since the arcade
+  original ties fruit to level rather than to which of the level's two it is. The threshold-armed
+  state (`bonusFruitThresholdIdx`) resets only where `dotSites` itself does, in `placeDots()` — a
+  death respawn (which leaves already-eaten dots eaten) doesn't re-arm a threshold the level
+  already passed, while a fresh level's dots get both back. Unlike an ordinary dot the fruit isn't
+  part of the channel-2 field at all — it's a CPU-tracked position (`bonusFruit` in `app.js`)
+  judged each step against `lastCoM`, since a bonus item is meant to vanish the instant Pac-Man
+  touches it rather than dissolve over several steps the way a real dot does. Eating it plays
+  `eat_fruit.wav` and holds the board for its own length, same beat as an eaten ghost. Both an
+  eaten ghost and an eaten fruit flash a floating score-number popup slightly below where they died
+  or were picked up (`ghostEatPopup`/`fruitEatPopup`), live for exactly as long as the board holds
+  for the jingle — set alongside `ghostEatPause`/`fruitEatPause` and cleared the same moment.
 - **Three actor modes**, cycled by the one button: **CARL acts sometimes** (default) only queries
   the policy for a configurable window of steps after the episode starts or after you last steer,
   then goes idle — same per-step cost as **You act** the rest of the time, which matters because
@@ -207,10 +241,11 @@ shader passes.
 | wall collision | JS sweep | folded into `sim.glsl` |
 | intervention (add/remove mass) | JS | `shaders/action.glsl` |
 | center of mass + total mass | JS sweep of the whole board | `shaders/reduce.glsl` → `shaders/com.glsl` |
-| eaten dot mass | n/a (no dots channel) | `shaders/eatreduce.glsl` → `shaders/eatsum.glsl` |
+| eaten dot / pellet mass | n/a (no dots channel) | `shaders/eatreduce.glsl` → `shaders/eatsum.glsl` |
 | mass left per dot (scoring) | n/a (no dots channel) | `shaders/dotsites.glsl` |
-| ghost center of mass | n/a (no ghost channel) | `shaders/reduce.glsl` → `shaders/com.glsl`, own targets |
+| ghost center of mass (per ghost) | n/a (no ghost channel) | `shaders/tilered.glsl` → `shaders/tilecom.glsl` |
 | ghost 90° turn | n/a (no ghost channel) | `shaders/rotate.glsl` |
+| ghost tiles → board space | n/a (no ghost channel) | `shaders/ghostblit.glsl` |
 | policy input window | JS crop of 4 stored boards | `shaders/crop.glsl` |
 | board rendering (walls, all three channels) | per-pixel JS + `putImageData` | `shaders/draw.glsl` |
 | **policy network** | onnxruntime-web (WASM) | onnxruntime-web (WebGPU by default, falling back to WASM per-op; `?ep=wasm` forces CPU-only) |
@@ -224,10 +259,11 @@ dotsites, crop, plus the two free-running channels' own sim passes and the ghost
 CPU then collects everything it needs in a single `readback()`:
 
 - the **CoM** (a 1×1 texture: row, col, mass, valid) for the episode bookkeeping and the overlay
-- the **eaten-mass total** (a 1×1 texture), thresholded on the CPU into "something was eaten"
+- the **eaten-mass totals** (dot and power-pellet, a 1×1 texture), thresholded on the CPU into
+  "something/a pellet was eaten"
 - the **mass left per dot** (one row, one texel per dot) for the score
-- the **ghost CoM** (a 1×1 texture) for the turn logic — free, in that the stall has already
-  happened by the time it is read
+- the **per-ghost CoM** (one row, one texel per ghost) for the turn logic — free, in that the
+  stall has already happened by the time it is read
 - the **96×96×4 crop** the policy reads
 
 The crop pass reads the CoM out of a *texture* rather than a uniform, which is what makes one stall
@@ -262,8 +298,8 @@ board, then step, then locate, then judge — because the policy is sensitive to
   here.
 - Board state is `R32F`, not the 8-bit textures the `Lenia/WebGL` demos use — the policy was
   trained on float32 states and 8-bit quantization would be a real change to its input.
-- The dots and ghost channels have no CPU-demo equivalent to match fidelity against — they're new
-  to this fork, not a port.
+- The dots and ghost channels, the power-pellet/frightened mechanic, and the level/lives system
+  have no CPU-demo equivalent to match fidelity against — they're new to this fork, not a port.
 
 ## Differences on purpose
 
@@ -280,9 +316,9 @@ board, then step, then locate, then judge — because the policy is sensitive to
   extremes mid-run.
 - No inline fallback soliton. The CPU demo carried one for the `file://` case; this version fetches
   shaders too, so that case cannot arise.
-- Fixed hand-authored maze instead of the randomized-DFS generator, and two further unsteered
-  Lenia channels for dots and ghosts — all new to this fork, not present in either the CPU demo or
-  `CARL-WebGL`.
+- Fixed hand-authored maze instead of the randomized-DFS generator, and the dots/pellets, ghosts,
+  frightened window, scoring, and level/lives system — all new to this fork, not present in either
+  the CPU demo or `CARL-WebGL`.
 
 ## Known limits
 
@@ -293,12 +329,7 @@ board, then step, then locate, then judge — because the policy is sensitive to
   plus a fence), trading one frame of latency for no stall.
 - Board edge is capped at 256 by the reduction's fixed 16×16 block loop; `setBoard` throws if that
   is exceeded rather than silently missing cells.
-- `O` (power pellets) in `MAZE_LAYOUT` is placed but not yet interpreted — `layoutMaze()` currently
-  treats it as plain open floor, and there is no power-pellet effect yet.
-- Nothing eats a ghost — the eating is one-directional, so there is no way to clear one; they can
-  only die by their own dynamics, and then they come straight back.
-- Exactly **one** ghost is supported. The CoM reduction is a whole-channel centroid, so with two
-  `M`s it would return the midpoint between them — a point generally inside a wall and belonging
-  to neither — and `steerGhost()` bails out rather than act on it. They would still spawn, run and
-  eat; they just would not turn. More than one needs per-soliton segmentation, a much bigger job.
-- Eaten dots don't come back until Restart/New Maze/soliton change resets the dots channel.
+- Up to `MAX_GHOSTS` (9) ghosts are supported, matching the layout's numbered spawns (`1`-`9`); a
+  higher count would need a wider ghost atlas and the matching `#define` bumped in three shaders.
+- Eaten dots and pellets don't come back until the dots channel is reset — Restart, New Maze,
+  soliton change, or a level win.

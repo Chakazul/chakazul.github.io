@@ -1,7 +1,6 @@
 #version 300 es
-// Stage 2 of the per-ghost centre of mass: folds one tile's 16x16 partials into one texel. The
-// output row is one texel per ghost, so the CPU picks up the whole pack in a single readback --
-// the same one stall the single ghost used to cost.
+// Stage 2 of the per-ghost CoM: folds one tile's 16x16 partials into one texel, one per ghost in
+// a single output row, so the whole pack comes back in the same one-stall readback.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
@@ -21,7 +20,7 @@ void main() {
         }
     }
 
-    // Nothing left in this tile: the ghost has dissolved, and the JS side treats that as a death.
+    // Nothing left in this tile: the ghost dissolved -- JS treats that as a death.
     if (mass < 1e-6) { fragColor = vec4(0.0, 0.0, 0.0, 0.0); return; }
     fragColor = vec4(my / mass, mx / mass, mass, 1.0);
 }

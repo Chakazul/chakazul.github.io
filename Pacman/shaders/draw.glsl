@@ -1,22 +1,18 @@
 #version 300 es
-// Display pass: the state ramped between two configurable colours, with walls over the top.
-// Replaces the per-pixel JS loop + putImageData in the CPU demo's render().
-//
-// Row 0 of the board is drawn at the top of the canvas, matching the ImageData
-// orientation the overlay canvas (arrows, action discs) and the mouse handlers assume.
+// Display pass: state ramped between configurable colours, walls on top. Replaces the CPU
+// demo's per-pixel putImageData loop. Row 0 is drawn at the canvas top, matching the overlay
+// canvas and mouse handlers.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
 
 uniform sampler2D uState;
 uniform sampler2D uState2;   // second Lenia channel (dots + power pellets), stepped but never steered
-uniform sampler2D uState3;   // the ghosts, composited to board space by ghostblit.glsl:
-                             // R = summed mass, G = 1-based index of the ghost that owns the pixel
+uniform sampler2D uState3;   // ghosts composited to board space by ghostblit.glsl:
+                             // R = summed mass, G = 1-based index of the owning ghost
 uniform sampler2D uWall;
-uniform sampler2D uPower;    // 1 where placeDots() stamped a power pellet rather than a plain dot --
-                             // same physical channel and mass as a dot, coloured differently (see
-                             // glsim.js's setPowerMask()), since the shared channel-2 rule fixes one
-                             // equilibrium size for everything in it regardless of stamp size.
+uniform sampler2D uPower;    // 1 where a power pellet was stamped rather than a plain dot -- same
+                             // mass, same rule, coloured differently (see glsim.js's setPowerMask())
 uniform ivec2 uSize;         // board (W, H)
 uniform vec3  uWallRGB;      // 0..1, flat fill for wall cells
 uniform vec3  uSolitonRGB;   // 0..1, the colour mass 1 reaches
@@ -41,11 +37,8 @@ void main() {
         return;
     }
 
-    // Mass ramps the board from the background colour up to the soliton colour, replacing the
-    // plain black->white ramp the CPU demo used. The free-running channels are laid over that
-    // ramp by their own mass, so where channels overlap the denser one is what shows. The ghosts
-    // go on last, over Pac-Man: they are the channel that erases him, so they should not read as
-    // being underneath him.
+    // Mass ramps background -> soliton colour; the free-running channels layer over that by their
+    // own mass. Ghosts composite last, over Pac-Man, since they're the channel that erases him.
     float v  = clamp(texelFetch(uState,  p, 0).r, 0.0, 1.0);
     float v2 = clamp(texelFetch(uState2, p, 0).r, 0.0, 1.0);
     vec2 g3 = texelFetch(uState3, p, 0).rg;

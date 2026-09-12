@@ -1,13 +1,9 @@
 #version 300 es
-// Per-dot presence, for scoring: output texel i sums the dots-channel mass left in a square window
-// centred on where dot i was stamped. The dots never move, so a fixed window is all it takes, and a
-// dot is bistable -- one Pac-Man bites into dissolves all the way to 0 within a few steps, one he
-// misses stays near its full mass -- so the CPU side only has to threshold each sum once.
-//
-// Not the eaten-mass reduction (eatreduce.glsl) with a different threshold: that measures only the
-// mass under Pac-Man's pixels, and the part of a bitten dot he never covered dissolves on its own
-// afterwards, uncounted. Not the channel's total mass (reduce.glsl -> com.glsl) either: every dot
-// breathes in phase with every other, so the total swings by many dots' worth.
+// Per-dot presence, for scoring: texel i sums channel-2 mass in a fixed window around dot i's
+// stamp position. A dot is bistable (bitten -> dissolves to ~0 within a few steps; missed ->
+// stays near full mass), so the CPU only needs one threshold on this sum. Distinct from
+// eatreduce.glsl (mass under Pac-Man's own pixels only, missing what a bitten dot sheds
+// afterward) and from the channel's raw total (swings with every dot's own breathing cycle).
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl

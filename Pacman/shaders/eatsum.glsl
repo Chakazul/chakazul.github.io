@@ -1,9 +1,6 @@
 #version 300 es
-// Stage 2 of the eaten-mass reduction: fold eatreduce.glsl's 16x16 partial sums into
-// one texel, the same shape as com.glsl folding reduce.glsl's output. The total (.r)
-// only has to answer "was anything eaten this step", so the CPU side treats it as a
-// boolean threshold rather than a precise mass count; the pellet-only total (.g) is
-// read the same way, to decide whether to (re)start the frightened window.
+// Stage 2: folds eatreduce.glsl's partials into one texel. Both totals are read on the CPU as
+// booleans ("was anything/any pellet eaten"), not precise counts.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl

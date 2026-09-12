@@ -1,16 +1,9 @@
 #version 300 es
-// Builds the agent's input window: a netSize x netSize toroidal crop centered on the
-// soliton, taken from the last K=4 board states and packed one frame per channel.
-//
-// Two things matter here. First, all four frames are cropped at the *same* origin --
-// the one derived from the current CoM -- exactly as buildCroppedStateInput() does. If
-// each frame were instead cropped at the CoM it had when it was captured, the stack
-// would show a stationary soliton and the velocity information the policy reads would
-// be gone. Keeping the four board states on the GPU and cropping them together here is
-// what makes that possible without reading whole boards back.
-//
-// Second, the origin comes from the CoM texture rather than a uniform, so this pass
-// does not have to wait for the CPU to learn where the soliton is.
+// Builds the policy's input window: a netSize x netSize toroidal crop centred on the soliton,
+// taken from the last K=4 board states and packed one frame per channel. All four frames use
+// the *same* origin (from the current CoM) -- cropping each at its own capture-time CoM would
+// show a stationary soliton and erase the velocity signal the policy depends on. The origin
+// comes from the CoM texture, not a uniform, so this pass doesn't wait on the CPU either.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl

@@ -1,12 +1,9 @@
 #version 300 es
-// Paints the ghost tiles back onto board-sized textures, which is what the rest of the demo
-// actually consumes: draw.glsl colours from o0 and sim.glsl reads o1 to erase Pac-Man where a
-// non-frightened ghost overlaps him. Nothing downstream needs to know the ghosts live in tiles.
-//
-// One pass over the board rather than one small draw per tile, because tiles can overlap in board
-// space once two ghosts are close, and separate draws would have the later one *replace* the
-// earlier instead of adding to it -- quietly deleting a ghost. Summing here also needs no blending,
-// which on a float target would mean depending on EXT_float_blend.
+// Composites the ghost tiles onto board-sized textures: o0 for draw.glsl's colouring, o1 (mass
+// with frightened ghosts excluded) for sim.glsl's ghost-eats-Pac-Man check -- nothing downstream
+// needs to know the ghosts live in tiles. One pass over the whole board rather than a draw per
+// tile: tiles can overlap once two ghosts are close, and separate draws would have the later one
+// *replace* the earlier instead of summing, silently deleting a ghost.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
@@ -39,9 +36,7 @@ void main() {
         float v = texelFetch(uAtlas, ivec2(i * uWin + d.x, d.y), 0).r;
         mass += v;
         if (uFrightened[i] == 0) danger += v;
-        // Whoever has the most mass here owns the pixel's colour. Carried in the texture rather
-        // than re-derived in draw.glsl from ghost positions, so it is exact even where tiles
-        // overlap, and costs nothing extra -- this loop already knows the answer.
+        // Whoever has the most mass here owns the pixel's colour -- exact even where tiles overlap.
         if (v > best) { best = v; owner = float(i) + 1.0; }
     }
 

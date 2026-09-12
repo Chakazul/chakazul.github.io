@@ -2,23 +2,20 @@
 // ============================================================================================
 //  GPU Lenia engine for the CARL maze demo.
 //
-//  The CPU demo (CARL/maze_playground.html) ran the whole simulation in JS: an FFT-accelerated
-//  convolution per step, a full-board sweep for the center of mass, and a per-pixel loop to
-//  paint the canvas. All three are per-cell-independent work, so all three live here as
-//  fragment shader passes instead. What stays on the CPU is the part that genuinely cannot
-//  move: the policy network, which runs in onnxruntime-web's WASM backend.
+//  The CPU demo (CARL/maze_playground.html) ran the whole sim in JS: FFT convolution per step,
+//  a full-board sweep for the centre of mass, a per-pixel canvas paint. All three are
+//  per-cell-independent, so all three are fragment shader passes here; only the policy network
+//  (onnxruntime-web/WASM) stays on the CPU.
 //
-//  The design constraint that shapes this file is that the CPU needs exactly two things back
-//  from the GPU each step -- where the soliton is, and the 96x96x4 window the policy reads --
-//  and every readback is a pipeline stall. So a step queues five passes with no synchronization
-//  between them (action, sim, reduce, com, crop) and the caller then picks up both results in
-//  one readback() call. The crop pass reads the CoM out of a texture rather than a uniform
-//  precisely so that it does not have to wait for the CPU to be told where to look.
+//  Every readback is a pipeline stall, and the CPU needs exactly two things back each step:
+//  where the soliton is, and the 96x96x4 window the policy reads. So a step queues five passes
+//  with no synchronization between them (action, sim, reduce, com, crop), and readback()
+//  collects both results in one call. crop.glsl reads the CoM out of a texture rather than a
+//  uniform for the same reason -- it doesn't have to wait to be told where to look.
 //
-//  Board state lives in a ring of four R32F textures, not the usual ping-pong pair, because the
-//  policy is fed a 4-frame stack and all four frames have to be croppable at a shared origin.
-//  Stepping writes over the four-steps-ago frame, which is exactly the one falling out of the
-//  stack, so four slots is the whole requirement.
+//  Board state is a ring of four R32F textures, not a ping-pong pair, because the policy needs
+//  a 4-frame stack all croppable at a shared origin. Stepping overwrites the four-steps-ago
+//  frame -- exactly the one falling out of the stack.
 // ============================================================================================
 
 const SimGL = (function () {
@@ -28,29 +25,21 @@ const SimGL = (function () {
   const RING = 4;          // frames kept for the policy's frame stack
   const GRID = 16;         // stage-1 reduction output is GRID x GRID (see reduce.glsl)
   const EAT_THRESHOLD = 0.1;  // Pac-Man mass above this erases the dots channel at that cell
-  // Frightened-window speed multipliers, applied to `dt` (the growth function's per-step time
-  // increment) rather than to any explicit velocity -- nothing here tracks one, a Lenia soliton's
-  // speed is an emergent property of its rule, and dt is the one knob that scales how much of a
-  // step's growth is applied without touching the rule (mu/sigma/betas) itself, which is what
-  // actually shapes the pattern. A frightened ghost's own tile runs at GHOST_FRIGHTENED_SPEED of
-  // its ordinary dt (see runGhostSim()); Pac-Man runs at PACMAN_FRIGHTENED_SPEED of his whenever
-  // *any* ghost is currently frightened (see step()), not just while he's actually near one.
+  // Frightened-window speed multipliers, applied to `dt` since a Lenia soliton's speed is an
+  // emergent property of its rule and dt is the knob that scales growth without touching the
+  // rule itself. A frightened ghost's tile runs at GHOST_FRIGHTENED_SPEED of normal (see
+  // runGhostSim()); Pac-Man runs at PACMAN_FRIGHTENED_SPEED whenever *any* ghost is frightened.
   const GHOST_FRIGHTENED_SPEED = 0.6;
   const PACMAN_FRIGHTENED_SPEED = 1.0;
-  // Edge of the private world each ghost is simulated in. The soliton's mass reaches ~23px from
-  // its centre, growth can appear a kernel radius beyond that, and computing those cells reads
-  // another radius further again -- so 96 has the room it needs, where the obvious 48 would clip
-  // the pattern. It is also what bounds the cost: a tile is 9216 cells against the board's 137500,
-  // so several ghosts together come to a fraction of one whole-board pass.
+  // Edge of each ghost's private tile. The soliton's mass reaches ~23px from centre plus a kernel
+  // radius of growth plus another radius of taps reading that -- 96 has the room; 48 would clip.
+  // Also bounds cost: 9216 cells per tile against the board's 137500.
   const GHOST_WIN = 96;
   const MAX_GHOSTS = 9;   // must match the #define in draw.glsl, ghostblit.glsl and ghostsim.glsl
-  // Pac-Man's own window. Wider than a ghost's, and for a reason a ghost does not have: he takes
-  // interventions. CARL picks a cell anywhere in its netSize view -- 48px off his centre of mass --
-  // and lays down a disc of actionRadius on top, so real mass can arrive 55px out. A 96 window
-  // (half-width 48) would silently clip any intervention past 41px; 64 covers the whole reach with
-  // room for the growth that follows it. Unlike the ghosts he keeps a board-sized texture: only the
-  // *simulation* is windowed, so the policy's frame stack, the CoM and the eat checks all still see
-  // an ordinary full board and need no changes at all.
+  // Pac-Man's own window, wider than a ghost's because he takes interventions: CARL can act up to
+  // 48px off centre plus a 7px action radius, so real mass can arrive 55px out -- a 96 window
+  // (half-width 48) would clip that. Unlike the ghosts he keeps a board-sized texture; only the
+  // simulation is windowed, so the frame stack, CoM and eat checks need no changes.
   const PAC_WIN = 128;
 
   let gl = null, canvas = null;
@@ -59,51 +48,42 @@ const SimGL = (function () {
   let ruleMu = 0.24, ruleSigma = 0.024, ruleDt = 0.1;
 
   let ringTex = [], ringFbo = [], ringIdx = 0;
-  // Board position of Pac-Man's simulation window, tracked from the CoM the last readback returned
-  // -- the engine already has it, so nothing has to be plumbed in from the caller.
+  // Board position of Pac-Man's simulation window, tracked from the last readback's CoM.
   let pacWin = null;
-  // Channel 2: a second Lenia field on the same board, stepped under its own rule. It gets a
-  // plain ping-pong pair rather than a ring, because nothing here needs its history -- the policy
-  // never sees it, so there is no frame stack to crop and no CoM to find.
+  // Channel 2 (dots): a second Lenia field, own rule, plain ping-pong pair rather than a ring --
+  // the policy never sees it, so there's no frame stack to crop and no CoM to find.
   let ch2Tex = [], ch2Fbo = [], ch2Idx = 0, ch2Kernel = null;
   let ch2R = 18, ch2Mu = 0.24, ch2Sigma = 0.024, ch2Dt = 0.1;
-  // Channel 3 (the ghosts). Unlike the other two this is not a board-sized field: the ghosts are
-  // simulated in an atlas of private GHOST_WIN-square tiles, one each, and composited back to a
-  // board-sized texture afterwards for everything downstream to read. Tiles are what stop two
-  // ghosts being two solitons in one field -- which is to say, what stops them destroying each
-  // other on contact -- and what makes their cost scale with the number of ghosts, not the board.
+  // Channel 3 (ghosts): not a board-sized field like the other two -- each ghost is simulated in
+  // its own private GHOST_WIN-square tile of one atlas, composited to board space afterwards.
+  // Tiles are what stop two ghosts being two solitons that destroy each other on contact, and
+  // what makes cost scale with ghost count rather than board size.
   let gAtlas = [], gAtlasFbo = [], gAtlasIdx = 0, ch3Kernel = null;
   let ch3R = 18, ch3Mu = 0.24, ch3Sigma = 0.024, ch3Dt = 0.1;
   let gBoardTex = null, gBoardFbo = null;              // the composited board-space result
-  // Same composite, but mass from a currently-frightened ghost's tile excluded -- what the
-  // ordinary ghosts-eat-Pac-Man check (in step(), below) reads instead of gBoardTex, so a
-  // frightened ghost simply contributes nothing to it and is harmless per-tile rather than only
-  // globally. A second render target of the same runGhostBlit() pass, not a separate pass.
+  // Same composite with a currently-frightened ghost's mass excluded -- what the ghosts-eat-
+  // Pac-Man check (step(), below) reads instead, so a frightened ghost is harmless per-tile.
+  // Second render target of runGhostBlit(), not a separate pass.
   let gDangerTex = null;
   let gRedTex = null, gRedFbo = null;                  // per-tile CoM, stage 1
   let gComTex = null, gComFbo = null;                  // per-tile CoM, stage 2 -- one texel each
-  // Board position of each tile's (0,0), how far its contents slide this step to keep the soliton
-  // centred, and whether Pac-Man is currently allowed to eat it (frightened) -- all three owned by
-  // the caller, which is the side that tracks which ghost is which and its frightened state.
+  // Per-ghost, owned by the caller: board position of each tile's (0,0), how far it slides this
+  // step to stay centred, and whether Pac-Man may currently eat it (frightened).
   let gOrigin = [], gShift = [], gFrightened = [], gCount = 0;
   let scratchTex = null, scratchFbo = null;
   let wallTex = null, powerTex = null, kernelTex = null;
   let redTex0 = null, redTex1 = null, redFbo = null, redBlock = 1;
   let comTex = null, comFbo = null;
-  // Total remaining dots-channel mass -- same two-stage reduce.glsl -> com.glsl shape as the
-  // Pac-Man CoM above, just pointed at ch2Tex. Reused rather than measured on the CPU from
-  // cumulative "eaten" mass, because the dots are themselves free-running Lenia solitons: eating
-  // only part of one can leave the rest to regrow under its own growth rule, so mass is not
-  // conserved and a running subtraction drifts from the field's actual total. com.glsl's mass
-  // component (.z) is exactly the sum this needs; its circular-mean position (.x/.y) is unused.
+  // Total remaining dots-channel mass, same reduce.glsl -> com.glsl shape as the Pac-Man CoM but
+  // pointed at ch2Tex. Reused each time rather than accumulated from "eaten" mass on the CPU,
+  // since the dots regrow under their own rule and mass isn't conserved. Only com.glsl's mass
+  // component (.z) is used; its position (.x/.y) is not.
   let dotsRedTex0 = null, dotsRedTex1 = null, dotsRedFbo = null, dotsComTex = null, dotsComFbo = null;
   let hasDots = false;      // false whenever there is no dots channel to have a total mass
-  // The "how much dot mass did Pac-Man just eat" reduction -- same two-stage shape as
-  // reduce.glsl -> com.glsl, just over a different pair of textures (see eatreduce.glsl).
+  // "How much dot mass did Pac-Man just eat", same two-stage shape, see eatreduce.glsl.
   let eatRedTex = null, eatRedFbo = null, eatSumTex = null, eatSumFbo = null;
-  // Per-dot presence (see dotsites.glsl): one output texel per dot, the channel-2 mass left in a
-  // window around where it was stamped. The positions arrive as a texture rather than a uniform
-  // array because their count is whatever the layout holds, not a compile-time constant.
+  // Per-dot presence (dotsites.glsl): one texel per dot, channel-2 mass left around its stamp.
+  // Positions arrive as a texture, not a uniform array, since their count isn't a compile-time constant.
   let siteTex = null, siteOutTex = null, siteOutFbo = null, siteCount = 0, siteRadius = 0;
   let sitePix = null, siteMass = null;
   let cropTex = null, cropFbo = null;
@@ -150,9 +130,8 @@ const SimGL = (function () {
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, data || null);
-    // Float targets are not filterable without OES_texture_float_linear, and every read in
-    // these shaders is a texelFetch anyway -- wrapping is done by hand so the sampler never
-    // needs to know about the torus.
+    // Float targets aren't filterable without OES_texture_float_linear, and every read here is a
+    // texelFetch anyway, so wrapping is done by hand rather than via the sampler.
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -190,9 +169,8 @@ const SimGL = (function () {
   function del(t, isFbo) { if (t) (isFbo ? gl.deleteFramebuffer(t) : gl.deleteTexture(t)); }
 
   // ------------------------------------------------------------------------------------------
-  //  Kernel -- built with the same arithmetic as buildKernel() in the CPU demo, including the
-  //  1e-7 tap threshold and the normalization by the *unthresholded* sum, so the weights the
-  //  shader multiplies by are the ones the CPU version used.
+  //  Kernel -- same arithmetic as the CPU demo's buildKernel() (1e-7 tap threshold, normalized
+  //  by the unthresholded sum), so the weights match.
   // ------------------------------------------------------------------------------------------
   function quad4(r) { const q = 4 * r * (1 - r); return q * q * q * q; }
 
@@ -223,13 +201,11 @@ const SimGL = (function () {
   // ------------------------------------------------------------------------------------------
   async function init(cv, netSize) {
     canvas = cv; net = netSize || 96;
-    // preserveDrawingBuffer, because the board is not redrawn every animation frame: at low sim
-    // speeds most frames step nothing, and while paused the loop stops entirely. Without it the
-    // drawing buffer is cleared after compositing and the canvas would blank out between draws.
+    // preserveDrawingBuffer: the board isn't redrawn every frame (paused, or low sim speed), and
+    // without this the drawing buffer clears after compositing and the canvas blanks between draws.
     gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
     if (!gl) throw new Error('WebGL 2 unavailable — try another browser (see caniuse.com/webgl2).');
-    // Without this the float textures the sim, reduction and crop all render into are not
-    // color-renderable, and none of the passes below can exist.
+    // Needed for the sim/reduction/crop float textures to be colour-renderable at all.
     if (!gl.getExtension('EXT_color_buffer_float'))
       throw new Error('EXT_color_buffer_float unavailable — this GPU/browser cannot render to float textures.');
 
@@ -267,7 +243,7 @@ const SimGL = (function () {
     dotsRedFbo = fbo([dotsRedTex0, dotsRedTex1]);
     dotsComTex = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, 1, 1);
     dotsComFbo = fbo([dotsComTex]);
-    // The ghost atlas: MAX_GHOSTS tiles side by side, ping-ponged like any Lenia field.
+    // Ghost atlas: MAX_GHOSTS tiles side by side, ping-ponged like any Lenia field.
     for (let i = 0; i < 2; i++) {
       const t = tex(gl.R32F, gl.RED, gl.FLOAT, GHOST_WIN * MAX_GHOSTS, GHOST_WIN,
                     new Float32Array(GHOST_WIN * MAX_GHOSTS * GHOST_WIN));
@@ -302,7 +278,7 @@ const SimGL = (function () {
       ringTex.push(t); ringFbo.push(fbo([t]));
     }
     ringIdx = RING - 1;
-    // Zero-filled, so the draw pass has something to sample before the first upload.
+    // Zero-filled so the draw pass has something to sample before the first upload.
     ch2Tex = []; ch2Fbo = [];
     const empty = new Float32Array(W * H);
     for (let i = 0; i < 2; i++) {
@@ -312,31 +288,24 @@ const SimGL = (function () {
     ch2Idx = 0;
     // Two channels: mass, and which ghost owns the pixel. See ghostblit.glsl.
     gBoardTex = tex(gl.RG32F, gl.RG, gl.FLOAT, W, H, new Float32Array(W * H * 2));
-    // Second render target of the same pass: mass with any currently-frightened ghost's
-    // contribution excluded. See gDangerTex's own comment above.
+    // Second render target of the same pass: mass with any frightened ghost excluded.
     gDangerTex = tex(gl.R32F, gl.RED, gl.FLOAT, W, H, new Float32Array(W * H));
     gBoardFbo = fbo([gBoardTex, gDangerTex]);
     scratchTex = tex(gl.R32F, gl.RED, gl.FLOAT, W, H);
     scratchFbo = fbo([scratchTex]);
     wallTex = tex(gl.R8, gl.RED, gl.UNSIGNED_BYTE, W, H, new Uint8Array(W * H));
-    // 1 where placeDots() stamped a power pellet rather than an ordinary dot, 0 elsewhere -- same
-    // 0/255-expansion trick as wallTex, since R8 is normalized. Dots and pellets are otherwise
-    // identical mass under the one shared channel-2 rule (a Lenia pattern's size is fixed by the
-    // kernel radius it runs at, so stamping one bigger just has it relax back to the same
-    // equilibrium size, not stay distinct), so colour is what draw.glsl uses to tell them apart;
-    // this mask is what tells draw.glsl which colour a given pixel of channel 2 gets. Static once
-    // written -- the dots channel never moves, so it never needs updating between placeDots() calls.
+    // 1 where a power pellet was stamped rather than a plain dot, 0 elsewhere -- dots and pellets
+    // are identical mass under the shared channel-2 rule, so this is what draw.glsl colours from.
+    // Static once written: the dots channel never moves between placeDots() calls.
     powerTex = tex(gl.R8, gl.RED, gl.UNSIGNED_BYTE, W, H, new Uint8Array(W * H));
 
-    // Stage-1 blocks tile the board across a fixed GRID x GRID output, whatever the board size:
-    // reduce.glsl loops on this value rather than a constant, so there is no board-edge ceiling
-    // any more (it used to cap the loops at 16, limiting the edge to GRID*16 = 256).
+    // Stage-1 blocks tile the board across a fixed GRID x GRID output, whatever the board size --
+    // reduce.glsl loops on this value rather than a constant 16, which used to cap the edge at 256.
     redBlock = Math.ceil(Math.max(W, H) / GRID);
   }
 
-  // The maze mask arrives as 0/1 bytes, which is what the JS side wants for its own masking.
-  // R8 is a *normalized* format though, so a stored 1 samples as 1/255 and every "is this a
-  // wall" test in the shaders would read false. Expand to 0/255 so it samples as 0.0/1.0.
+  // R8 is a normalized format, so a stored 1 would sample as 1/255 (false in the shaders' "is
+  // this a wall" tests). Expand the incoming 0/1 mask to 0/255 so it samples as 0.0/1.0.
   function setWall(mask) {
     const t = new Uint8Array(mask.length);
     for (let i = 0; i < mask.length; i++) t[i] = mask[i] ? 255 : 0;
@@ -344,8 +313,7 @@ const SimGL = (function () {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, W, H, 0, gl.RED, gl.UNSIGNED_BYTE, t);
   }
 
-  // Same 0/255 expansion as setWall(), for the power-pellet colour mask. Called by placeDots()
-  // alongside uploadState2(), whenever the dots channel is (re)stamped.
+  // Same 0/255 expansion as setWall(), for the power-pellet colour mask.
   function setPowerMask(mask) {
     const t = new Uint8Array(mask.length);
     for (let i = 0; i < mask.length; i++) t[i] = mask[i] ? 255 : 0;
@@ -353,8 +321,7 @@ const SimGL = (function () {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, W, H, 0, gl.RED, gl.UNSIGNED_BYTE, t);
   }
 
-  // Where each dot was stamped, as [row, col] board positions, plus the half-width of the square
-  // window summed around each. Called by placeDots() whenever the dots channel is (re)stamped;
+  // Where each dot was stamped ([row, col]) plus the half-width of the window summed around each.
   // readback()'s dotSites comes back in this same order. An empty list turns the pass off.
   function setDotSites(sites, radius) {
     del(siteTex, false); del(siteOutTex, false); del(siteOutFbo, true);
@@ -397,8 +364,8 @@ const SimGL = (function () {
   }
 
   function uploadState(arr) {
-    // Fills every frame of the ring with the same state — the equivalent of fillStack() at
-    // spawn, so the policy's first input is four copies of the starting board.
+    // Fills every ring frame with the same state, so the policy's first input is four copies of
+    // the starting board.
     for (let i = 0; i < RING; i++) {
       gl.bindTexture(gl.TEXTURE_2D, ringTex[i]);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, W, H, 0, gl.RED, gl.FLOAT, arr);
@@ -421,18 +388,14 @@ const SimGL = (function () {
     drawQuad();
   }
 
-  // Both channels are the same Lenia step with different weights, so one program serves both --
-  // a channel is just its own kernel plus its own growth parameters. `eat`, when given, is
-  // {tex, threshold}: another channel's state texture that erases this one wherever it exceeds
-  // threshold -- one extra fetch-and-compare, the same shape as the wall check, rather than a
-  // second convolution pass to detect overlap. `wallEnabled` skips the wall fetch entirely for a
-  // channel whose solitons never move -- true stationary spots (the dots) can never reach a wall,
-  // so masking against one every step is pure waste for that channel.
-  // `win`, when given, is a board position to confine the step to: the destination is cleared and
-  // only a PAC_WIN-square patch around that point is computed. The texture stays board-sized, so
-  // every other pass -- the crop, the reduction, the eat checks, the draw -- carries on reading an
-  // ordinary full board and none of them had to change. What is dropped is only ever empty: the
-  // soliton spans ~46px and the window ~128, and interventions reach 55px at the very most.
+  // Both channels are the same Lenia step with different weights, so one program serves both.
+  // `eat`, when given, is {tex, threshold}: another channel's state that erases this one wherever
+  // it exceeds threshold -- one fetch-and-compare rather than a second convolution to detect
+  // overlap. `wallEnabled` skips the wall fetch for a channel whose solitons never move (the dots
+  // can never reach a wall). `win`, when given, confines the step to a PAC_WIN-square patch
+  // around that board position, clearing the rest of the destination -- every other pass keeps
+  // reading an ordinary full board, since what's dropped is always empty (soliton ~46px, window
+  // ~128px, interventions reach at most 55px out).
   function runSim(srcTex, dstFbo, kern, R, mu, sigma, dt, eat, wallEnabled, win) {
     if (win) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
@@ -458,8 +421,8 @@ const SimGL = (function () {
     gl.disable(gl.SCISSOR_TEST);
   }
 
-  // reduce -> com -> crop. Queued together with no readback in between; the caller collects
-  // both results afterwards in one go.
+  // reduce -> com -> crop, queued with no readback in between; the caller collects both results
+  // afterwards in one go.
   function runAnalysis() {
     let p = pass(prog.reduce, redFbo, GRID, GRID);
     bind(p, 'uState', 0, ringTex[ringIdx]);
@@ -492,9 +455,8 @@ const SimGL = (function () {
     drawQuad();
   }
 
-  // reduce -> com again, over ch2Tex instead of the ring: how much dots-channel mass is left on
-  // the whole board right now -- and, per dot site, around each dot. Queued alongside
-  // runAnalysis() with no readback in between.
+  // reduce -> com again, over ch2Tex instead of the ring: total dots-channel mass left, plus
+  // per-dot-site mass. Queued alongside runAnalysis() with no readback in between.
   function runDotsAnalysis() {
     let p = pass(prog.reduce, dotsRedFbo, GRID, GRID);
     bind(p, 'uState', 0, ch2Tex[ch2Idx]);
@@ -511,9 +473,8 @@ const SimGL = (function () {
     if (siteCount) runDotSites();
   }
 
-  // A window near a board edge runs off it, and the board is a torus, so it comes back on the far
-  // side -- while a scissor rectangle cannot wrap. Cut it into the one to four pieces that do lie
-  // on the board.
+  // A window near a board edge wraps toroidally, but a scissor rectangle can't -- cut it into the
+  // one to four pieces that do lie on the board.
   function spans(start, len, size) {
     const s0 = ((start % size) + size) % size;
     return s0 + len <= size ? [[s0, len]] : [[s0, size - s0], [0, len - (size - s0)]];
@@ -525,13 +486,10 @@ const SimGL = (function () {
     return out;
   }
 
-  // The caller owns which ghost is where. `origins` are the board positions of each tile's (0,0),
-  // `shifts` how far each tile's contents slide this step -- whole cells, because a fractional
-  // slide would mean resampling the soliton, and resampling it every step smears it away -- and
-  // `frightened` whether Pac-Man currently eats that tile on overlap instead of the other way
-  // round. All three are rebuilt from the caller's own ghost list on every call (steerGhosts()
-  // calls this every step), so per-tile frightened state never goes stale between calls the way a
-  // separate setter touched only sometimes would.
+  // `origins` are each tile's board (0,0), `shifts` how far it slides this step (whole cells,
+  // since a fractional slide would resample the soliton and smear it), `frightened` whether
+  // Pac-Man currently eats that tile instead of the reverse. Rebuilt from the caller's ghost list
+  // on every call (steerGhosts() calls this every step), so frightened state never goes stale.
   function setGhostTiles(origins, shifts, frightened) {
     gCount = Math.min(origins.length, MAX_GHOSTS);
     gOrigin = origins.slice(0, gCount).map(o => [Math.round(o[0]), Math.round(o[1])]);
@@ -552,8 +510,8 @@ const SimGL = (function () {
     for (let i = 0; i < gCount; i++) gl.uniform1f(u(p, `${name}[${i}]`), list[i]);
   }
 
-  // Writes one soliton into one tile. texSubImage2D rather than a whole-atlas upload, so placing
-  // or respawning a single ghost leaves every other tile running untouched.
+  // texSubImage2D rather than a whole-atlas upload, so placing/respawning one ghost leaves every
+  // other tile untouched.
   function uploadGhostTile(i, data) {
     if (i >= MAX_GHOSTS) return;
     gl.bindTexture(gl.TEXTURE_2D, gAtlas[gAtlasIdx]);
@@ -562,11 +520,10 @@ const SimGL = (function () {
   }
 
   // One Lenia step for every ghost, each confined to its own tile. A single draw covers the whole
-  // pack -- the tiles are contiguous from 0, so one scissor bounds the used ones. `pacmanTex` is
-  // Pac-Man's board-space state; a tile whose ghost is currently frightened (gFrightened, per-tile)
-  // gets erased wherever it exceeds EAT_THRESHOLD there -- the frightened-only reverse of the
-  // ordinary ghost-eats-Pac-Man check, and per-ghost rather than all-or-nothing so an already-eaten
-  // ghost that respawned mid-window comes back not frightened while its packmates still are.
+  // pack -- tiles are contiguous from 0, so one scissor bounds the used ones. A tile whose ghost
+  // is frightened (gFrightened, per-tile) is erased wherever `pacmanTex` exceeds EAT_THRESHOLD --
+  // the reverse of the ordinary ghost-eats-Pac-Man check -- so a respawned ghost mid-window comes
+  // back unfrightened while its packmates stay frightened.
   function runGhostSim(pacmanTex) {
     const dst = 1 - gAtlasIdx;
     const p = pass(prog.ghostsim, gAtlasFbo[dst], GHOST_WIN * MAX_GHOSTS, GHOST_WIN);
@@ -583,8 +540,7 @@ const SimGL = (function () {
     setTileUniforms(p, 'uOrigin', gOrigin);
     setTileUniforms(p, 'uShift', gShift);
     setTileFlagUniforms(p, 'uFrightened', gFrightened);
-    // Per-tile, not a shared uDt: a frightened ghost runs slower than its (possibly still normal)
-    // packmates, which a single uniform for the whole atlas couldn't express.
+    // Per-tile, not a shared uDt: a frightened ghost runs slower than its still-normal packmates.
     setTileFloatUniforms(p, 'uDt', gFrightened.map(f => f ? ch3Dt * GHOST_FRIGHTENED_SPEED : ch3Dt));
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(0, 0, GHOST_WIN * gCount, GHOST_WIN);
@@ -594,9 +550,8 @@ const SimGL = (function () {
   }
 
   // Tiles -> board space, for draw.glsl and for the eat check in Pac-Man's own sim pass. Two
-  // render targets: gBoardTex (total mass + owner, for rendering) and gDangerTex (mass with any
-  // frightened tile's contribution left out, for the ghosts-eat-Pac-Man check -- see its own
-  // comment). Both come out of this one pass since it already sums every tile per pixel.
+  // render targets from one pass: gBoardTex (total mass + owner) and gDangerTex (frightened
+  // tiles excluded).
   function runGhostBlit() {
     const p = pass(prog.ghostblit, gBoardFbo, W, H);
     bind(p, 'uAtlas', 0, gAtlas[gAtlasIdx]);
@@ -622,10 +577,8 @@ const SimGL = (function () {
     drawQuad();
   }
 
-  // Turn one ghost without disturbing what it is: an exact quarter-turn permutation of its live
-  // tile, rather than a fresh stamp of the canonical pattern. Pivot is tile-local and integer -- a
-  // half-pixel pivot would not land texel centres on texel centres and the rotation would stop
-  // being exact. See rotate.glsl.
+  // Exact quarter-turn permutation of the ghost's live tile, not a fresh stamp -- see rotate.glsl.
+  // Pivot is tile-local and integer; a half-pixel pivot would break the exact texel-to-texel mapping.
   function rotateGhost(i, lx, ly, turns) {
     if (!ch3Kernel || i >= gCount || !(turns % 4)) return;
     const dst = 1 - gAtlasIdx;
@@ -649,10 +602,9 @@ const SimGL = (function () {
     if (hasDots) runDotsAnalysis();
   }
 
-  // How much dots-channel mass sits under Pac-Man's just-stepped state, i.e. how much is about
-  // to be erased by the eat check inside the channel-2 sim pass below -- same two textures, same
-  // threshold, just measured rather than acted on. dotsTex is channel 2's *pre*-step state (still
-  // resident: ch2Tex's ping-pong means it isn't overwritten until the sim pass after this one).
+  // How much dots-channel mass is about to be erased by the channel-2 sim pass's eat check below
+  // -- same two textures, same threshold, just measured rather than acted on. dotsTex is channel
+  // 2's pre-step state, still resident until the sim pass after this one overwrites it.
   function runEatDetect(dotsTex, pacmanTex) {
     let p = pass(prog.eatreduce, eatRedFbo, GRID, GRID);
     bind(p, 'uDots', 0, dotsTex);
@@ -674,26 +626,20 @@ const SimGL = (function () {
     let input = ringTex[ringIdx];
     if (action) { runAction(input, action); input = scratchTex; }
     const dst = (ringIdx + 1) % RING;                     // overwrites the frame aging out
-    // The ghosts eat Pac-Man exactly the way Pac-Man eats the dots, just pointed the other way --
-    // except a currently-frightened ghost contributes nothing to gDangerTex (see runGhostBlit()),
-    // so it is individually harmless without anything needing to be suppressed here. This one
-    // reads the ghosts' *pre*-step state, since their own sim pass is queued below -- a frame
-    // staler than the dots' eat check, and unnoticeable at one Lenia step of ghost drift. It stays
-    // readable through that pass regardless: ping-pong means the ghosts write the other slot of
-    // their pair, not the one bound here.
+    // Ghosts eat Pac-Man the way he eats the dots, just reversed -- a frightened ghost contributes
+    // nothing to gDangerTex (runGhostBlit()), so it's harmless without special-casing here. Reads
+    // the ghosts' pre-step state (their own sim pass is queued below); one Lenia step staler than
+    // the dots' own eat check, which doesn't matter at this drift rate.
     const ghostEat = (ch3Kernel && gCount) ? { tex: gDangerTex, threshold: EAT_THRESHOLD } : null;
-    // Sped up while any ghost is currently frightened (gFrightened, the same per-tile flags the
-    // eat checks use) -- not just while he's near one, matching the ghosts' own speed change being
-    // a property of the window rather than of proximity.
+    // Sped up while any ghost is frightened, not just while he's near one -- the speed change is a
+    // property of the window, matching the ghosts' own.
     const pacDt = gFrightened.some(f => f) ? ruleDt * PACMAN_FRIGHTENED_SPEED : ruleDt;
     runSim(input, ringFbo[dst], kernelTex, kR, ruleMu, ruleSigma, pacDt, ghostEat, true, pacWin);
     ringIdx = dst;
-    // Channel 2 steps on the same schedule but takes no action pass and no analysis: CARL
-    // neither sees it nor steers it, so there is nothing to intervene on and nothing to read back.
-    // It does eat, though: ringTex[dst] is Pac-Man's just-stepped state, so a dot is erased the
-    // instant Pac-Man's mass overlaps it this same tick, not one frame late. Wall masking is
-    // skipped (wallEnabled=false): the dots are stationary spots stamped only onto open floor,
-    // so they can never drift into a wall, and there is nothing to check for.
+    // Channel 2 (dots) steps on the same schedule with no action pass and no analysis -- CARL
+    // never sees or steers it. It does eat: ringTex[dst] is Pac-Man's just-stepped state, so a dot
+    // is erased the instant his mass overlaps it. Wall masking is skipped (dots never move, so
+    // they can never drift into a wall).
     hasEatSignal = !!ch2Kernel;
     hasDots = !!ch2Kernel;
     if (ch2Kernel) {
@@ -704,11 +650,9 @@ const SimGL = (function () {
       ch2Idx = d2;
       runDotsAnalysis();     // measures the just-erased state, so a win reads the same step it happens
     }
-    // The ghosts: free-running like the dots, but mobile, so unlike the dots they are wall-masked.
-    // Ordinarily nothing eats them -- the eating they take part in is the ghostEat above, which
-    // reads the board-space composite this leaves behind. A frightened one (per-tile, gFrightened)
-    // is the other way round: Pac-Man's just-stepped state (ringTex[dst], same frame the dots' own
-    // eat check reads) erases it instead, symmetric with how a dot gets erased under him.
+    // Ghosts: free-running like the dots but mobile, so wall-masked unlike them. Ordinarily
+    // nothing eats them (the ghostEat above reads the board-space composite they leave behind); a
+    // frightened one is instead erased by Pac-Man's just-stepped state, symmetric with a dot.
     hasGhost = !!ch3Kernel && gCount > 0;
     if (hasGhost) { runGhostSim(ringTex[dst]); runGhostBlit(); runGhostCom(); }
     runAnalysis();
@@ -719,8 +663,7 @@ const SimGL = (function () {
   function readback() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, comFbo);
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, comPix);
-    // The next step's window follows him. Held at its last position when the CoM goes invalid,
-    // which only happens once he has dissolved and the episode is over anyway.
+    // The next step's window follows him; held at its last position once he's dissolved (episode over).
     if (comPix[3] > 0.5) pacWin = [comPix[0], comPix[1]];
     let eaten = 0, pelletEaten = 0;
     if (hasEatSignal) {
@@ -729,11 +672,8 @@ const SimGL = (function () {
       eaten = eatPix[0];
       pelletEaten = eatPix[1];
     }
-    // Another 1x1 read, and the pipeline is already flushed by the CoM read above, so it costs
-    // essentially nothing on top of the stall that was happening anyway.
-    // Every ghost in one read: their results are neighbouring texels of a single row, so the whole
-    // pack costs the same one call a single ghost did. Positions come back tile-local; the caller
-    // adds the tile origin, since it is the side that knows where each tile is.
+    // Every ghost in one read (neighbouring texels of one row), same cost as reading a single
+    // ghost. Positions come back tile-local; the caller adds the tile origin.
     const ghosts = [];
     if (hasGhost) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, gComFbo);
@@ -748,8 +688,8 @@ const SimGL = (function () {
       gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, dotsComPix);
       dotsMass = dotsComPix[2];
     }
-    // Every dot site in one row, same one-call shape as the ghosts above. Reused buffer: the caller
-    // reads it before the next readback() overwrites it.
+    // Every dot site in one row, same shape as the ghosts above. Reused buffer: the caller reads
+    // it before the next readback() overwrites it.
     let dotSites = null;
     if (hasDots && siteCount) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, siteOutFbo);

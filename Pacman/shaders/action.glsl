@@ -1,21 +1,14 @@
 #version 300 es
-// Applies one intervention -- CARL's or the user's -- as a disc of added or removed
-// mass, writing the result to a scratch texture that the sim pass then steps from.
-//
-// This is a separate pass rather than something folded into sim.glsl on purpose: the
-// sim pass reads ~1000 neighbours per cell, so having it apply the action inline would
-// mean re-testing the action disc at every one of those taps. A standalone pass costs
-// one fetch per cell instead, which is nothing next to the convolution. It is skipped
-// entirely on no-op steps.
+// Applies one intervention (add/remove mass) as a disc into a scratch texture the sim pass then
+// steps from. A separate pass rather than folded into sim.glsl, so the ~1000-tap convolution
+// isn't re-testing the action disc at every neighbour; skipped entirely on no-op steps.
 precision highp float;
 precision highp sampler2D;
-// Not optional, and not just tidiness: GLSL ES 3.00's *fragment* language defaults int to
-// mediump, which is only guaranteed to hold +-2^15. The squared distance below reaches
-// (W/2)^2 = 275^2 = 75625 on this board, so on a GPU that implements mediump int as a real
-// 16-bit type (i.e. most mobile ones -- desktop drivers hand out 32 bits and hide this) it
-// wraps mod 65536, and the "<= uRadius^2" test then also passes on a circle of radius
-// sqrt(65536) = 256 around the action: a board-sized ring of injected mass, which explodes
-// the soliton on the first step CARL acts.
+// Required, not cosmetic: GLSL ES 3.00 defaults fragment-stage int to mediump (only guaranteed
+// 16-bit), which most mobile GPUs implement literally (desktop drivers quietly hand out 32 bits).
+// The squared distance below reaches ~75625, which wraps mod 65536 under 16-bit int, turning the
+// action radius into a board-spanning ring of injected mass -- exploding the soliton on the first
+// action on affected devices.
 precision highp int;
 
 uniform sampler2D uState;
@@ -30,8 +23,7 @@ void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     float v = texelFetch(uState, p, 0).r;
 
-    // Shortest toroidal offset to the action center. The radius (7) is far smaller
-    // than half the board, so the nearest-image offset is the right one.
+    // Shortest toroidal offset to the action center.
     int dx = p.x - uCenter.x;
     if (dx >  uSize.x / 2) dx -= uSize.x;
     if (dx < -uSize.x / 2) dx += uSize.x;

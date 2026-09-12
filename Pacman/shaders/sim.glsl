@@ -1,17 +1,9 @@
 #version 300 es
-// One Lenia step: toroidal convolution with the growth kernel, then the growth
-// function, then wall masking. This is the pass that replaces the CPU FFT in
-// CARL/maze_playground.html -- the math below is the direct-sum form of the same
-// convolution, which is what the FFT there was accelerating. On the GPU the direct
-// sum is the fast path: every cell is an independent thread, so the O(knn) tap loop
-// costs nothing that matters, and it avoids the Bluestein path the CPU version was
-// forced onto by the non-power-of-2 board sizes (100/150/200/250).
-//
-// The kernel arrives as a (2R+1)^2 texture built by the JS side with the exact same
-// code as the CPU demo's buildKernel(), already normalized by its sum and already
-// zeroed below the 1e-7 tap threshold. Keeping it a texture rather than recomputing
-// quad4() per tap means the weights are bit-identical to the CPU version's, and the
-// tiny kernel stays resident in texture cache.
+// One Lenia step: toroidal convolution, growth function, then eat/wall masking. Direct-sum
+// convolution is the GPU's fast path (every cell an independent thread), replacing the CPU
+// demo's FFT, which was itself forced onto the slow Bluestein path by non-power-of-2 board
+// sizes. The kernel texture is built by the same arithmetic as the CPU's buildKernel()
+// (normalized, 1e-7-thresholded), so weights match bit for bit.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl
@@ -38,8 +30,7 @@ void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     int W = uSize.x, H = uSize.y;
 
-    // Toroidal tap sum. dy/dx never exceed the kernel radius (18) and the board is
-    // always >= 100 wide, so wrapping is a single add/subtract, not a modulo.
+    // Toroidal tap sum -- taps never exceed the kernel radius, so wrapping is one add/subtract.
     float conv = 0.0;
     for (int dy = -uR; dy <= uR; dy++) {
         int y = p.y + dy;
@@ -63,9 +54,8 @@ void main() {
     // second channel's state texture instead of the fixed wall mask.
     if (uEatEnabled != 0 && texelFetch(uEat, p, 0).r > uEatThreshold) v = 0.0;
 
-    // Wall collision, applied after the step exactly as applyWallCollision() does --
-    // so mass an action dropped into a wall is still visible to this step's
-    // convolution, and only then removed.
+    // Wall collision, applied after the step so mass an action dropped into a wall is still
+    // visible to this step's convolution, and only then removed.
     if (uWallEnabled != 0 && texelFetch(uWall, p, 0).r > 0.5) v = 0.0;
 
     fragColor = vec4(v, 0.0, 0.0, 1.0);

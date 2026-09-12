@@ -1,21 +1,9 @@
 #version 300 es
-// Stage 1 of the center-of-mass reduction: each output texel sums one block of the
-// board into the five accumulators the toroidal circular mean needs.
-//
-// The CPU demo walked the whole board every step to find the soliton. Reading the
-// board back to do that here would defeat the point of running the sim on the GPU, so
-// the sum happens on the GPU and only the 1x1 result of stage 2 ever crosses back.
-// Output is a fixed 16x16 grid regardless of board size (uBlock = ceil(N/16)), which
-// keeps stage 2's serial sum at a constant 256 texels.
-//
-// The per-block loops below run uBlock times, bounded by the uniform rather than by a
-// constant -- same as sim.glsl looping on uR. They used to be capped at 16 iterations,
-// which silently dropped every cell past the first 16 of a block and so limited the
-// board to a 16*16=256px edge; the wide 5x10 maze needs 500, i.e. uBlock=32.
-// Total work is O(W*H) either way -- a bigger board just means fewer, longer-running
-// threads out of the fixed 256, which a GPU absorbs without trouble.
-//
-// Five accumulators do not fit one RGBA target, hence the two attachments.
+// Stage 1 of the CoM reduction: each texel sums one board block into the five toroidal-mean
+// accumulators, so the CPU never sweeps the board itself (only stage 2's 1x1 result crosses
+// back). Output is a fixed 16x16 grid regardless of board size (uBlock = ceil(edge/16)); the
+// per-block loop bound is the uniform, not a constant 16 -- a fixed 16 used to silently cap the
+// board edge at 256px. Two attachments because five accumulators don't fit one RGBA target.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump -- see action.glsl

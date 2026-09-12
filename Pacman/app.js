@@ -2,58 +2,48 @@
 // ============================================================================================
 //  CARL maze demo, WebGL edition.
 //
-//  Same demo as CARL/maze_playground.html and the same trained policy; what changed is where
-//  the Lenia simulation runs. The CPU version stepped the automaton in JS with an FFT-based
-//  convolution, swept the whole board each step to locate the soliton, and painted the canvas
-//  a pixel at a time. All of that is now GPU work in glsim.js. This file keeps the parts that
-//  are genuinely sequential or genuinely CPU-bound: maze generation, episode bookkeeping, the
-//  overlay drawing, the UI, and the policy network itself (onnxruntime-web, WASM).
+//  Same demo and trained policy as CARL/maze_playground.html; what changed is where the Lenia
+//  simulation runs. The CPU version stepped the automaton in JS (FFT convolution, a full-board
+//  sweep for the soliton, per-pixel canvas paint) -- all of that is now GPU work in glsim.js.
+//  This file keeps only what's genuinely sequential or CPU-bound: maze generation, episode
+//  bookkeeping, the overlay, the UI, and the policy network (onnxruntime-web, WASM).
 //
-//  The step order is deliberately identical to the CPU demo's agentStep(), because the policy
-//  is sensitive to it: act on the current board, then step, then locate the soliton, then judge
-//  the episode. What differs is only that locating the soliton and cropping its neighbourhood
-//  happen on the GPU and come back together in a single readback.
+//  Step order matches the CPU demo's agentStep() exactly, since the policy is sensitive to it
+//  (act, step, locate, judge) -- what differs is that locating the soliton and cropping its
+//  neighbourhood happen on the GPU and come back together in one readback.
 // ============================================================================================
 
 // ====================================================================================
 //  URL params and feature switches -- e.g. ?sound=0&dots=0&net=96
 // ====================================================================================
-// "0"/"false" turns a switch off; anything else, or the param being absent, leaves the default.
+// "0"/"false" turns a switch off; anything else, or absence, leaves the default.
 function boolParam(name, def) {
   const v = new URLSearchParams(location.search).get(name);
   return v === null ? def : v !== '0' && v.toLowerCase() !== 'false';
 }
-// Positive integers only -- absent, unparseable or <= 0 all leave the default.
 function intParam(name, def) {
   const v = parseInt(new URLSearchParams(location.search).get(name), 10);
   return v > 0 ? v : def;
 }
-// A whole percentage, 0-100, returned as a fraction. Unlike intParam this accepts 0: for the
-// things it reads, "never" is a setting someone might actually want, not a missing value.
+// A whole percentage, 0-100, as a fraction. Unlike intParam this accepts 0 as a real setting.
 function pctParam(name, def) {
   const v = parseInt(new URLSearchParams(location.search).get(name), 10);
   return v >= 0 && v <= 100 ? v / 100 : def;
 }
-// Sound effects + the death beat. Off: no start jingle (the game begins the instant the soliton
-// spawns instead of waiting on one), no eat_dot chomp, and a death just holds+respawns in silence
-// instead of playing the death jingle first.
 const SOUND_ENABLED = boolParam('sound', true);
-// The pellet (channel-2) soliton field -- its rule, its stamps, its rendering. Off: placeDots()
-// never calls SimGL.setRule2()/uploadState2(), so ch2Kernel stays null and sim.glsl's per-step
-// channel-2 pass and its contribution to the drawn board are both skipped -- only the Pac-Man
-// channel moves.
+// Pellet (channel-2) field. Off: placeDots() never sets a rule, so channel 2's sim pass and its
+// contribution to the drawn board are both skipped -- only Pac-Man's channel moves.
 const DOTS_ENABLED = boolParam('dots', true);
-// The ghost (channel-3) soliton field, same switch shape as the dots. Off: placeGhosts() never
-// calls SimGL.setRule3()/uploadState3(), so ch3Kernel stays null and both halves of the channel
-// are skipped -- its own per-step sim pass, and the eat check that erases Pac-Man where a ghost
-// overlaps him. So this is also the switch for "nothing can kill Pac-Man but himself".
+// Ghost (channel-3) field, same shape as the dots switch. Off: no ghost sim pass and no eat check
+// -- i.e. also the switch for "nothing can kill Pac-Man but himself".
 const GHOSTS_ENABLED = boolParam('ghost', true);
-// Execution provider for the policy net: WebGPU by default (measured faster than WASM on the
-// mobile devices this was tuned on), with 'wasm' listed as a fallback so any op the WebGPU EP
-// doesn't support still lands on wasm. WebGPU can't remove the CPU roundtrip in agentStep() --
-// the sim runs in a separate WebGL2 context with no memory sharing with WebGPU, so the crop
-// still crosses through CPU either way -- but it does speed up the net's own conv work (a real
-// 4x96x96 CNN, not a toy MLP). `?ep=wasm` forces CPU-only, for re-comparing on a new device.
+// Dying still plays out (jingle, pause, respawn) but never costs a life -- for testing deep levels
+// without a game over cutting the run short.
+const GOD_MODE = boolParam('god', false);
+// WebGPU by default for the policy net (faster than WASM on the mobile devices this was tuned
+// on), falling back to wasm per-op. Doesn't remove the CPU roundtrip in agentStep() -- the sim
+// runs in a separate WebGL2 context sharing no memory with WebGPU -- but speeds up the net's own
+// conv work. `?ep=wasm` forces CPU-only, for re-comparing on a new device.
 const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'wasm'
   ? ['wasm'] : ['webgpu', 'wasm'];
 
@@ -63,52 +53,37 @@ const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === '
 const CFG = {
   K: 4,                       // frame stack
   R: 18,                      // kernel radius (fixed -- all 48 training solitons share it)
-  netSize: intParam('net', 96), // the model was trained on 96x96 toroidal grids with no mazes --
-                                // every inference call crops a 96x96 toroidal window centered on
-                                // the soliton's CoM out of the (larger) maze board, so the model
-                                // always sees input matching its training distribution regardless
-                                // of the selected board size, and runs faster to boot. ?net=N
-                                // overrides the window edge for experiments: the policy is fully
-                                // convolutional so a different N still runs, but it is off the
-                                // distribution the model was trained on, and N also sets how much
-                                // the one readback per step has to carry (N*N*4 floats).
+  // The model was trained on 96x96 toroidal grids with no mazes; every inference crops a 96x96
+  // toroidal window centred on the CoM out of the larger board, so input always matches training
+  // regardless of board size. ?net=N overrides this for experiments (fully convolutional, so it
+  // still runs, but off-distribution) and also sets the crop size the one readback carries.
+  netSize: intParam('net', 96),
   dt: 0.1,
-  // Per-channel multipliers on `dt` above -- Pac-Man's own speed and the ghosts' own speed,
-  // independent of each other and of the dots channel (which has none: it never moves). Each
-  // layers under glsim.js's own frightened-window multiplier rather than replacing it: Pac-Man
-  // runs at dt*channel1Speed normally and dt*channel1Speed*1.25 (PACMAN_FRIGHTENED_SPEED) while
-  // any ghost is frightened; a ghost runs at dt*channel3Speed normally and dt*channel3Speed*0.75
-  // (GHOST_FRIGHTENED_SPEED) while it itself is. 1 leaves both exactly as they were.
+  // Per-channel dt multipliers -- Pac-Man's and the ghosts' own speed, independent of each other
+  // and of the stationary dots channel. Each layers under glsim.js's frightened-window multiplier
+  // rather than replacing it (PACMAN_FRIGHTENED_SPEED, GHOST_FRIGHTENED_SPEED); 1 leaves it as is.
   channel1Speed: 1.5,
   channel3Speed: 1.5,
   actionValue: [0.3, -0.3, 0.0],  // add / remove / no-op (output channel order)
   actionRadius: 7,
   windowSize: 4,               // steps of CoM history kept for the "current direction" arrow
   pinnedTime: 0.005,           // 50/10000 -- see meta_direction.json for why this is pinned
-  costMin: 0, costMax: 5,      // true action_cost_range from meta_direction.json -- the model
-                                // normalizes action_cost against this, so it must match training,
-                                // independent of whatever range the UI slider exposes. The slider
-                                // deliberately runs past it (to 10), which normalizes to 2.0 rather
-                                // than clamping at 1.0: clamping would make the top half of the
-                                // slider inert, and rescaling to the slider's own range would
-                                // silently change what every existing cost value means.
+  // The true action_cost_range from meta_direction.json -- the model normalizes against this, so
+  // it must match training regardless of the UI slider's own range. The slider deliberately runs
+  // past costMax (to 10): clamping would make its top half inert, and rescaling to the slider's
+  // own range would silently change what every existing cost value means.
+  costMin: 0, costMax: 5,
   massDeathFraction: 0.3,      // soliton counts as "dead" below this fraction of its spawn mass
   // ...and as blown up above this absolute mass. Lowered from the CPU demo's 1500, which windowing
-  // exposed as unreachable: measured on rule74, an undisturbed soliton peaks at 437 (146% of its
-  // ~298 spawn mass) and one with CARL-sized mass injected every single step plateaus at 679, so
-  // 1500 never fired and a blown-up Pac-Man simply sat there. 1000 clears that forced ceiling by
-  // ~1.5x and the healthy peak by ~2.3x, while staying far under what a real runaway reaches --
-  // it is 6% of the 128-square window's capacity, so genuine unbounded growth crosses it early.
-  // Note the window is not what caps the mass: 96 and 128 windows gave the identical 679 peak, so
-  // this is the growth function's own ceiling, not a clipping artefact.
+  // made unreachable: an undisturbed rule74 soliton peaks at 437 (146% of spawn) and one fed
+  // CARL-sized mass every step plateaus at 679, so 1500 never fired. 1000 clears both peaks with
+  // room to spare while staying well under a real runaway (6% of the 128-window's capacity).
   massExplodeLimit: 1000,
   modelUrl: 'models/agent_direction.onnx',
   solitonsUrl: 'models/solitons_direction.json',
   thumbDir: 'assets/solitons/',        // one PNG per allowed rule, named "<rule name>.png"
-  // The curated subset of update rules this demo exposes, out of the 48 the maze agent was
-  // trained across. The picker renders these in *this* order, five per row, so the leading five
-  // are the ones a first-time visitor sees on the top row: the solitons that survive the maze
-  // most reliably.
+  // Curated subset of the 48 rules the maze agent was trained on, in picker order (five per row,
+  // so the leading five are the ones a first-time visitor sees) -- these survive the maze best.
   allowedRuleNames: [
     'rule73_mu0.2250_s0.0250_R18', 'rule74_mu0.2300_s0.0350_R18', 'rule67_mu0.2800_s0.0410_R18',
     'rule72_mu0.1650_s0.0200_R18', 'rule57_mu0.2350_s0.0360_R18',
@@ -119,66 +94,69 @@ const CFG = {
     'rule46_mu0.2500_s0.0270_R18', 'rule63_mu0.3200_s0.0660_R18',
   ],
   defaultRuleName: 'rule74_mu0.2300_s0.0350_R18',  // or rule73_mu0.2250_s0.0250_R18
-  // The dots channel's rule. One soliton of it is dropped on every '.' cell of the layout; they
-  // then run free under their own growth parameters, with no policy steering them.
+  // Dots channel's rule: one soliton per '.' in the layout, free-running under its own growth,
+  // never steered.
   channel2RuleName: 'rule0_mu0.3800_s0.0700_R18',
-  // Half CFG.R, which shrinks the dots to half size -- see resizeSoliton() in placeDots(): the
-  // pattern is always resampled by exactly channel2R/R, so this is the only number to change.
+  // Half CFG.R, shrinking the dots to half size -- see resizeSoliton() in placeDots(), which
+  // always resamples by exactly channel2R/R.
   channel2R: 9,
-  // The ghost channel's rule. One soliton on every 'M' of the layout, respawned alongside Pac-Man.
-  // Kept at the native CFG.R (unlike the dots) because a ghost is meant to be Pac-Man-sized and to
-  // travel the corridors the way he does, and a Lenia pattern only moves like itself at the radius
-  // it was found at. Free-running: CARL never sees this channel and never steers it.
+  // Ghost channel's rule: one soliton per 'M', respawned alongside Pac-Man. Kept at the native
+  // CFG.R (unlike the dots) since a Lenia pattern only moves like itself at the radius it was
+  // found at, and a ghost should be Pac-Man-sized. Free-running -- CARL never sees or steers it.
   //
-  // Chosen for speed -- a ghost that cannot keep up is not a threat. Measured in a corridor of
-  // this maze, rule74 runs 0.479 px/step against rule73's 0.194, a wider gap than in open space
-  // (0.452 vs 0.270) because rule73 wastes much more of its motion on the ~32deg lean it travels
-  // at, where rule74 leans only ~11deg. It being the same rule as defaultRuleName is deliberate
-  // rather than incidental: it puts the ghost at exactly Pac-Man's own pace on the default pick,
-  // so it closes only when it out-navigates him, not because it simply moves faster.
+  // Chosen for speed: a ghost that can't keep up isn't a threat. Measured in a corridor of this
+  // maze, rule74 runs 0.479 px/step against rule73's 0.194 (rule73 wastes more motion on a wider
+  // lean angle). Matching defaultRuleName is deliberate: it puts the ghost at exactly Pac-Man's
+  // pace on the default pick, so it closes only by out-navigating him.
   channel3RuleName: 'rule74r_mu0.2300_s0.0350_R18',
-  // How often a ghost's turn is a deliberate move toward Pac-Man rather than a roll of the dice --
-  // the difficulty dial. At 0 it wanders and only meets him by accident; at 1 it closes on him at
-  // every junction that offers the option. ?chase=N (a whole percentage, 0-100) to retune.
+  // Difficulty dial: how often a ghost's turn deliberately closes on Pac-Man rather than rolling
+  // the dice. 0 = wanders, 1 = closes whenever a junction allows it. ?chase=N (0-100) to retune.
   chaseBias: pctParam('chase', 0.6),
   easyRuleCount: 5,            // leading entries flagged as easy-to-steer -- one picker row
   actionFadeSeconds: 0.85,     // how long an intervention marker takes to fade out, in sim time
-  // How long a gap with nothing eaten is allowed before the eat_dot_0/1 "waka waka" loop stops.
-  // Measured in real (wall-clock) time, not sim time, since it times a sound rather than the sim.
+  // Wall-clock (not sim) gap with nothing eaten before the eat_dot_0/1 "waka waka" loop stops.
   eatSoundGraceMs: 1000,
-  // The board counts as cleared once the dots channel's live total mass (SimGL.readback().dotsMass,
-  // a real GPU reduction over channel 2 -- see runDotsAnalysis()) falls below this absolute value --
-  // not exactly 0, since a dot mid-erasure can leave a sliver behind that channel 2's own growth
-  // rule would otherwise sustain forever. An absolute mass, not a fraction of the mass placeDots()
-  // spawned with: the dots are themselves free-running Lenia solitons, so their total drifts with
-  // the rule's own growth/decay rather than only ever going down as they're eaten, and a fraction
-  // of a stale spawn-time snapshot doesn't track that.
+  // Board counts as cleared once the dots channel's live total mass (SimGL.readback().dotsMass)
+  // falls below this -- not exactly 0, since a dot mid-erasure can leave a sliver its own growth
+  // rule would sustain forever. An absolute value rather than a fraction of the spawn total: the
+  // dots are themselves free-running solitons, so their total drifts with growth/decay rather
+  // than only falling as they're eaten.
   dotsWinMass: 0.1,
-  // A dot counts as eaten, and scores, the step the channel-2 mass left in its own window (see
-  // placeDots() and dotsites.glsl) drops below this fraction of what that window held when stamped.
-  // The margin is wide both ways, measured on a CPU mirror of sim.glsl: an untouched dot never
-  // falls below ~80% over its ~52-step breathing cycle, nor does one Pac-Man only grazes, while one
-  // he bites into dissolves the rest of the way to exactly 0 within a few steps.
+  // A dot scores the step its own window (dotsites.glsl) drops below this fraction of what it
+  // held at stamping. Wide margin either way (CPU-mirror measurement): an untouched or grazed dot
+  // never falls below ~80% over its ~52-step breathing cycle, while a bitten one dissolves to 0
+  // within a few steps.
   dotGoneFraction: 0.4,
-  // How long a power pellet's frightened window stays open, in wall-clock ms -- same convention as
-  // eatSoundGraceMs: about player-perceived time, not sim steps, so it doesn't scale with sim
-  // speed. Eating another pellet while already frightened resets the clock rather than stacking.
+  // How long a power pellet's frightened window stays open, wall-clock ms (player-perceived time,
+  // so it doesn't scale with sim speed). A second pellet eaten mid-window resets rather than stacks.
   frightenedDurationMs: 15000,
+  // Bonus fruit: a bonus dot appears on Pac-Man's spawn tile the moment the level's dots-eaten
+  // fraction crosses each entry of bonusFruitThresholds -- twice a level at the defaults (30%,
+  // 70%) -- worth BONUS_FRUIT_POINTS[level-1] instead of the usual 10. Left uneaten for
+  // bonusFruitTimeout steps, it disappears instead (the next threshold, if any, still arms in its
+  // own time -- see updateBonusFruit()). Configurable -- just change the numbers.
+  bonusFruitThresholds: [0.3, 0.7],
+  bonusFruitTimeout: 700,
 };
+// Pickup distance from Pac-Man's own centre of mass -- his kernel radius (CFG.R), since the fruit
+// is picked up on contact rather than dissolved like an ordinary dot (see updateBonusFruit()).
+const BONUS_FRUIT_RADIUS = CFG.R;
 const MA = CFG.actionValue[0]; // action magnitude (0.3)
+// Keyed by level (1-9, i.e. index level-1) rather than by which of a level's two fruits it is --
+// see updateBonusFruit(). Array.from(), not a plain string split: every one of these is outside
+// the BMP (a surrogate pair in UTF-16), so [...str]/split('') would cut them in half.
+const BONUS_FRUIT_EMOJIS = Array.from('🍊🍎🍒🍓🍉🍭🍄🍩🍖');
+const BONUS_FRUIT_POINTS = [100, 100, 100, 200, 500, 700, 1000, 2000, 5000];
 
-// Board palette, 0-255. All of these go to draw.glsl as uniforms, so changing them here is the
-// only edit needed: the board ramps from `background` at mass 0 to `soliton` at mass 1, channels
-// 2 and 3 are laid over that in `soliton2`/`soliton3`, and wall cells are painted flat in `wall`.
+// Board palette, 0-255, passed to draw.glsl as uniforms: background->soliton is the mass 0->1
+// ramp, channels 2/3 layer over it as soliton2/soliton3, walls paint flat.
 const COLORS = {
   soliton:    [255, 221, 51],   // Pac-Man yellow
   soliton2:   [255, 255, 255],  // ordinary dots, in the free-running channel-2 field
   pellet:     [255, 255, 0],    // power pellets, same field -- see placeDots()'s power mask
-  soliton3:   [255, 40, 40],    // fallback for ghost mass with no owner recorded -- arcade red,
-                                // the one hue that reads as danger against the yellow and blue
-  // One per ghost, in spawn order, cycled if there are more ghosts than colours. Which one applies
-  // to a pixel is recorded in the composited texture by ghostblit.glsl, so it stays exact even
-  // where two ghosts' tiles overlap in board space.
+  soliton3:   [255, 40, 40],    // fallback for ghost mass with no owner recorded (arcade red)
+  // One per ghost, in spawn order, cycled if there are more ghosts than colours. ghostblit.glsl
+  // records which one owns each pixel, so it stays exact even where tiles overlap.
   ghosts: [
     [255,  40,  40],            // Blinky red
     [ 90, 160, 255],            // Inky blue
@@ -198,15 +176,13 @@ const COLORS = {
 // ====================================================================================
 //  Simulation state
 //
-//  Note what is *not* here any more: the board array, the frame stack, the kernel taps and the
-//  FFT scratch buffers. The board lives in GPU textures and the frame stack is a ring of them;
-//  the only board-sized array left on this side is the wall mask, which is generated once per
-//  maze and uploaded.
+//  What's not here any more: the board array, frame stack, kernel taps, FFT scratch -- the board
+//  lives in GPU textures. The only board-sized array left here is the wall mask, generated once
+//  per maze and uploaded.
 // ====================================================================================
-// Wide board: 5 rows x 11 columns of maze cells. 550x250 is exactly 11:5, so the pixel aspect
-// matches the tile grid and both axes land on ~40px cells (see the MAZE_LAYOUT comment below).
-// There is no board-size control -- the cell count is fixed by the layout, and any other size
-// just starves the corridors.
+// 5 rows x 11 columns of maze cells; 550x250 is exactly 11:5 so both axes land on ~40px cells
+// (see MAZE_LAYOUT below). No board-size control -- the layout fixes the cell count, and any
+// other size just starves the corridors.
 const BOARD_H = 250, BOARD_W = 550;
 let H = BOARD_H, W = BOARD_W, N = H * W;
 let mu = 0.24, sig = 0.024, betas = [1.0, 0.5];
@@ -215,121 +191,106 @@ let maze = { start: [0, 0] };
 let dir = [0, 1];                             // current target direction (dy,dx), unit length
 let comHistory = [[0, 0], [0, 0], [0, 0], [0, 0]];
 let lastCoM = null, initialMass = 0;
-// The most recent crop readback, channel-packed (frame k in channel k). Held by reference: the
-// engine reuses one buffer, and it is always consumed into a tensor before the next readback
-// overwrites it.
+// Most recent crop readback, channel-packed. Held by reference (the engine reuses one buffer),
+// always consumed into a tensor before the next readback overwrites it.
 let lastCrop = null;
 let steps = 0, actions = 0, solitonDead = false;
 let courseChanges = 0;          // target direction changes the user made this episode
-// The pending auto-respawn from a death, so a manual Restart/New Maze/etc. during that gap can
-// cancel it -- otherwise it would fire a second, unwanted respawn on top of the manual one.
+// Pending auto-respawn from a death, so a manual Restart/etc. during the gap can cancel it.
 let deathTimer = 0;
 let levelWon = false;
-// Game-over lives, shown as 💛 in the title row (see render()). Reset only on a genuine new game
-// (placeSoliton()'s `resetLives` -- Restart, maze toggle, soliton picker, initial load, and the
-// full restart handleDeath() falls back to once lives run out), not on the ordinary death-respawn
-// in between (which is what makes them count down across deaths). Clearing the board carries the
-// life count into the next board rather than resetting it, and adds one on top (capped at
-// MAX_LIVES) as the reward for the win -- see handleWin().
+// Shown as 💛 in the title row. Reset only on a genuine new game (Restart, maze toggle, soliton
+// picker, initial load, or game-over), not on an ordinary death-respawn (so they count down
+// across deaths). A win carries the count into the next board and adds one, capped at MAX_LIVES.
 const STARTING_LIVES = 3;
 const MAX_LIVES = 5;
 let lives = STARTING_LIVES;
-// The level system: level N spawns the maze's ghosts numbered 1..N (see placeGhosts()), so the
-// starting level is also the starting ghost count. Advances by one every win (see
-// respawnAfterWin()) and resets on a genuine new game the same way lives do (placeSoliton()'s
-// `resetLevel`, defaulting to `resetLives`) -- not on an ordinary death-respawn or on clearing the
-// board, which is what makes the game harder round over round instead of every death. ?level=N to
-// start somewhere other than 3 -- also what a reset falls back to, so it holds across a Restart.
+// Level N spawns the maze's ghosts numbered 1..N, so the starting level is the starting ghost
+// count (see placeGhosts()). Advances by one per win, resets on a genuine new game same as lives
+// -- not on a death-respawn or a win -- so the game gets harder round over round, not per death.
+// ?level=N to start elsewhere (also what a reset falls back to).
 const STARTING_LEVEL = intParam('level', 3);
 let level = STARTING_LEVEL;
-// The pending auto-restart from clearing the board, same shape as deathTimer.
-let winTimer = 0;
-// Frightened is tracked per ghost (see newGhost()'s `frightened` field), not as one global mode:
-// eating a pellet marks every currently-not-already-frightened ghost, but a ghost that then gets
-// eaten and respawns (respawnGhost() -> newGhost()) ends its own window immediately and comes back
-// chasing, while its packmates keep counting down theirs. frightenedTimer is the single shared
-// duration they all started from -- cleared and restarted on every pellet eaten while it's already
-// running, so a second pellet extends the window rather than stacking a second one behind it.
+// The maze layout's highest numbered ghost spawn (see MAZE_LAYOUT) -- clearing this level already
+// has every ghost in play, so a further level would spawn nothing new. Winning it ends the run
+// instead of quietly advancing to an identical board.
+const MAX_LEVEL = 9;
+let winTimer = 0;    // pending auto-restart from clearing the board, same shape as deathTimer
+// Tracked per ghost (newGhost()'s `frightened`), not as one global mode: a pellet marks every
+// not-already-frightened ghost, but one eaten and respawned ends its own window immediately while
+// its packmates keep counting down theirs. frightenedTimer is the shared duration, restarted on
+// every pellet eaten so a second pellet extends the window rather than stacking one behind it.
 let frightenedTimer = 0;
-// Set by frightenedTimer's callback, which fires between agentStep() calls with no fresh `rb`
-// (ghost tile-local positions) to turn ghosts with -- it only flags that the window has ended.
-// updateFrightened() is what actually reacts to it, on whichever step notices it next, turning
-// every *still*-frightened ghost back toward Pac-Man and clearing the flag (an already-normal one,
-// from an earlier respawn, is left alone -- it ended its own window already).
+// Set by frightenedTimer's callback (no fresh readback there to turn ghosts with) -- just flags
+// the window ended. updateFrightened() reacts on the next step it notices, turning every *still*-
+// frightened ghost back toward Pac-Man (one already normal from an earlier respawn is untouched).
 let frightenedExpired = false;
-// True while the sim holds for the eat_ghost.wav jingle -- set by handleGhostEaten(), cleared once
-// the sound actually finishes (or fails to play at all). Checked in loop() alongside
-// solitonDead/levelWon; unlike those two this one has no timer of its own, since it's the sound's
-// own 'ended' event that ends the hold.
+// True while the sim holds for the eat_ghost.wav jingle -- set by handleGhostEaten(), cleared by
+// the sound's own 'ended' event (unlike solitonDead/levelWon this has no timer of its own).
 let ghostEatPause = false;
-// Score -- persists across level wins and death respawns within one game, and resets only on a
-// genuine new game (placeSoliton()'s `resetLives`, same as lives). Every dot is 10 points and every
-// power pellet 50, awarded once per dot, the step its own spot on the board is found empty
-// (rb.dotSites, see CFG.dotGoneFraction). Not counted off the mass erased under Pac-Man's pixels
-// (rb.eaten): a dot is a Lenia soliton, and the part of a bitten one he never covered dissolves on
-// its own afterwards, so erased mass came to only 25-70% of a dot and many never added up to a
-// score. Not off the dots channel's total mass either: every dot breathes +-15% in phase with every
-// other, so the total swings by ~15 dots' worth.
+// Floating "200" (etc.) shown where the ghost died, live for exactly as long as ghostEatPause --
+// set alongside it in handleGhostEaten(), cleared alongside it too. {r, c, text} or null.
+let ghostEatPopup = null;
+// Bonus fruit currently on the board, or null -- {r, c, emoji, points, spawnStep}, always stamped
+// at maze.start. bonusFruitThresholdIdx is which of CFG.bonusFruitThresholds is still armed (0,
+// then 1, then done for the level) -- it resets only where dotSites itself does, in placeDots(),
+// so a death respawn (which leaves already-eaten dots eaten) doesn't re-arm a threshold the level
+// already passed, and a fresh level's dots do get both thresholds back.
+let bonusFruit = null;
+let bonusFruitThresholdIdx = 0;
+// True while the sim holds for the eat_fruit.wav jingle, same shape as ghostEatPause.
+let fruitEatPause = false;
+// Same idea as ghostEatPopup, for the bonus fruit -- shown where it was picked up.
+let fruitEatPopup = null;
+// Persists across wins and death-respawns, resets only on a genuine new game. 10/dot, 50/pellet,
+// awarded once each (rb.dotSites vs CFG.dotGoneFraction) -- not off mass erased under Pac-Man's
+// pixels (misses what a bitten dot sheds afterward) nor the channel's raw total (swings ~15 dots'
+// worth as every dot breathes in phase).
 let score = 0;
-// One entry per stamp placeDots() made, in the order it handed them to SimGL.setDotSites():
-// {r, c, points, spawnMass (what its window held at stamping), eaten}. Rebuilt only with the dots
-// field itself, so a death respawn keeps the dots already eaten counted.
+// One entry per placeDots() stamp, in SimGL.setDotSites() order: {r, c, points, spawnMass, eaten}.
+// Rebuilt only with the dots field itself, so a death respawn keeps already-eaten dots counted.
 let dotSites = [];
-// Eating a ghost is worth 200, doubling for every next ghost eaten inside the same power pellet's
-// frightened window (200, 400, 800, ...), same as the arcade. Reset to 1 by a fresh power pellet
-// (updateScore(), even one eaten mid-window -- extending the timer resets the combo too) and by
-// every fresh spawn (placeSoliton(), since ghosts always respawn there).
+// 200/400/800/... per ghost eaten within one frightened window, arcade-style. Reset to 1 on a
+// fresh pellet (even mid-window) and on every fresh spawn.
 let ghostChainMultiplier = 1;
-// The eat_dot_0/1 "waka waka" loop. eatActive is true while the pair is alternating; eatToggle
-// picks which of the two plays next; eatDeadline (performance.now()-based) is when it's allowed
-// to stop -- every eaten dot pushes it out by another full CFG.eatSoundGraceMs. The deadline is
-// checked only at the one place a new play is actually started (see playNextEatSound), rather
-// than off a separate timer callback that could fire mid-playback and race a restart -- that is
-// what keeps this to one sample audible at a time.
+// eat_dot_0/1 "waka waka" loop: eatActive while alternating, eatToggle picks which plays next,
+// eatDeadline (wall-clock) is when it's allowed to stop -- pushed out by CFG.eatSoundGraceMs per
+// eaten dot. Checked only where a new play starts (playNextEatSound), not off a separate timer,
+// so at most one sample plays at once.
 let eatActive = false, eatToggle = 0, eatDeadline = 0;
 let running = false, session = null, busy = false, lastMs = 0, lastAction = null, lastQ = null;
-// True from the moment a spawn calls playStartSound() until its jingle actually finishes --
-// covers both "waiting for the first gesture to unlock audio" and "jingle audibly playing".
-// setRunning() refuses to unpause while this is set, so Play/Space/etc. can't cut the intro short.
+// True from playStartSound() until its jingle finishes (covers waiting for the unlocking gesture
+// too). setRunning() refuses to unpause while set, so Play/Space can't cut the intro short.
 let introPlaying = false;
-// Recent interventions, newest last: {r,c,sign,step}. Each marker fades out over
-// CFG.actionFadeSeconds of *simulation* time, so the trail reads the same at any sim speed
-// (and freezes mid-fade rather than vanishing when the run is paused).
+// Recent interventions, newest last: {r,c,sign,step}. Fades over CFG.actionFadeSeconds of *sim*
+// time, so the trail reads the same at any sim speed and freezes rather than vanishes when paused.
 let actionTrail = [];
 let bank = [], currentIndex = 0;
-// Every usable entry in the JSON by name, whether or not the picker offers it. The free-running
-// channels (CFG.channel2RuleName, CFG.channel3RuleName) look their rules up here rather than in
-// `bank`, so a rule can drive the dots or the ghosts without also being a Pac-Man pick.
+// Every usable JSON entry by name, whether or not the picker offers it -- the free-running
+// channels look their rules up here rather than in `bank`.
 let ruleBank = new Map();
 let mazeEnabled = true;
-// Chrome on/off: the control deck and CARL's overlay (direction arrows, intervention discs) hide
-// together, so the board can be watched as a game rather than as an instrumented demo.
+// Chrome on/off: the control deck and CARL's overlay hide together, so the board reads as a game.
 let showOverlay = true;
-// Who intervenes on the soliton, one of 'sometimes' (default), 'always', or 'human'. In 'human'
-// mode CARL's policy is never queried: the sim still advances, but the only actions on the board
-// are the ones the user clicks in. 'sometimes' is the performance mode: CARL is only queried for
-// sometimesWindow steps after an episode starts or after the user steers, then goes idle (no
-// inference, no action) until the next steer -- inference is the expensive part of a step, so this
-// is much cheaper to run than 'always' while looking the same whenever the player is engaged.
+// 'sometimes' (default) queries CARL only for sometimesWindow steps after a spawn/steer, then
+// goes idle -- much cheaper than 'always' since inference is the expensive part of a step, and
+// looks the same whenever the player is actually engaged. 'human': CARL is never queried; the
+// user's own clicks are the only actions.
 let actorMode = 'sometimes';
 let humanActs = false;                 // derived from actorMode === 'human', kept for readability
 let sometimesWindow = 100;             // configurable steps CARL stays active for in 'sometimes' mode
 let sometimesRemaining = 0;            // steps left in the current active window ('sometimes' mode only)
-// The user's queued action, {gx,gy,sign}, or null. At most one is ever held: a step consumes it
-// exactly where agentAct() would have run, so a human turn and a CARL turn are the same turn.
+// User's queued action, {gx,gy,sign}, or null. At most one held: a step consumes it exactly where
+// agentAct() would run, so a human turn and a CARL turn are the same turn.
 let pendingAction = null;
-// The 90deg rotation the soliton spawns with. Rolled once per maze, not per spawn, so Respawn
-// re-runs the same starting configuration instead of quietly changing the soliton's heading.
+// 90deg spawn rotation, rolled once per maze (not per spawn) so Respawn repeats the same heading.
 let spawnRotation = 0;
 let sps = 60, stepAcc = 0, lastT = 0, measSps = 0, rateSteps = 0, rateTime = 0;
-// A batch of steps yields once it has spent this much of the frame, rather than running a fixed
-// number of steps. The fixed cap this replaces (16) was sized for a step that is pure GPU work,
-// which is what a step costs while *you* are acting. With CARL acting every step also pays for an
-// inference -- tens of milliseconds on a phone -- so 16 of them ran back to back for most of a
-// second, and since render() only lands after the batch, the board visibly froze between repaints
-// even though the step rate itself was tolerable. Budgeting by wall-clock time instead spends the
-// same frame on however many steps actually fit: the sim runs slower on a slow device rather than
-// in lurches, and the rate readout reports what was really achieved. ?budget=N to tune on a device.
+// A batch yields once it's spent this much of the frame, rather than a fixed step count. The
+// fixed cap this replaces (16) assumed pure-GPU steps; with CARL acting, each also pays an
+// inference (tens of ms on a phone), so 16 back to back could freeze the board for most of a
+// second before the next repaint. Budgeting by wall-clock time instead runs however many steps
+// fit, so a slow device just runs slower rather than in lurches. ?budget=N to tune per device.
 const FRAME_BUDGET_MS = intParam('budget', 10);
 const MAX_TRAIL = 48;            // hard cap on the intervention trail (the fade usually ends it first)
 
@@ -341,14 +302,13 @@ const sndDeath = new Audio('assets/sound/death_0.wav');
 const sndIntermission = new Audio('assets/sound/intermission.wav');
 const sndFright = new Audio('assets/sound/fright.wav');
 const sndEatGhost = new Audio('assets/sound/eat_ghost.wav');
+const sndEatFruit = new Audio('assets/sound/eat_fruit.wav');
 const sndEat = [new Audio('assets/sound/eat_dot_0.wav'), new Audio('assets/sound/eat_dot_1.wav')];
-// Registered once, permanently, rather than per-play: 'ended' only fires on a natural finish
-// (never from stopEatingSound()'s pause()), so a one-shot listener re-added on every play would
-// pile up whenever a play gets interrupted before it can fire and be removed -- e.g. a death or
-// Restart landing mid-note -- and each stale listener left behind means one more concurrent call
-// into playNextEatSound() the next time that same element does finish naturally, which is exactly
-// what plays two tracks over each other. playNextEatSound() itself is what decides whether to
-// keep going, so this listener just hands control back to it every time.
+// Registered once, not per-play: 'ended' only fires on a natural finish (never from
+// stopEatingSound()'s pause()), so a one-shot listener re-added each play would pile up whenever
+// a play gets interrupted mid-note (a death, a Restart) -- each stale listener left behind means
+// an extra concurrent call the next time that element finishes naturally, playing two tracks at
+// once. playNextEatSound() itself decides whether to keep going.
 sndEat.forEach(snd => snd.addEventListener('ended', playNextEatSound));
 
 // ====================================================================================
@@ -362,76 +322,46 @@ function toroidalDelta(ny, nx, oy, ox) {
 }
 
 // ====================================================================================
-//  Maze layout -- a fixed, hand-authored maze, replacing the randomized-DFS generator the
-//  CARL demo shipped with. The geometry it produces is the same one that generator built:
-//  wide open *cells* (cw px) separated by thin *walls* (ww px), i.e. walls live between
-//  cells rather than occupying cells of their own. Only the connectivity is now authored
-//  instead of rolled.
+//  Maze layout -- fixed, hand-authored (replacing the randomized-DFS generator the CARL demo
+//  shipped with), but the same geometry: wide open *cells* separated by thin *walls* between
+//  them. Written on a doubled grid, the standard maze-ASCII form: an RxC maze is (2R+1)x(2C+1)
+//  characters, odd/odd indices are cells ((row,col) -> cell ((row-1)/2, (col-1)/2)), even/even
+//  are corner posts (always wall), and everything else is a wall slot between two cells.
 //
-//  That in-between geometry is why the layout is written on a doubled grid: an RxC maze is
-//  (2R+1) x (2C+1) characters, the standard maze-ASCII form, which is also the shape real
-//  Pac-Man level data takes -- so the 5x11 maze below is authored as 11x23 characters.
+//  '+' and '-' are pure authoring aliases for '.' and ' ', kept so a hand-edited row still reads
+//  as ASCII art. '^' is open floor too, except a ghost standing on it is sent north rather than
+//  choosing for itself -- what gives a centre room a one-way exit.
 //
-//        col:  0 1 2 3 4 5 6 7 8 9 10        odd index  -> cell
-//    row 0     # # # # # # # # # # #         even index -> the wall slot between two cells
-//    row 1     # C . . . . . . . . #         (row,col) both odd  -> cell (r,c) = ((row-1)/2, (col-1)/2)
-//    row 2     # . # # # . # # # . #         both even           -> corner post, always wall
+//  '.'/'+' places a dot and 'O' a power pellet (both a channel-2 soliton, see placeDots()) on
+//  either a cell slot (centred on the tile) or a wall slot (centred in the gap, like a pellet in
+//  a corridor) -- ignored on a corner post, which is always wall.
 //
-//  Two characters are pure authoring aliases, there so a hand-edited row stays readable as ASCII
-//  art: '+' means exactly '.', and '-' means exactly ' '. Nothing reads them differently. '^' is
-//  a third of the same shape -- open floor, exactly like '-' -- except to a ghost standing on it,
-//  which is sent north instead of choosing for itself. That is what lets a centre room have a
-//  one-way exit: without it a ghost can rattle around inside a pocket indefinitely.
+//  On a cell slot: 'C' Pac-Man's spawn · '1'-'9' a numbered ghost's spawn (placeGhosts() spawns
+//  ghosts numbered at or below the current `level`) · '#' solid cell · 'O' a power pellet (same
+//  soliton/rule as a dot, just recoloured -- see placeDots()'s power mask) · anything else open
+//  floor (a 'C' or digit is open floor too, just marking what spawns there).
+//  On a wall slot: '#'/'|' wall · anything else an open passage -- including on the outer ring,
+//  since the sim wraps toroidally regardless of walls, so an opening there is a real side tunnel
+//  to the opposite edge, not a dead end.
 //
-//  '.' (or '+') places one dot, and 'O' one power pellet -- both a channel-2 soliton, see
-//  placeDots() -- wherever they appear, cell slot or wall slot alike: on a cell slot it centers on
-//  the tile, on a wall slot it centers on the gap between the two tiles either side (a pellet
-//  sitting in a corridor, same as real Pac-Man). A '.'/'+'/'O' on a corner post (both indices even)
-//  is impossible to satisfy -- corner posts are always wall -- and is ignored.
-//
-//  Characters:
-//    on a cell slot:  'C' Pac-Man's spawn · '1'-'9' a numbered ghost's spawn (see placeGhosts()
-//                     and CFG/`level` below -- the current level only spawns ghosts numbered at or
-//                     below it) · '#' solid (filled) cell · 'O' a power pellet -- same channel-2
-//                     soliton as a '.'/'+' dot, under the same shared rule, just recoloured (see
-//                     placeDots()'s power mask): the rule fixes one equilibrium size for everything
-//                     in that channel, so a bigger *stamp* would just relax back down to ordinary
-//                     dot size rather than stay distinct · anything else (' ', '-', '^') is open
-//                     floor, no dot. 'C' and a digit are open floor too; they only mark what spawns
-//                     on the tile.
-//    on a wall slot:  '#' (or '|') wall · anything else (' ', '-', '^', '.', '+', 'O') is an open
-//                     passage between the two neighbouring cells -- including on the outer
-//                     ring (row/col 0 and row/col 2R/2C): the sim wraps toroidally regardless
-//                     of walls, so an opening there is a real Pac-Man-style side tunnel to the
-//                     opposite edge, not a dead end. Corner posts (both indices even, e.g.
-//                     (0,0)) are always wall, on the border same as in the interior.
-//
-//  Sizing: cw is derived from the board so the maze always fills it -- so the *layout* fixes
-//  how many cells there are, and the board size fixes how many pixels each one gets. Keep cw
-//  above the soliton's width or it clips the walls on every turn: the curated solitons run
-//  30-46px across (models/solitons_direction.json, rule58 is the 46px outlier). The 5x11 maze
-//  on the 550x250 board lands at cwX=40, cwY=39 -- near enough square, with wall thickness
-//  matching CARL-WebGL's original generator (see MAZE_WW below). Solitons wider than cw are
-//  clipped to fit -- see placeSoliton().
+//  Cell width (cw) is derived from the board so the maze always fills it, so keep cw above the
+//  soliton's width (30-46px, models/solitons_direction.json) or turns clip it. The 5x11 maze on
+//  the 550x250 board lands at cwX=40, cwY=39, wall thickness matching the old generator (see
+//  MAZE_WW). Solitons wider than cw are clipped to fit -- see placeSoliton().
 // ====================================================================================
 const MAZE_WALL_CHARS = '#|';
-// The four headings, in the order rotate90()'s k uses, so (k+1)%4 is a right turn and (k+3)%4 a
-// left one, and the difference between two headings is the number of quarter turns between them.
-// That *relative* part is exact and rule-independent. What is not is the absolute part: which way
-// a freshly stamped pattern travels depends on how its bank entry happens to be drawn -- rule74's
-// canonical heading is right, rule73's is left. So the ghost's heading is never assumed from the
-// rotation it was stamped with; it is read back off its own motion (see ghostHeading()).
+// Headings in rotate90()'s k order, so (k+1)%4 is a right turn, (k+3)%4 a left one, and the
+// difference between two headings is the quarter turns between them -- exact and rule-independent.
+// The *absolute* heading a freshly stamped pattern travels is not (rule74's canonical heading is
+// right, rule73's is left), so a ghost's heading is always read off its own motion, never assumed
+// from its stamp rotation -- see ghostHeading().
 const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-// Cells the ghost is allowed to change direction on. These are the same characters that already
-// mean "dot" ('+'), "open" ('-', '^'), "ghost spawn" ('1'-'9') and "power pellet" ('O'), doing
-// double duty as turn markers -- which costs nothing, because in this layout they land on exactly
-// the 32 corner/junction cells and on no straight corridor cell at all.
+// Cells a ghost may turn on -- the same "dot"/"open"/"ghost spawn"/"power pellet" characters
+// doing double duty, since in this layout they land on exactly the 32 corner/junction cells.
 const GHOST_TURN_CHARS = '+-O^123456789';
-// ...and the one that does not leave the choice open: a ghost reaching it is sent north.
-const GHOST_NORTH_CHAR = '^';
-// Wall thickness and outer border, in pixels -- matches the randomized generator this replaced
-// (CARL-WebGL's original ww=9, edgeWall=9). At 5x5 cells that leaves cw=39, tighter than the
-// widest curated soliton (46px, models/solitons_direction.json) -- see placeSoliton()'s clip.
+const GHOST_NORTH_CHAR = '^';   // the one that doesn't leave the choice open -- always sent north
+// Wall thickness and outer border, matching the old generator (ww=9, edgeWall=9). At 5x5 cells
+// that leaves cw=39, tighter than the widest curated soliton (46px) -- see placeSoliton()'s clip.
 const MAZE_WW = 9, MAZE_EDGE = 9;
 
 // 5 rows x 11 cols, mirrored left-to-right about the centre column: the right half is the left
@@ -463,16 +393,14 @@ function layoutMaze(layout, bh, bw, enableWalls) {
   const cwX = Math.max(1, Math.floor((bw - 2 * MAZE_EDGE - (cols - 1) * MAZE_WW) / cols));
   const cwY = Math.max(1, Math.floor((bh - 2 * MAZE_EDGE - (rows - 1) * MAZE_WW) / rows));
   const stepX = cwX + MAZE_WW, stepY = cwY + MAZE_WW;
-  // Whatever the floor()s above leave over is spread as extra margin, keeping the maze centered.
+  // Leftover from the floor()s above is spread as extra margin, keeping the maze centered.
   const offX = MAZE_EDGE + Math.max(0, Math.floor((bw - 2 * MAZE_EDGE - (cols * stepX - MAZE_WW)) / 2));
   const offY = MAZE_EDGE + Math.max(0, Math.floor((bh - 2 * MAZE_EDGE - (rows * stepY - MAZE_WW)) / 2));
   const cellTop = r => offY + r * stepY, cellLeft = c => offX + c * stepX;
 
-  // Pixel centre of a slot on one axis, whatever its parity: an odd index is a cell and resolves
-  // to that cell's middle; an even index is the gap in front of cell i/2 and resolves to the
-  // middle of that gap -- the outer margin at the two ends, the wall slot everywhere else. Used
-  // only for dots -- walls and the spawn stay confined to their own slot parity, as documented
-  // above.
+  // Pixel centre of a slot on either parity: odd index -> that cell's middle, even index -> the
+  // middle of the gap in front of cell i/2. Used only for dots -- walls and the spawn stay
+  // confined to their own slot parity.
   const slotCenter = (i, cellStart, cw, count, span) => {
     if (i & 1) return cellStart((i - 1) >> 1) + (cw >> 1);
     const k = i >> 1;
@@ -483,8 +411,7 @@ function layoutMaze(layout, bh, bw, enableWalls) {
   const gridPos = (gr, gc) =>
     [slotCenter(gr, cellTop, cwY, rows, bh), slotCenter(gc, cellLeft, cwX, cols, bw)];
 
-  // Same carve-out-of-solid approach as the generator this replaces: start all wall, open up
-  // the cells, then open the passages between them.
+  // Carve-out-of-solid: start all wall, open up the cells, then open the passages between them.
   const wallArr = new Uint8Array(bh * bw).fill(enableWalls ? 1 : 0);
   const carve = (y0, x0, y1, x1) => {
     y0 = Math.max(0, y0); x0 = Math.max(0, x0); y1 = Math.min(bh, y1); x1 = Math.min(bw, x1);
@@ -500,16 +427,12 @@ function layoutMaze(layout, bh, bw, enableWalls) {
     if (isWall(ch)) continue;                                   // solid cell: leave it filled
     if (enableWalls) carve(cellTop(r), cellLeft(c), cellTop(r) + cwY, cellLeft(c) + cwX);
   }
-  // Sorted by id, not left in the row-major scan order above -- ghostCells.map(cellCenter) below
-  // feeds maze.ghosts to placeGhosts() in this order, and that order is what fixes which array
-  // index (and so which colour, see render()'s ghostColors) a given numbered ghost always gets,
-  // regardless of which levels include it.
+  // Sorted by id (not scan order): this fixes which array index -- and colour, see render() --
+  // a given numbered ghost always gets, regardless of which levels include it.
   ghostCells.sort((a, b) => a.id - b.id);
 
-  // Dots and power pellets are read off the whole doubled grid, cell slots and wall slots alike,
-  // since '.'/'+'/'O' are all valid on either (see the layout comment above). Kept as two separate
-  // lists rather than one tagged list: placeDots() stamps them with the same soliton and rule, so
-  // there is nothing a caller would do differently per-entry except which list it came from.
+  // Dots/pellets are read off the whole doubled grid, cell and wall slots alike. Two separate
+  // lists rather than one tagged list, since placeDots() stamps both the same way regardless.
   const dotPos = [], powerPos = [];
   for (let gr = 0; gr < gh; gr++) for (let gc = 0; gc < layout[gr].length; gc++) {
     const ch = at(gr, gc);
@@ -518,19 +441,15 @@ function layoutMaze(layout, bh, bw, enableWalls) {
     (ch === 'O' ? powerPos : dotPos).push(gridPos(gr, gc));
   }
   if (enableWalls) for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-    // Only the gap itself is carved, not the union of the two cells -- so a passage next to a
-    // solid cell opens the connector without also hollowing the cell out.
+    // Only the gap itself is carved, not the union of the two cells, so a passage next to a
+    // solid cell opens the connector without hollowing the cell out.
     if (c + 1 < cols && !isWall(at(2 * r + 1, 2 * c + 2)))
       carve(cellTop(r), cellLeft(c) + cwX, cellTop(r) + cwY, cellLeft(c + 1));
     if (r + 1 < rows && !isWall(at(2 * r + 2, 2 * c + 1)))
       carve(cellTop(r) + cwY, cellLeft(c), cellTop(r + 1), cellLeft(c) + cwX);
   }
-  // The outer ring of wall slots (row/col 0 and row/col gh-1/gw-1) works the same way -- an
-  // open one carves its cell's gap all the way out to the physical board edge, through the
-  // MAZE_EDGE margin, rather than to a neighbouring cell (there isn't one). sim.glsl already
-  // wraps the board toroidally regardless of walls, so a corridor opened clear to the edge on
-  // both sides of the board is a real Pac-Man-style side tunnel to the opposite edge, not just
-  // a dead end. Corner posts ((0,0) etc.) are never carved, same as interior ones.
+  // Same idea on the outer ring: an open wall slot there carves clear to the physical board edge
+  // instead of to a neighbour, becoming a real side tunnel since sim.glsl wraps toroidally anyway.
   if (enableWalls) {
     for (let r = 0; r < rows; r++) {
       if (!isWall(at(2 * r + 1, 0))) carve(cellTop(r), 0, cellTop(r) + cwY, cellLeft(0));
@@ -542,24 +461,16 @@ function layoutMaze(layout, bh, bw, enableWalls) {
     }
   }
 
-  // Corner posts are never carved above -- they stay exactly the fixed WW-ish square the initial
-  // fill() left them as, at every grid intersection (interior and border alike). Round each one
-  // down to a circle inscribed in its own box only on the side(s) that face open floor; a side
-  // that instead continues into a solid wall bar is left full square, so that bar's full-width
-  // flat end merges flush with the post rather than butting against a circle that -- being
-  // inscribed in a box exactly as wide as the bar -- would otherwise only touch that bar's edge
-  // at a single tangent point, notching out the rest of the bar's corners right where they meet
-  // the post (visible as a chip/pinch). A corner rounds only when BOTH of its two adjacent sides
-  // are open: that is precisely "elongate the wall into the post by the circle's own radius", since
-  // leaving a solid-facing quadrant untouched is the same as the bar already reaching the post's
-  // centre line, where the inscribed circle is at its full-width equator.
+  // Corner posts stay square from fill() above at every grid intersection. Round each one to an
+  // inscribed circle, but only on the side(s) that face open floor -- a side facing a solid wall
+  // bar stays square so the bar's flat end merges flush with the post instead of the circle
+  // notching a chip out of its corner. A corner rounds only when BOTH adjacent sides are open.
   if (enableWalls) for (let i = 0; i <= rows; i++) for (let j = 0; j <= cols; j++) {
     const y0 = i === 0 ? 0 : cellTop(i - 1) + cwY, y1 = i === rows ? bh : cellTop(i);
     const x0 = j === 0 ? 0 : cellLeft(j - 1) + cwX, x1 = j === cols ? bw : cellLeft(j);
     const cy = (y0 + y1) / 2, cx = (x0 + x1) / 2, rad = Math.min(y1 - y0, x1 - x0) / 2;
 
-    // Sampled one pixel outside the post's own box, toroidally wrapped (the board wraps, so the
-    // post's true neighbour past a board edge is the opposite edge, not "nothing").
+    // Sampled one pixel outside the post's box, toroidally wrapped (the board wraps).
     const isOpenAt = (y, x) => {
       const yy = ((y % bh) + bh) % bh, xx = ((x % bw) + bw) % bw;
       return wallArr[yy * bw + xx] === 0;
@@ -582,18 +493,16 @@ function layoutMaze(layout, bh, bw, enableWalls) {
   if (!startCell) startCell = [0, 0];
   const cellCenter = ([r, c]) => [cellTop(r) + (cwY >> 1), cellLeft(c) + (cwX >> 1)];
 
-  // Per-cell decision table for the ghosts: the layout character on the cell, which of the four
-  // DIRS headings can leave it, and its pixel centre. Built here because this is the one place
-  // that knows both the layout characters and the pixel geometry they resolve to.
+  // Per-cell decision table for the ghosts: layout character, which DIRS headings can leave it,
+  // and pixel centre -- built here, the one place that knows both the layout and the geometry.
   const cells = [];
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
     const gr = 2 * r + 1, gc = 2 * c + 1;
     const [cy, cx] = cellCenter([r, c]);
     cells.push({ ch: at(gr, gc), open: DIRS.map(([dy, dx]) => !isWall(at(gr + dy, gc + dx))), cy, cx });
   }
-  // Which cell a board pixel falls in, or -1 outside the grid (the outer margin, where a tunnel
-  // wraps). The wall gap past a cell reads as that cell rather than as a slot of its own; callers
-  // gate on distance to the centre anyway, so the gap never satisfies them.
+  // Which cell a board pixel falls in, or -1 outside the grid. The wall gap past a cell reads as
+  // that cell; callers gate on distance to the centre anyway, so the gap never satisfies them.
   const cellIndexAt = (y, x) => {
     const r = Math.floor((y - offY) / stepY), c = Math.floor((x - offX) / stepX);
     return (r >= 0 && r < rows && c >= 0 && c < cols) ? r * cols + c : -1;
@@ -610,10 +519,8 @@ function layoutMaze(layout, bh, bw, enableWalls) {
 }
 
 // ====================================================================================
-//  Soliton placement: exact 90deg rotation (no interpolation) + place its own center of
-//  mass at the maze start, clipped to the spawn cell's cwX x cwY box if the soliton is
-//  wider than that (its edges are empty or near-empty, so the clip costs it little), then
-//  zero out anything that still lands on a wall.
+//  Soliton placement: exact 90deg rotation, centre of mass placed at the maze start (clipped to
+//  the spawn cell's box if wider than it), then anything still on a wall zeroed out.
 // ====================================================================================
 function rotate90(src, h, w, k) {
   k = ((k % 4) + 4) % 4;
@@ -633,11 +540,9 @@ function rotate90(src, h, w, k) {
   return { data: out, h: nh, w: nw };
 }
 
-// Resamples a soliton's pixel data to `scale` of its native size, bilinearly. A Lenia pattern is
-// tied to the kernel radius it was found at -- shrinking just the kernel radius without also
-// shrinking the pattern breaks it (it's no longer the same normalized neighbourhood the pattern
-// self-organized around), so the dots channel's smaller kernel radius (see placeDots()) and this
-// resample always move together, by the same factor.
+// Resamples a soliton to `scale` of its native size, bilinearly. A Lenia pattern is tied to the
+// kernel radius it was found at, so the dots channel's smaller radius (placeDots()) and this
+// resample always move together by the same factor.
 function resizeSoliton(entry, scale) {
   const h = entry.h, w = entry.w;
   const nh = Math.max(1, Math.round(h * scale)), nw = Math.max(1, Math.round(w * scale));
@@ -659,10 +564,9 @@ function resizeSoliton(entry, scale) {
   return { flat, h: nh, w: nw };
 }
 
-// Writes one soliton into `arr` with its own centre of mass landing on (tr,tc). `mask`, if given,
-// gets a 1 written at every cell the stamp actually touches -- how placeDots() tells a power
-// pellet's footprint apart from an ordinary dot's for colouring, since both are the same soliton
-// under the same rule and nothing about the mass values themselves distinguishes one from the other.
+// Writes one soliton into `arr` centred on (tr,tc). `mask`, if given, gets a 1 at every cell the
+// stamp touches -- how placeDots() tells a power pellet's footprint apart from a dot's, since
+// both are the same soliton and rule.
 function stampSoliton(arr, entry, tr, tc, rotation, mask) {
   const rot = rotate90(entry.flat, entry.h, entry.w, rotation);
   let sy = 0, sx = 0, sm = 0;
@@ -671,11 +575,9 @@ function stampSoliton(arr, entry, tr, tc, rotation, mask) {
   }
   const cy = sy / sm, cx = sx / sm;
 
-  // Clip window, centered on the soliton's own centroid, sized to the spawn cell -- anything
-  // farther than half the cell width/height from (cy,cx) is dropped rather than deposited, so a
-  // soliton wider than the cell is trimmed to fit instead of overhanging into a neighbouring
-  // passage (the caller's wall zeroing only catches an overhang that lands on a wall, not one
-  // that lands on an open corridor next door).
+  // Clip window sized to the spawn cell, centred on the soliton's centroid -- trims a soliton
+  // wider than the cell instead of letting it overhang into a neighbouring passage (the wall
+  // zeroing below only catches an overhang that lands on a wall, not on open corridor next door).
   const halfY = maze.cellY / 2, halfX = maze.cellX / 2;
 
   const oy = Math.round(tr - cy), ox = Math.round(tc - cx);
@@ -692,15 +594,15 @@ function stampSoliton(arr, entry, tr, tc, rotation, mask) {
   }
 }
 
-// The dots channel: one soliton on every '.'/'+' of the layout, plus one on every 'O' (a power
-// pellet -- same soliton, same rule, just recoloured; see the mask below), all under a single
-// shared rule. CARL never sees this channel and never acts on it -- it just runs. Rebuilt whenever
-// the agent's soliton is placed, so Restart and toggling the maze restore the full set.
+// The dots channel: one soliton per '.'/'+' plus one per 'O' (power pellet -- same soliton and
+// rule, just recoloured), all free-running under a single shared rule; CARL never touches it.
+// Rebuilt whenever the agent's soliton is placed, so Restart/maze toggle restore the full set.
 function placeDots() {
   dotSites = [];
+  bonusFruitThresholdIdx = 0;   // a fresh dot set gets both bonus-fruit thresholds back
   if (!DOTS_ENABLED) return;
-  // No dots or pellets in the layout means no second channel at all: leaving its rule unset is
-  // what keeps SimGL.step() from paying for a second convolution over an empty board.
+  // No dots or pellets in the layout: leave the rule unset, so SimGL.step() skips the whole
+  // second convolution rather than paying for one over an empty board.
   const entry = (maze.dots.length || maze.power.length)
     ? ruleBank.get(CFG.channel2RuleName) : null;
   if (!entry) return;
@@ -708,8 +610,7 @@ function placeDots() {
 
   const scaled = resizeSoliton(entry, CFG.channel2R / CFG.R);
   const arr = new Float32Array(N);
-  // 1 wherever a power pellet's stamp landed, so draw.glsl can colour it apart from a plain dot --
-  // the two are otherwise the same mass under the same rule (see stampSoliton()).
+  // 1 wherever a power pellet landed, so draw.glsl can colour it apart from a plain dot.
   const power = new Uint8Array(N);
   for (const [r, c] of maze.dots) stampSoliton(arr, scaled, r, c, 0);
   for (const [r, c] of maze.power) stampSoliton(arr, scaled, r, c, 0, power);
@@ -717,10 +618,10 @@ function placeDots() {
   SimGL.uploadState2(arr);
   SimGL.setPowerMask(power);
 
-  // One scoring site per stamp -- see the `score` comment. The window reaches channel2R either
-  // side: a dot's mass stays within ~5px of its centre at channel2R=9, and neighbouring dots sit
-  // ~24px apart, so no window ever picks up a neighbour's mass. The baseline is summed off the
-  // board just uploaded, so a stamp a wall clipped is judged against what it actually started with.
+  // One scoring site per stamp (see `score`). Window reaches channel2R either side: a dot's mass
+  // stays within ~5px of centre and neighbours sit ~24px apart, so no window picks up another
+  // dot's mass. Baseline is summed off the board just uploaded, so a wall-clipped stamp is judged
+  // against what it actually started with.
   const rad = CFG.channel2R;
   const windowMass = (r, c) => {
     let m = 0;
@@ -735,21 +636,13 @@ function placeDots() {
   SimGL.setDotSites(dotSites.map(s => [s.r, s.c]), rad);
 }
 
-// The ghost channel: one soliton on every 'M' of the layout, all under a single shared rule and,
-// like the dots, running free -- CARL neither sees this channel nor steers it. The one thing it
-// does to the game is erase Pac-Man's mass wherever it overlaps him (glsim.js's ghostEat), which
-// is also how a ghost kills: enough of him erased and finishStep() reads the mass below
-// CFG.massDeathFraction and calls it a death, through the ordinary death path.
-//
-// Rebuilt on every spawn, death respawns included, so the ghosts always start back in their house
-// rather than wherever they had drifted to when Pac-Man died.
-//
-// Each ghost is simulated in a private GHOST_WINDOW-square tile rather than in a shared field.
-// Two ghosts in one field are two Lenia solitons, and two Lenia solitons that meet annihilate or
-// blow up; tiles let them pass through each other the way arcade ghosts do. A tile is a window
-// onto the board -- it carries a board origin, so walls still apply -- and it slides by whole
-// cells each step to keep its soliton centred, whole cells because a fractional slide would mean
-// resampling the pattern away. See shaders/ghostsim.glsl.
+// The ghost channel: one soliton per numbered spawn, free-running like the dots -- CARL neither
+// sees nor steers it. It erases Pac-Man's mass on overlap (glsim.js's ghostEat), which is also
+// how a ghost kills: enough erased and finishStep() reads the mass below CFG.massDeathFraction.
+// Rebuilt on every spawn (death respawns included), so ghosts always restart in their house.
+// Each ghost runs in a private GHOST_WINDOW-square tile rather than a shared field -- two ghosts
+// sharing one would be two solitons that annihilate or blow up on contact; tiles let them pass
+// through each other instead. See shaders/ghostsim.glsl.
 const GHOST_WINDOW = SimGL.GHOST_WIN;   // the tile edge the engine allocates
 
 let ghosts = [];              // one entry per 'M'; [] means there are none to judge or steer
@@ -761,32 +654,29 @@ function newGhost(r, c, cellIdx, home = [r, c]) {
     origin: [Math.round(r) - (GHOST_WINDOW >> 1), Math.round(c) - (GHOST_WINDOW >> 1)],
     shift: [0, 0],              // whole cells its tile slides next step, to re-centre it
     cell: cellIdx,
-    // The house is itself a marked cell and the ghost spawns dead on its centre, so without
-    // `turned` it would count as having just passed the centre and turn on its very first step.
+    // Without this the house cell (where it spawns dead-centre) would read as "just passed the
+    // centre" and trigger a turn on its very first step.
     turned: true,
     prevD2: Infinity,           // squared distance to that cell's centre one step ago
     anchor: [r, c],             // CoM on entering `cell` -- the baseline its heading is read from
-    // Stamped in the bank's own orientation, whatever that is, and turned to face the way out of
-    // the house as soon as it has moved far enough to say which way it is going -- a few px, well
-    // short of the ~20 to the wall. Aiming it at stamp time would mean knowing the rule's
-    // canonical heading, which varies by rule.
+    // Stamped in the bank's own orientation and turned to face the house exit once it has moved
+    // far enough to say which way it's going -- aiming it at stamp time would need knowing each
+    // rule's canonical heading, which varies.
     aim: cellIdx >= 0 ? maze.cells[cellIdx].open.indexOf(true) : -1,
     spawnMass: 0,               // 0 disarms this ghost's death check
-    // Per-ghost, not global: a ghost eaten mid-frightened-window respawns here with this false
-    // (see respawnGhost(), which is just this same newGhost()), ending its own window immediately
-    // while its packmates -- untouched -- keep counting down theirs. See updateFrightened().
+    // Per-ghost: a ghost eaten mid-frightened-window respawns with this false, ending its own
+    // window immediately while untouched packmates keep counting down theirs. See updateFrightened().
     frightened: false,
   };
 }
 
-// Builds one ghost's tile: the soliton centred in it, masked against the maze at the board cells
-// the tile currently covers. Returns the tile's mass, which is what arms its death check -- summed
-// here rather than waited for from a readback, so the check is live from the step it appears.
+// Builds one ghost's tile: the soliton centred in it, masked against the maze cells it covers.
+// Returns the tile's mass, which arms its death check immediately rather than waiting on a readback.
 function buildGhostTile(entry, g) {
   const win = GHOST_WINDOW, half = win >> 1;
   const tile = new Float32Array(win * win);
   // stampSoliton() works in board coordinates, so stamp into a board-sized scratch and cut the
-  // tile out of it -- that keeps one implementation of the centring and clipping, not two.
+  // tile out -- one implementation of the centring/clipping, not two.
   const board = new Float32Array(N);
   stampSoliton(board, entry, g.y, g.x, 0);
   let mass = 0;
@@ -808,16 +698,14 @@ function pushGhostTiles() {
 }
 
 function placeGhosts() {
-  // Cleared first, and only refilled once ghosts are actually on the board: an entry's spawnMass
-  // is what arms its death check, so every path that leaves the channel empty must also leave that
-  // disarmed -- otherwise "no ghost" reads as "dead ghost" and respawns on a loop, every step.
+  // Cleared first, refilled only once ghosts are actually on the board -- spawnMass=0 arms
+  // nothing, so any path leaving the channel empty must leave the death check disarmed too, or
+  // "no ghost" reads as "dead ghost" and respawns every step.
   ghosts = [];
   SimGL.setGhostTiles([], []);
   if (!GHOSTS_ENABLED) return;
-  // The level system: level N spawns every numbered ghost at or below N, so level 3 (the starting
-  // level) is ghosts 1-3, level 4 adds ghost 4, and so on -- and a level past the highest number
-  // the layout actually has just spawns all of them, since the filter below has nothing left to
-  // exclude (see updateLevel()'s comment for "if level number is higher than the max ghost").
+  // Level N spawns every numbered ghost at or below N (level 3, the start, is ghosts 1-3); a
+  // level past the layout's highest number just spawns all of them, since nothing's left to exclude.
   const spawns = maze.ghosts.filter(([, , id]) => id <= level);
   const entry = spawns.length ? ruleBank.get(CFG.channel3RuleName) : null;
   if (!entry) return;      // no ghost spawn at or below this level: leave the whole channel unset
@@ -836,21 +724,15 @@ function placeGhosts() {
 // ------------------------------------------------------------------------------------
 //  Ghost steering: 90deg rotations at junctions.
 //
-//  A free-running soliton already travels in a straight line on its own, so the only thing that
-//  needs deciding is what happens at a corner or crossroad. Rather than steer the turn with the
-//  policy -- a second inference every step, which is what a step actually costs -- the ghost's own
-//  tile is rotated a quarter turn about its centre of mass (rotate.glsl). The turn is then instant
-//  and always succeeds, which is also how an arcade ghost turns.
-//
-//  Rotating rather than re-stamping is what keeps the turn from reading as a blink: the pattern
-//  that comes out the far side is the one that went in, mass for mass, not a fresh copy of the
-//  canonical soliton from the bank.
+//  A free-running soliton already travels straight, so the only decision is what happens at a
+//  corner or crossroad. Rather than steer the turn with the policy (a second inference per step),
+//  the ghost's own tile is rotated a quarter turn about its CoM (rotate.glsl) -- instant, always
+//  succeeds, and (unlike re-stamping the canonical pattern) doesn't read as a blink.
 // ------------------------------------------------------------------------------------
-// A ghost's heading, read off how it has actually moved since its anchor rather than inferred from
-// the rotation it was stamped with -- which would be wrong for any rule whose bank entry does not
-// happen to face right. -1 until it has travelled far enough for the answer to be trustworthy:
-// these solitons run at 0.3-0.45 px/step and up to ~30deg off their nominal axis, so a couple of
-// px is not a heading. Six is, and there are ~20 to cross before a heading is needed.
+// A ghost's heading, read off how it has actually moved since its anchor -- inferring it from the
+// stamp rotation would be wrong for any rule not facing right in the bank. -1 until it has
+// travelled far enough (6px) for the answer to be trustworthy at 0.3-0.45px/step and up to ~30deg
+// off-axis.
 const GHOST_HEADING_MIN_PX = 6;
 function ghostHeading(g) {
   const [dy, dx] = toroidalDelta(g.y, g.x, g.anchor[0], g.anchor[1]);
@@ -858,11 +740,9 @@ function ghostHeading(g) {
   return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 0 : 2) : (dy > 0 ? 1 : 3);
 }
 
-// Which of `choices` heads most directly at (sign>0) or away from (sign<0) Pac-Man from (gy,gx).
-// Scored against the toroidal vector to him, so a heading whose corridor leaves by a side tunnel
-// is judged on where it actually comes out rather than on the long way round. -1 if he is not on
-// the board to be chased or fled from. Fleeing reuses the exact same scoring, just negated --
-// "most away" is "least toward" -- so frightened ghosts and normal ones share one function.
+// Which of `choices` heads most directly at (sign>0) or away from (sign<0) Pac-Man from (gy,gx),
+// scored against the toroidal vector to him so a side-tunnel corridor is judged on where it comes
+// out. -1 if he isn't on the board. Fleeing just negates the same score, so both share one function.
 function ghostChaseDir(choices, gy, gx, rb, sign = 1) {
   if (!rb.valid) return -1;
   const [dy, dx] = toroidalDelta(rb.row, rb.col, gy, gx);
@@ -874,28 +754,22 @@ function ghostChaseDir(choices, gy, gx, rb, sign = 1) {
   return best;
 }
 
-// A ghost dies the same two ways Pac-Man does -- dissolved away, or grown past the explode limit --
-// judged against its own spawn mass on the same CFG thresholds. What differs is the consequence:
-// no jingle, no held board, no episode end, and no effect on the other ghosts. It is simply put
-// back in its own house. The explode limit stays meaningful inside a tile, which a window on
-// Pac-Man's channel would not: a 96-square tile holds up to 9216 mass against the 1500 threshold,
-// so a runaway still trips it long before it saturates.
+// A ghost dies the same two ways Pac-Man does -- dissolved, or past the explode limit -- judged
+// against its own spawn mass on the same CFG thresholds. The consequence differs: no jingle, no
+// held board, no episode end, no effect on the other ghosts -- it's just put back in its house.
 function ghostDied(g, s) {
   if (!g.spawnMass) return false;         // not armed -- nothing to have died
   return !s.valid || s.mass > CFG.massExplodeLimit || s.mass < CFG.massDeathFraction * g.spawnMass;
 }
 
 // Puts one ghost back on the board, leaving the rest of the pack running. Rewriting its tile is
-// also the whole of the cleanup after an explosion: a tile has hard edges, so however far the mess
-// spread it is still inside that one tile, and the board-space texture everything downstream reads
-// is rebuilt from the tiles every step rather than accumulated -- so there is nowhere else for
-// debris to have got to, and nothing else to scrub.
+// also the whole cleanup after an explosion: a tile has hard edges, so the mess stays inside it,
+// and the board-space texture is rebuilt from the tiles every step rather than accumulated.
 //
-// Every death -- eaten while frightened or dissolved/exploded on its own -- sends the ghost back to
-// symbol '1''s cell, the one actual ghost house inside the centre room, rather than its own numbered
-// spawn: the numbered cells are scattered around the maze (see MAZE_LAYOUT), not all of them a
-// "house" a ghost could plausibly walk out of again. Its own numbered cell is still passed through
-// as `home`, so a future level filtering it back out and back in still knows where it belongs.
+// Every death sends the ghost back to symbol '1''s cell -- the one actual house in the centre
+// room -- rather than its own numbered spawn, since the numbered cells are scattered around the
+// maze and not all plausibly a "house". Its own numbered cell still passes through as `home`, for
+// a future level filter to know where it belongs.
 function respawnGhost(i, eaten) {
   const entry = ruleBank.get(CFG.channel3RuleName);
   if (!entry) return;
@@ -910,13 +784,10 @@ function respawnGhost(i, eaten) {
   SimGL.uploadGhostTile(i, tile);
 }
 
-// Flips ghost `i` if it is currently heading the "wrong" way for the mode `away` names -- toward
-// Pac-Man when it should be fleeing him, or away from him when it should be chasing again -- by a
-// hard 180. Left alone if it's already heading the right way, or hasn't moved far enough since its
-// last turn to have a readable heading at all (ghostHeading() returns -1): "either no change or
-// turn 180", never a left/right correction. The pivot is `s.localRow/localCol`, the tile-local
-// position this same readback just reported -- exactly what SimGL.rotateGhost() needs, and current
-// regardless of anything steerGhost() does to `g.origin`/`g.shift` afterwards for the *next* step.
+// Flips ghost `i` by a hard 180 if it's heading the "wrong" way for mode `away` (toward Pac-Man
+// when it should flee, or away when it should chase) -- left alone if already correct or if it
+// hasn't moved far enough for a readable heading (ghostHeading() returns -1): never a left/right
+// correction, only "no change or 180".
 function turnGhost180(rb, i, away) {
   if (!rb.valid) return;
   const g = ghosts[i], s = rb.ghosts[i];
@@ -931,15 +802,11 @@ function turnGhost180(rb, i, away) {
   g.turned = true;   // this cell's turn is spent -- steerGhost() shouldn't also fire one below
 }
 
-// Starts/extends the shared frightened window on a pellet eaten, and ends it on the step that
-// first notices frightenedExpired -- in both cases turning (see turnGhost180()) only the ghosts
-// that transition: a pellet eaten while some ghosts are already frightened just extends their
-// clock, no re-turn, and an expiry only turns whichever ghosts are *still* frightened, skipping
-// any that already ended their own window early via respawnGhost() (which resets g.frightened to
-// false the moment a frightened ghost gets eaten and returns home). SimGL.step() already used the
-// *previous* per-ghost frightened flags for this step's eat checks (see pushGhostTiles()), so a
-// pellet eaten just now takes effect next step -- the same one-step lag ghost death detection
-// already has.
+// Starts/extends the shared frightened window on a pellet eaten, ends it on the step that first
+// notices frightenedExpired -- in both cases turning (turnGhost180()) only the ghosts that
+// actually transition, skipping ones already frightened (window just extends) or already ended
+// early via respawnGhost(). A pellet eaten now takes effect next step, the same one-step lag
+// ghost death detection already has (SimGL.step() used last step's frightened flags).
 function updateFrightened(rb) {
   if (rb.pelletEaten > EAT_SOUND_MIN_MASS) {
     playFrightSound();
@@ -962,12 +829,11 @@ function updateFrightened(rb) {
   }
 }
 
-// Dots and pellets score once each, the step their own window is found empty (see the `score`
-// comment above). The combo reset stays on the first bite of a pellet (rb.pelletEaten), same moment
-// updateFrightened() opens the window, rather than waiting the few steps the rest takes to dissolve.
+// Dots and pellets score once each, the step their own window is found empty (see `score`). The
+// combo reset stays on the first bite of a pellet, same moment updateFrightened() opens the window.
 function updateScore(rb) {
   if (rb.pelletEaten > EAT_SOUND_MIN_MASS) ghostChainMultiplier = 1;   // even mid-window
-  // A length mismatch would mean a readback from before the last placeDots() -- nothing to judge.
+  // Length mismatch means a readback from before the last placeDots() -- nothing to judge.
   if (!rb.dotSites || rb.dotSites.length !== dotSites.length) return;
   for (let i = 0; i < dotSites.length; i++) {
     const s = dotSites[i];
@@ -984,11 +850,13 @@ function steerGhosts(rb) {
     if (!s) continue;
     if (ghostDied(ghosts[i], s)) {
       const eaten = ghosts[i].frightened;   // dissolved while frightened -- Pac-Man ate it
+      const dy = ghosts[i].y, dx = ghosts[i].x;   // captured before respawnGhost() moves it home
       respawnGhost(i, eaten);               // just this one; the rest run on
       if (eaten) {
-        score += 200 * ghostChainMultiplier;
+        const pts = 200 * ghostChainMultiplier;
+        score += pts;
         ghostChainMultiplier *= 2;          // next ghost in this same window is worth double
-        handleGhostEaten();
+        handleGhostEaten(dy, dx, pts);
       }
       continue;
     }
@@ -1000,17 +868,15 @@ function steerGhosts(rb) {
 
 function steerGhost(g, idx, s, rb) {
   const win = GHOST_WINDOW, half = win >> 1;
-  // The engine reports where the soliton sits inside its tile; the board position is that plus the
-  // tile's origin. The tile then slides by whole cells to put it back in the middle, which is what
-  // keeps it from ever reaching an edge -- the shift takes effect on the next step's sim.
+  // Board position is the tile origin plus where the engine reports the soliton inside it; the
+  // tile then slides by whole cells to re-centre it (effective on the next step's sim).
   g.y = ((g.origin[0] + s.localRow) % H + H) % H;
   g.x = ((g.origin[1] + s.localCol) % W + W) % W;
   const sy = Math.round(s.localRow) - half, sx = Math.round(s.localCol) - half;
   g.shift = [sy, sx];
-  // Wrapped into board range, not left to accumulate: ghostblit.glsl locates a tile by shifting
-  // it at most one board-width to find the near copy, so an origin that has drifted further than
-  // that (e.g. after several trips around a toroidal edge) stops matching any pixel at all -- the
-  // ghost goes invisible until further wandering drifts it back into range on its own.
+  // Wrapped into board range, not left to accumulate: ghostblit.glsl only searches one board-width
+  // for a tile's near copy, so an origin drifted further (several trips around the torus) would
+  // stop matching any pixel until it wanders back into range.
   g.origin = [(((g.origin[0] + sy) % H) + H) % H, (((g.origin[1] + sx) % W) + W) % W];
 
   const i = maze.cellIndexAt(g.y, g.x);
@@ -1019,12 +885,11 @@ function steerGhost(g, idx, s, rb) {
     g.anchor = [g.y, g.x];                  // fresh baseline: this cell's run is the heading
   }
 
-  // Pivot for any rotation below, in tile-local coordinates and integer -- the rotation is only
-  // exact about a whole cell.
+  // Pivot for any rotation below, tile-local and integer -- exact only about a whole cell.
   const pivX = Math.round(s.localCol), pivY = Math.round(s.localRow);
 
-  // The one-off turn out of the spawn house, once there is enough motion to say which way it is
-  // currently pointing. Everything below is the ordinary junction logic and does not apply yet.
+  // One-off turn out of the spawn house, once there's enough motion to read a heading. Everything
+  // below is ordinary junction logic and doesn't apply yet.
   if (g.aim >= 0) {
     const cur = ghostHeading(g);
     if (cur < 0) return;
@@ -1038,12 +903,10 @@ function steerGhost(g, idx, s, rb) {
   const cell = maze.cells[i];
   if (!GHOST_TURN_CHARS.includes(cell.ch)) return;
 
-  // Turn at the closest approach to the tile centre, not on first crossing into some band around
-  // it. The distance falls while the ghost runs in and rises once it is past, so the step where it
-  // stops falling is the centre crossing itself -- which is where a turn has to happen, since the
-  // rotation pivots on the CoM and anywhere else swings the soliton into the corner it is turning
-  // around. A distance threshold cannot do this: it fires on entry to the band, a third of a tile
-  // early, and tightening it enough to land on the centre makes it small enough to step over.
+  // Turn at closest approach to the tile centre (distance stops falling), not on first crossing
+  // into a band around it: the rotation pivots on the CoM, so turning elsewhere swings the
+  // soliton into the corner. A distance threshold can't land on the centre without being small
+  // enough for a faster soliton to step clean over.
   const dy = g.y - cell.cy, dx = g.x - cell.cx;
   const d2 = dy * dy + dx * dx;
   if (d2 > g.prevD2) {
@@ -1051,19 +914,17 @@ function steerGhost(g, idx, s, rb) {
     const cur = ghostHeading(g);
     if (cur < 0) return;      // too little travel to read a heading -- leave it running straight
 
-    // Left, straight and right -- never a reversal, so the ghost reads as patrolling rather than
-    // dithering. A '^' cell overrides all of that and sends it north, which is what gives a centre
-    // room a one-way exit. Whatever the candidates, only the ones that are actually open survive;
-    // if none does (a dead end) reversing is all that is left.
+    // Left, straight, right -- never a reversal, so the ghost reads as patrolling. A '^' cell
+    // overrides this and sends it north (a centre room's one-way exit). Only actually-open
+    // candidates survive; a dead end leaves reversing as the only option.
     const wanted = cell.ch === GHOST_NORTH_CHAR ? [3] : [(cur + 3) % 4, cur, (cur + 1) % 4];
     const open = wanted.filter(k => cell.open[k]);
     let next;
     if (!open.length) next = (cur + 2) % 4;
     else {
-      // CFG.chaseBias of the time it takes the opening that closes on (or, frightened, opens away
-      // from) Pac-Man; the rest of the time it rolls. Biasing only the turns still compounds hard,
-      // because every junction is another chance to correct -- which is why this is the difficulty
-      // dial and not the speed.
+      // CFG.chaseBias of the time it takes the opening that closes on (or, frightened, flees)
+      // Pac-Man; the rest rolls. Biasing only the turns still compounds hard, since every junction
+      // is another chance to correct -- the difficulty dial, not the speed.
       const chase = Math.random() < CFG.chaseBias
         ? ghostChaseDir(open, g.y, g.x, rb, g.frightened ? -1 : 1) : -1;
       next = chase >= 0 ? chase : open[(Math.random() * open.length) | 0];
@@ -1077,21 +938,16 @@ function steerGhost(g, idx, s, rb) {
   g.prevD2 = d2;
 }
 
-// resetDots is false only for the automatic respawn after a death: the dots channel just keeps
-// running with whatever it already had (dots already eaten stay eaten). Every user-triggered
-// (re)spawn -- Restart, New Maze, the maze toggle, the soliton picker -- restores the full set.
-// `resetLives` defaults to `playIntro` -- every ordinary fresh start (Restart, New Maze, the
-// soliton picker, initial load, and the full restart handleDeath() falls back to once lives run
-// out) refills lives back to STARTING_LIVES same as everything else about a fresh start. The one
-// exception is handleWin() clearing the board: that's still a fresh spawn (dots refilled, jingle
-// played) but not a new *game* -- clearing the board carries the player's remaining lives into the
-// next one, same as a level clear would in the arcade original -- so it passes false explicitly.
+// resetDots is false only for the automatic respawn after a death: the dots channel keeps running
+// as-is (already-eaten dots stay eaten). Every user-triggered (re)spawn restores the full set.
+// `resetLives` defaults to `playIntro` -- every ordinary fresh start refills lives, except
+// handleWin() clearing the board, which is a fresh spawn but not a new *game*, so it carries
+// remaining lives into the next board and passes false explicitly.
 function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = playIntro, resetLevel = resetLives) {
   mu = entry.mu; sig = entry.sigma; betas = entry.betas.slice();
   SimGL.setRule({ mu, sigma: sig, betas, R: CFG.R, dt: CFG.dt * CFG.channel1Speed });
-  // Resolved before placeGhosts() below, which reads `level` to decide which numbered ghosts to
-  // spawn -- respawnAfterWin() has already bumped it by the time this runs, and a reset here must
-  // land before that same call, not after it.
+  // Must land before placeGhosts() below reads `level` -- respawnAfterWin() has already bumped it
+  // by the time this runs.
   if (resetLevel) level = STARTING_LEVEL;
 
   // Built once on the CPU and uploaded; from here on the board only exists on the GPU.
@@ -1101,17 +957,20 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   for (let i = 0; i < N; i++) if (wall[i]) arr[i] = 0;    // applyWallCollision, at spawn
   SimGL.uploadState(arr);
   if (resetDots) placeDots();
-  placeGhosts();     // unconditional: a ghost that ate Pac-Man must not still be sitting on his
-                     // spawn tile when he comes back, or the respawn is eaten on arrival
+  placeGhosts();     // unconditional: a ghost that just ate Pac-Man mustn't still sit on his
+                     // spawn tile when he comes back
 
   clearTimeout(deathTimer);
   clearTimeout(winTimer);
   clearTimeout(frightenedTimer);
   stopEatingSound();
   sndEatGhost.pause(); sndEatGhost.currentTime = 0;   // in case a respawn lands mid-jingle
+  sndEatFruit.pause(); sndEatFruit.currentTime = 0;
   steps = 0; actions = 0; courseChanges = 0; solitonDead = false; levelWon = false; ghostEatPause = false;
+  ghostEatPopup = null;
   frightenedExpired = false;   // placeGhosts() above already gave every ghost a fresh, unfrightened newGhost()
   ghostChainMultiplier = 1;    // fresh ghosts (placeGhosts() above is unconditional): fresh combo too
+  bonusFruit = null; fruitEatPause = false; fruitEatPopup = null;
   if (resetLives) lives = STARTING_LIVES;
   if (resetLives) score = 0;
   sometimesRemaining = sometimesWindow;
@@ -1119,8 +978,8 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   actionTrail.length = 0;
   pendingAction = null;
 
-  // One analysis pass with no step behind it, so the spawn CoM and the policy's first input
-  // window come from the same place every later step gets them from.
+  // One analysis pass with no step behind it, so the spawn CoM and the policy's first window
+  // come from the same place every later step gets them from.
   SimGL.prime();
   const rb = SimGL.readback();
   lastCrop = rb.crop;
@@ -1128,21 +987,17 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   initialMass = lastCoM ? lastCoM[2] : 0;
   comHistory = Array.from({ length: CFG.windowSize }, () => lastCoM ? [lastCoM[0], lastCoM[1]] : [tr, tc]);
   render();
-  // Skipped for the automatic post-death respawn: that one carries on the same run rather than
-  // starting a fresh one, so it gets no jingle and no pause -- the sim just keeps going the
-  // instant solitonDead clears above.
+  // Skipped for the automatic post-death respawn, which carries on the same run rather than
+  // starting a fresh one -- no jingle, no pause.
   if (playIntro) playStartSound();
 }
-// Held paused through the start jingle -- the board is up and visible but frozen -- then the run
-// begins the instant it ends. Runs after every manual (re)spawn (initial boot, Restart, maze
-// toggle, soliton picker) -- not the automatic respawn after a death, see placeSoliton().
+// Held paused through the start jingle, then runs the instant it ends. Skipped for the automatic
+// death respawn (see placeSoliton()).
 //
-// Browsers refuse to play audio with sound until the page has seen a user gesture. Restart/maze
-// toggle/etc. are themselves triggered from inside a click, so they're already past that gate and
-// play immediately -- but the very first call, from page load, has no gesture behind it yet and
-// gets rejected. Rather than starting silently in that case, show a prompt and wait for the
-// page's actual first gesture (a click, a tap, any key), then retry -- that attempt is inside a
-// real gesture, so it succeeds -- before starting the game.
+// Browsers block audio until a user gesture. Restart/maze-toggle/etc. are already inside a click
+// so they play immediately, but the very first call from page load has no gesture yet and gets
+// rejected -- so instead of starting silently, show a prompt and retry once the page sees its
+// actual first gesture.
 function playStartSound() {
   if (!SOUND_ENABLED) { setRunning(true); return; }
   setRunning(false);
@@ -1161,39 +1016,33 @@ function playStartSound() {
       });
     });
 }
-// Keys the HTML spec excludes from counting as a "user activation" gesture: the UI Events
-// Modifier Keys table, plus Escape (excluded separately by the activation-triggering-input-event
-// definition). Pressing only one of these keeps the game waiting rather than starting silently.
+// Keys the HTML spec excludes from a "user activation" gesture (the UI Events Modifier Keys
+// table, plus Escape). Pressing only one of these keeps the game waiting rather than starting
+// silently.
 const NON_ACTIVATING_KEYS = new Set([
   'Alt', 'AltGraph', 'CapsLock', 'Control', 'Fn', 'FnLock', 'Hyper', 'Meta', 'NumLock', 'OS',
   'ScrollLock', 'Shift', 'Super', 'Symbol', 'SymbolLock', 'Escape',
 ]);
 // Waits for the page's next "real" gesture, then runs `cb` once. Shared by playStartSound()'s
-// autoplay-blocked fallback on first load and showGameOverPrompt().
+// autoplay-blocked fallback, showGameOverPrompt(), showWinPrompt() and showStartScreen().
 function waitForGesture(cb) {
   const start = () => {
     window.removeEventListener('pointerup', onPointer);
     window.removeEventListener('keydown', onKey);
     cb();
   };
-  // pointerup, not pointerdown: iOS Safari (and other strict mobile browsers) only counts a
-  // *completed* tap -- touchend/pointerup/click -- as the gesture that unlocks audio, not the
-  // touch-start. Listening on pointerdown consumed the one-shot listener on the down-phase,
-  // attempt() failed again for the same reason as the very first (gestureless) call, and it
-  // fell straight through to the catch(finish) below -- silently starting the game with no
-  // jingle on a tap, while every other spawn path (Restart, etc.) plays fine because a button
-  // click is a real completed gesture on any browser.
+  // pointerup, not pointerdown: iOS Safari only counts a *completed* tap as the gesture that
+  // unlocks audio. Listening on pointerdown would consume the listener before that, so the retry
+  // fails for the same reason as the original call and the game starts silently.
   const onPointer = () => start();
-  // Modifier keys (and Escape) don't count as a real "user activation" for autoplay purposes
-  // -- a bare Alt/Ctrl/Shift/CapsLock press would otherwise fall straight through to the
-  // catch() above and start the game silently. Keep listening past those instead of consuming
-  // the one-shot gesture on them.
+  // Modifier keys (and Escape) don't count as activation -- keep listening past a bare
+  // Alt/Ctrl/Shift/CapsLock instead of consuming the gesture on it.
   const onKey = e => { if (!NON_ACTIVATING_KEYS.has(e.key)) start(); };
   window.addEventListener('pointerup', onPointer, { once: true });
   window.addEventListener('keydown', onKey);
 }
-// Reuses the (otherwise unused) result banner element for the "waiting for a gesture" notice --
-// same spot, same look, shown both on the very first page load and on game over.
+// Reuses the (otherwise unused) result banner for the "waiting for a gesture" notice, shown both
+// on first page load and on game over.
 function showStartPrompt() {
   const el = $('result');
   el.className = 'result';
@@ -1205,14 +1054,35 @@ function hideStartPrompt() {
   el.hidden = true;
   el.innerHTML = '';
 }
-// Game over (lives ran out, see handleDeath()): hold on the "Start" prompt instead of restarting
-// under the player -- same paused, waiting-for-a-gesture presentation as the very first page
-// load. respawnCurrentSoliton() runs inside the resulting gesture, so its own playStartSound()
-// call plays the start jingle immediately rather than needing a second prompt.
-function showGameOverPrompt() {
+// Hold on the "Start" prompt instead of restarting under the player -- same presentation as the
+// first page load. respawnCurrentSoliton() runs inside the resulting gesture, so its
+// playStartSound() plays immediately rather than needing a second prompt. Shared tail of both
+// showGameOverPrompt() (lives ran out) and showWinPrompt() (final level cleared) -- either way the
+// next gesture leads back to a fresh game, not a continued one.
+function showStartScreen() {
   setRunning(false);
   showStartPrompt();
   waitForGesture(() => { hideStartPrompt(); respawnCurrentSoliton(); });
+}
+// Lives ran out: hold on a "Game over" banner, then fall through to the "Start" prompt on the next
+// gesture.
+function showGameOverPrompt() {
+  setRunning(false);
+  const el = $('result');
+  el.className = 'result';
+  el.innerHTML = '<b>Game over</b>';
+  el.hidden = false;
+  waitForGesture(() => { el.hidden = true; el.innerHTML = ''; showStartScreen(); });
+}
+// Final level cleared: hold on a "You win!" banner instead of quietly advancing past MAX_LEVEL,
+// then fall through to the "Start" prompt on the next gesture.
+function showWinPrompt() {
+  setRunning(false);
+  const el = $('result');
+  el.className = 'result';
+  el.innerHTML = '<b>You win!</b>';
+  el.hidden = false;
+  waitForGesture(() => { el.hidden = true; el.innerHTML = ''; showStartScreen(); });
 }
 
 function newMaze() {
@@ -1228,26 +1098,19 @@ function initBoard() {
   newMaze();
 }
 function respawnCurrentSoliton() { placeSoliton(bank[currentIndex]); }
-// The death-triggered respawn -- same spawn, but leaves the dots channel alone (see placeSoliton).
+// Death-triggered respawn -- same spawn, but leaves the dots channel alone (see placeSoliton()).
 function respawnAfterDeath() { placeSoliton(bank[currentIndex], false, false); }
-// The win-triggered respawn -- a full fresh spawn like respawnCurrentSoliton(), except lives carry
-// over into the next board rather than refilling (see placeSoliton()'s `resetLives` -- the life
-// gained for the win itself is already applied, in handleWin(), ahead of the intermission jingle),
-// and the level advances by one first, so placeGhosts() -- called from inside placeSoliton() --
-// spawns the next level's ghost count. `level` isn't clamped to the layout's highest numbered
-// ghost here: the filter in placeGhosts() (`id <= level`) just has nothing left to exclude once
-// level passes it, so a level with no matching digit is silently a no-op rather than needing
-// special-casing. `playIntro` is false: the intermission jingle just finished, so the next board
-// should start running immediately rather than layering the start jingle on top of it.
+// Win-triggered respawn -- full fresh spawn, but lives carry over rather than refilling (the life
+// gained for the win is already applied in handleWin()), the level advances first so placeGhosts()
+// spawns the next level's count, and `playIntro` is false since the intermission jingle just
+// finished.
 function respawnAfterWin() { level++; placeSoliton(bank[currentIndex], true, false, false); }
 
 // ====================================================================================
 //  Agent step
 // ====================================================================================
-// Crops a CFG.netSize toroidal window out of each stacked frame, centered on the soliton's
-// current CoM. The crop itself happens in crop.glsl; this is the CPU-side copy of its origin
-// math, used to map the policy's per-cell output back to board coordinates and to bound what
-// the user is allowed to click in human mode.
+// CPU-side copy of crop.glsl's origin math, used to map the policy's per-cell output back to
+// board coordinates and to bound what the user may click in human mode.
 function agentWindowOrigin(cy, cx) {
   const half = CFG.netSize >> 1;
   return [Math.round(cy) - half, Math.round(cx) - half];
@@ -1264,8 +1127,8 @@ function buildContext() {
 async function agentAct() {
   const t0 = performance.now();
   const S = CFG.netSize, SS = S * S;
-  // The crop arrives channel-packed (frame k in channel k of one RGBA texture); the model wants
-  // [1,K,S,S], i.e. frame-major. This de-interleave is the whole cost of the new input path.
+  // The crop arrives channel-packed; the model wants frame-major [1,K,S,S]. This de-interleave is
+  // the whole cost of the GPU input path.
   const data = new Float32Array(CFG.K * SS);
   for (let k = 0; k < CFG.K; k++) {
     const base = k * SS;
@@ -1293,9 +1156,7 @@ async function agentAct() {
   return { x: c, y: r, delta: sign * MA, radius: CFG.actionRadius };
 }
 
-// The user's half of a turn: hand over the one queued action, if any, and clear the queue. Runs
-// at the same point in the step as agentAct(), so the action is registered on this step and the
-// board is free to take the next one.
+// The user's half of a turn: hand over the one queued action, if any, and clear the queue.
 function takePendingAction() {
   const a = pendingAction;
   if (!a) return null;
@@ -1319,10 +1180,9 @@ async function agentStep() {
     if (actorMode === 'sometimes') sometimesRemaining--;
   }
 
-  // Action, step, wall mask, CoM reduction and the next input crop, queued back to back with no
-  // synchronization; the single readback below is the only point where the CPU waits on the GPU.
-  // Per-ghost frightened state rides along on ghosts[i].frightened via pushGhostTiles() (called at
-  // the end of steerGhosts() below), not as an argument here -- see glsim.js's gFrightened.
+  // Action, step, reduction and the next crop, queued back to back; the readback below is the
+  // only point the CPU waits on the GPU. Per-ghost frightened state rides along via
+  // pushGhostTiles() at the end of steerGhosts(), not as an argument here.
   SimGL.step(action);
   const rb = SimGL.readback();
   lastCrop = rb.crop;
@@ -1333,8 +1193,8 @@ async function agentStep() {
   finishStep(rb);
 }
 
-// Bookkeeping shared by both actors: take the soliton's freshly computed center of mass and
-// decide whether the episode has ended.
+// Bookkeeping shared by both actors: take the soliton's freshly computed CoM and decide whether
+// the episode has ended.
 function finishStep(rb) {
   if (rb.eaten > EAT_SOUND_MIN_MASS) noteEating();
   if (rb.hasDots && !solitonDead && !levelWon && rb.dotsMass < CFG.dotsWinMass) {
@@ -1352,16 +1212,56 @@ function finishStep(rb) {
     if (rb.mass > CFG.massExplodeLimit) handleDeath(true);
     else if (rb.mass < CFG.massDeathFraction * initialMass) handleDeath();
   }
+  if (!solitonDead && !levelWon) updateBonusFruit();
 }
-// Ignore floating-point noise from the reduction -- SimGL.readback().eaten is an exact sum of
-// erased dot mass, not a heuristic, so this only needs to clear rounding error, not tune a
-// detector.
+
+// Bonus fruit: appears on Pac-Man's own spawn tile the moment the level's dots-eaten fraction
+// crosses CFG.bonusFruitThresholds[bonusFruitThresholdIdx] -- twice a level at the defaults, since
+// there are two thresholds -- and disappears unresolved after CFG.bonusFruitTimeout steps. Emoji
+// and points come from BONUS_FRUIT_EMOJIS/BONUS_FRUIT_POINTS at the current `level` (1-9), fixed
+// at spawn so a mid-flight level change (there isn't one, but just in case) can't retarget an
+// already-showing fruit. Picked up on contact -- unlike an ordinary dot it isn't part of the
+// channel-2 field at all, just a CPU-tracked position judged against lastCoM, since a bonus item
+// is meant to disappear the instant Pac-Man touches it rather than dissolve over several steps.
+function updateBonusFruit() {
+  if (bonusFruit) {
+    if (steps - bonusFruit.spawnStep >= CFG.bonusFruitTimeout) bonusFruit = null;
+  } else if (dotSites.length && bonusFruitThresholdIdx < CFG.bonusFruitThresholds.length) {
+    const eatenFrac = dotSites.filter(s => s.eaten).length / dotSites.length;
+    if (eatenFrac >= CFG.bonusFruitThresholds[bonusFruitThresholdIdx]) {
+      bonusFruitThresholdIdx++;
+      const [r, c] = maze.start;
+      const idx = Math.min(BONUS_FRUIT_EMOJIS.length, Math.max(1, level)) - 1;
+      bonusFruit = { r, c, emoji: BONUS_FRUIT_EMOJIS[idx], points: BONUS_FRUIT_POINTS[idx], spawnStep: steps };
+    }
+  }
+  if (!bonusFruit || !lastCoM) return;
+  const [dy, dx] = toroidalDelta(lastCoM[0], lastCoM[1], bonusFruit.r, bonusFruit.c);
+  if (dy * dy + dx * dx > BONUS_FRUIT_RADIUS * BONUS_FRUIT_RADIUS) return;
+  const { r, c, points } = bonusFruit;
+  score += points;
+  bonusFruit = null;
+  handleBonusFruitEaten(r, c, points);
+}
+
+// Same beat as handleGhostEaten(): holds the board for the jingle's own length, no extra pause.
+// (r, c) is where the fruit sat, shown as a floating score popup for as long as the board holds.
+function handleBonusFruitEaten(r, c, points) {
+  fruitEatPause = true;
+  fruitEatPopup = { r, c, text: `${points}` };
+  const finish = () => { fruitEatPause = false; fruitEatPopup = null; };
+  if (!SOUND_ENABLED) { finish(); return; }
+  sndEatFruit.currentTime = 0;
+  sndEatFruit.play()
+    .then(() => sndEatFruit.addEventListener('ended', finish, { once: true }))
+    .catch(finish);
+}
+// Clears rounding error in the GPU reduction, not a heuristic threshold.
 const EAT_SOUND_MIN_MASS = 1e-4;
-// The eat_dot_0/1 "waka waka" pair, alternating for as long as dots keep getting eaten. Every
-// eaten dot pushes eatDeadline out by another CFG.eatSoundGraceMs; once it's passed, the chain's
-// next scheduled play (not a separate timer) sees that and stops instead of queuing another
-// sample -- so it always finishes the sample already playing rather than cutting one off, and
-// there is never a moment where a fresh start and an old tail could both be sounding at once.
+// eat_dot_0/1 "waka waka" pair, alternating while dots keep getting eaten. Every eaten dot pushes
+// eatDeadline out by CFG.eatSoundGraceMs; once passed, the next scheduled play sees that and stops
+// rather than queuing another sample, so a sample already playing always finishes uncut and never
+// overlaps a fresh start.
 function noteEating() {
   if (!SOUND_ENABLED) return;
   eatDeadline = performance.now() + CFG.eatSoundGraceMs;
@@ -1375,77 +1275,67 @@ function playNextEatSound() {
   snd.currentTime = 0;
   snd.play().catch(() => { eatActive = false; });   // playback blocked -- don't spin retrying forever
 }
-// Stops the loop outright (mid-note if need be) -- used when a new life starts, so a chomp left
-// over from the previous one can't bleed into it.
+// Stops the loop outright, mid-note if need be -- used on a new life so a leftover chomp can't
+// bleed into it.
 function stopEatingSound() {
   eatActive = false;
   for (const snd of sndEat) { snd.pause(); snd.currentTime = 0; }
 }
-// Death is a beat, not a stop: while lives remain, no "Fail" screen and the Play/Pause button
-// never flips, so the game never visibly pauses -- the sim just holds (loop() stops stepping
-// while solitonDead) through the death jingle, then a further second of silence, then the soliton
-// respawns on its own (see the `next` pick below). Once lives run out it's game over instead: see
-// showGameOverPrompt().
+// Death is a beat, not a stop: while lives remain the sim just holds (loop() stops stepping while
+// solitonDead) through the jingle plus a further second, then respawns on its own. Game over once
+// lives run out instead -- see showGameOverPrompt().
 const DEATH_PAUSE_MS = 1000;
-// `exploded`, when true, is a mass-runaway death (rb.mass > CFG.massExplodeLimit) rather than an
-// ordinary dissolve or ghost kill -- see finishStep(). That one doesn't cost a life: it isn't
-// something the player could have steered around the way running into a ghost is, so it just
-// respawns the soliton in place, same beat and jingle otherwise.
+// `exploded` (mass-runaway, see finishStep()) costs no life, since it isn't something the player
+// could have steered around the way a ghost is -- same beat and jingle otherwise.
 function handleDeath(exploded = false) {
   solitonDead = true;
-  if (!exploded) lives = Math.max(0, lives - 1);
-  // Lives run out: hold on the "Start" prompt (showGameOverPrompt()) rather than restarting
-  // immediately -- the player chooses when the next game begins, same as the very first page
-  // load. respawnCurrentSoliton() (a full restart, refilled dots, lives back to STARTING_LIVES,
-  // start jingle) runs once they give it that gesture.
+  if (!exploded && !GOD_MODE) lives = Math.max(0, lives - 1);
+  // Lives run out: hold on a "Game over" banner rather than restarting immediately -- the player
+  // chooses when the next game begins.
   const next = lives > 0 ? respawnAfterDeath : showGameOverPrompt;
   if (!SOUND_ENABLED) { deathTimer = setTimeout(next, DEATH_PAUSE_MS); return; }
   sndDeath.currentTime = 0;
-  // The pause is timed off the jingle actually ending, not off starting it -- if playback is
-  // blocked for some reason, fall back to the pause alone rather than never respawning.
+  // Timed off the jingle actually ending; if playback is blocked, fall back to the pause alone.
   const afterSound = () => { deathTimer = setTimeout(next, DEATH_PAUSE_MS); };
   sndDeath.play()
     .then(() => sndDeath.addEventListener('ended', afterSound, { once: true }))
     .catch(afterSound);
 }
 
-// Clearing the board is also a beat rather than a stop: the sim holds (loop() stops stepping
-// while levelWon) through the intermission jingle, then a further second of silence, then a fresh
-// spawn -- same path as a manual Restart (refilled dots channel, no start jingle; see
-// respawnAfterWin()), except lives carry over rather than refilling, since this is a level clear,
-// not a new game.
+// Clearing the board is also a beat, not a stop: the sim holds through the intermission jingle
+// plus a further second, then a fresh spawn -- same path as Restart, except lives carry over
+// since this is a level clear, not a new game.
 const WIN_PAUSE_MS = 1000;
 function handleWin() {
   levelWon = true;
-  // Awarded immediately, ahead of the intermission jingle rather than after it, so the 💛 count
-  // in the title row updates (render() runs right after this step -- see loop()) before the
-  // reward beat even starts playing, not once it's over.
+  // Awarded ahead of the intermission jingle so the 💛 count updates before the reward beat plays.
   lives = Math.min(MAX_LIVES, lives + 1);
   stopEatingSound();      // the last dot's chomp shouldn't bleed into the intermission jingle
-  if (!SOUND_ENABLED) { winTimer = setTimeout(respawnAfterWin, WIN_PAUSE_MS); return; }
+  const next = level >= MAX_LEVEL ? showWinPrompt : respawnAfterWin;
+  if (!SOUND_ENABLED) { winTimer = setTimeout(next, WIN_PAUSE_MS); return; }
   sndIntermission.currentTime = 0;
-  const afterSound = () => { winTimer = setTimeout(respawnAfterWin, WIN_PAUSE_MS); };
+  const afterSound = () => { winTimer = setTimeout(next, WIN_PAUSE_MS); };
   sndIntermission.play()
     .then(() => sndIntermission.addEventListener('ended', afterSound, { once: true }))
     .catch(afterSound);
 }
 
-// Fire-and-forget, unlike the death/win/eat-ghost jingles -- the game keeps running underneath it,
-// so it's just restarted from the top on every pellet eaten (including one eaten mid-window, which
-// only extends the frightened timer -- see updateFrightened()) rather than queued or awaited.
+// Fire-and-forget, unlike the death/win/eat-ghost jingles -- the game keeps running underneath
+// it, so it's just restarted from the top on every pellet eaten rather than queued or awaited.
 function playFrightSound() {
   if (!SOUND_ENABLED) return;
   sndFright.currentTime = 0;
   sndFright.play().catch(() => {});
 }
 
-// The one moment eating a ghost differs from eating a dot: the board holds (loop() stops stepping
-// while ghostEatPause) for the sound's own length, same beat as handleDeath()/handleWin() but with
-// no further pause tacked on afterward and no consequence beyond the hold itself -- the eaten
-// ghost already went home via respawnGhost(), called just before this from steerGhosts().
-function handleGhostEaten() {
+// The board holds for the sound's own length (same beat as handleDeath()/handleWin(), no extra
+// pause after) -- the eaten ghost already went home via respawnGhost(), called just before this.
+// (r, c) is where it died (captured by the caller before respawnGhost() moved it), shown as a
+// floating score popup for exactly as long as the board holds.
+function handleGhostEaten(r, c, points) {
   ghostEatPause = true;
-  const finish = () => { ghostEatPause = false; };
+  ghostEatPopup = { r, c, text: `${points}` };
+  const finish = () => { ghostEatPause = false; ghostEatPopup = null; };
   if (!SOUND_ENABLED) { finish(); return; }
   sndEatGhost.currentTime = 0;
   sndEatGhost.play()
@@ -1454,8 +1344,8 @@ function handleGhostEaten() {
 }
 
 // ====================================================================================
-//  Rendering -- the board itself is a shader pass (draw.glsl); everything below is the
-//  overlay canvas sitting on top of it, unchanged from the CPU demo.
+//  Rendering -- the board is a shader pass (draw.glsl); everything below is the overlay canvas
+//  on top, unchanged from the CPU demo.
 // ====================================================================================
 function drawArrow(c, x0, y0, dx, dy, len, color) {
   const n = Math.hypot(dx, dy); if (n < 1e-6) return;
@@ -1468,9 +1358,8 @@ function drawArrow(c, x0, y0, dx, dy, len, color) {
   c.lineTo(x1 - hs * Math.cos(ang + 0.4), y1 - hs * Math.sin(ang + 0.4));
   c.closePath(); c.fill();
 }
-// The green/red discs stamped on the board each step. Each one lingers and fades out over
-// CFG.actionFadeSeconds of sim time instead of blinking for a single frame, so the pattern of
-// interventions stays readable at 20+ steps/sec.
+// Green/red discs stamped on the board each step, fading out over CFG.actionFadeSeconds of sim
+// time instead of blinking for a single frame, so the intervention pattern reads at 20+ steps/sec.
 function drawActionTrail(sc) {
   if (!actionTrail.length) return;
   const fadeSteps = Math.max(4, CFG.actionFadeSeconds * sps);
@@ -1494,21 +1383,42 @@ function drawActionTrail(sc) {
   }
 }
 // One 👀 per ghost, centred on its CoM -- g.y/g.x are continuous (straight off the GPU tile
-// reduction, see steerGhost()), not rounded pixel indices, so this uses the same no-offset mapping
-// lastCoM's own arrows use rather than actionTrail's "+0.5 to recentre a rounded index" one.
+// reduction), so this uses the same no-offset mapping lastCoM's arrows use, not actionTrail's
+// "+0.5 to recentre a rounded index" one.
 function drawGhostEyes(sc) {
   if (!ghosts.length) return;
   octx.font = `${Math.max(7, (maze.cellY || 40) * sc * 0.5)}px sans-serif`;
   octx.textAlign = 'center';
   octx.textBaseline = 'bottom';
-  // octx.fillStyle isn't reset between draws -- drawActionTrail() is the only other place that
-  // touches it, always to a low-alpha rgba() for its fading action markers, and never sets it back
-  // afterward. Without setting it here too, fillText() would inherit that leftover alpha instead
-  // of drawing opaque, which is exactly why the eyes faded whenever CARL had recently acted.
+  // fillStyle isn't reset between draws -- drawActionTrail() leaves it at a low-alpha rgba(), so
+  // without setting it here the eyes would inherit that leftover alpha instead of drawing opaque.
   for (const g of ghosts) {
     octx.fillStyle = g.frightened ? '#fff7' : '#ffff';
     octx.fillText('👀', g.x * sc, g.y * sc);
   }
+}
+// The bonus fruit: a plain dot (same look as an ordinary one) with its emoji drawn over it, both
+// gone the instant updateBonusFruit() judges it eaten.
+function drawBonusFruit(sc) {
+  if (!bonusFruit) return;
+  const px = bonusFruit.c * sc, py = bonusFruit.r * sc;
+  octx.beginPath(); octx.arc(px, py, Math.max(2, sc * 3), 0, 7);
+  octx.fillStyle = `rgb(${COLORS.soliton2.join(',')})`; octx.fill();
+  octx.font = `${Math.max(10, (maze.cellY || 40) * sc * 0.8)}px sans-serif`;
+  octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  octx.fillText(bonusFruit.emoji, px, py);
+}
+// A floating score number under wherever a ghost or the bonus fruit was just eaten, live for
+// exactly as long as its own pause flag holds the board (cleared by handleGhostEaten()/handleBonusFruitEaten()
+// alongside ghostEatPause/fruitEatPause, not by a timer of its own here).
+function drawScorePopup(sc, p) {
+  if (!p) return;
+  const px = p.c * sc, py = (p.r + (maze.cellY || 40) * 0.4) * sc;   // slightly below the spot
+  octx.font = `bold ${Math.max(11, (maze.cellY || 40) * sc * 0.42)}px sans-serif`;
+  octx.textAlign = 'center'; octx.textBaseline = 'top';
+  octx.lineWidth = Math.max(1, sc * 0.6);
+  octx.strokeStyle = 'rgba(0,0,0,.7)'; octx.strokeText(p.text, px, py);
+  octx.fillStyle = '#fff'; octx.fillText(p.text, px, py);
 }
 
 // The queued-but-not-yet-applied action, as a hollow dashed ring.
@@ -1526,10 +1436,9 @@ function drawPendingAction(sc) {
 let boardReady = false;   // render() can be reached from UI handlers before the first initBoard()
 function render() {
   if (!boardReady) return;
-  // Per ghost, not all-or-nothing: only the ones currently frightened read as the frightened
-  // colour, in place of their own -- an already-respawned packmate keeps chasing in its own colour
-  // while the rest are still fleeing blue. Built fresh each frame rather than cycled by glsim.js
-  // (as COLORS.ghosts alone would be), since which index is which colour now depends on state.
+  // Per ghost, not all-or-nothing: an already-respawned packmate keeps its own colour while the
+  // rest are still fleeing blue. Built fresh each frame since which index is which colour depends
+  // on state.
   const ghostColors = ghosts.map((g, i) =>
     g.frightened ? COLORS.frightened : COLORS.ghosts[i % COLORS.ghosts.length]);
   SimGL.draw({ ...COLORS, ghosts: ghostColors });
@@ -1539,20 +1448,22 @@ function render() {
   octx.clearRect(0, 0, ov.width, ov.height);
   const sc = ov.width / W;
 
-  // Unlike the rest of this overlay, not gated on showOverlay: it's part of what a ghost *is* to
-  // the player, not a CARL debugging aid, so it stays up with the chrome hidden the same way the
-  // ghosts' own board-rendered colour does.
+  // Not gated on showOverlay unlike the rest below: it's part of what a ghost *is* to the player,
+  // not a CARL debugging aid.
   drawGhostEyes(sc);
+  drawBonusFruit(sc);
+  drawScorePopup(sc, ghostEatPopup);
+  drawScorePopup(sc, fruitEatPopup);
 
-  // Everything below is CARL's working-out drawn over the board -- the two direction arrows and
-  // the intervention discs. Hidden together with the control deck, leaving just the game.
+  // CARL's working-out drawn over the board -- direction arrows and intervention discs. Hidden
+  // together with the control deck, leaving just the game.
   if (showOverlay) {
     if (lastCoM) {
-      // One tile long: enough to read the heading against the maze, short enough not to cover it.
+      // One tile long: enough to read the heading, short enough not to cover the maze.
       const cx = lastCoM[1] * sc, cy = lastCoM[0] * sc, alen = (maze.cellX || 40) * sc;
       const cs = getComputedStyle(document.documentElement);
-      // The target direction is CARL's instruction. With CARL idle nothing consumes it, so the blue
-      // arrow would be a claim about an agent that isn't acting -- hide it while the user has the board.
+      // Hide the target arrow while CARL is idle -- nothing is acting on it, so it would claim an
+      // agent is working when it isn't.
       if (!humanActs) drawArrow(octx, cx, cy, dir[1], dir[0], alen, cs.getPropertyValue('--target').trim());
       const old = comHistory[0];
       const [vdy, vdx] = toroidalDelta(lastCoM[0], lastCoM[1], old[0], old[1]);
@@ -1585,14 +1496,13 @@ async function loop() {
     lastT = now;
     stepAcc += elapsed * sps;
     let want = Math.floor(stepAcc); stepAcc -= want;
-    // Steps the budget could not afford are dropped here rather than carried over -- rolling them
-    // into the next frame would only make the following batch longer, and so on downwards. The
-    // budget is checked after a step, not before, so a device where one step alone blows the whole
-    // budget still advances by one instead of stalling forever.
+    // Steps the budget can't afford are dropped, not carried over (that would only lengthen the
+    // next batch). Checked after a step, not before, so one step blowing the whole budget still
+    // advances by one instead of stalling forever.
     let done = 0;
     try {
       for (let k = 0; k < want; k++) {
-        if (solitonDead || levelWon || ghostEatPause) break;   // holding for a jingle
+        if (solitonDead || levelWon || ghostEatPause || fruitEatPause) break;   // holding for a jingle
         await agentStep();
         done++;
         if (performance.now() - now >= FRAME_BUDGET_MS) break;
@@ -1617,9 +1527,8 @@ function setRunning(v) {
 //  Input: click-to-steer, arrow keys, sliders/buttons/selects
 // ====================================================================================
 let actionCost = 2.5;
-// Every user-initiated steer goes through here, so a single place counts course changes.
-// Re-issuing the direction the agent is already chasing (holding an arrow key down, clicking
-// straight ahead) isn't a change of course, so it isn't counted.
+// Every user-initiated steer goes through here. Re-issuing the direction already being chased
+// (holding an arrow key, clicking straight ahead) isn't counted as a change of course.
 function steerTo(dy, dx) {
   const n = Math.hypot(dy, dx); if (n < 1e-6) return;
   const ny = dy / n, nx = dx / n;
@@ -1643,9 +1552,8 @@ window.addEventListener('keydown', e => {
   if (e.key === ' ') { setRunning(!running); e.preventDefault(); }
 });
 $('play').addEventListener('click', () => setRunning(!running));
-// Step always leaves the run paused and the board one step further on, so it reads as a scrub
-// rather than a nudge to a still-running sim. If the loop happens to be mid-batch when the click
-// lands (busy), that in-flight step is the advance -- stepping again here would double it.
+// Step always leaves the run paused, one step further on. If the loop is mid-batch when the
+// click lands (busy), that in-flight step is the advance -- stepping again here would double it.
 async function stepOnce() {
   setRunning(false);
   if (busy || solitonDead) return;
@@ -1656,14 +1564,12 @@ async function stepOnce() {
 $('step1').addEventListener('click', stepOnce);
 
 // ------------------------------------------------------------------------------------
-//  Human actor: the same intervention CARL makes -- same +-MA over CFG.actionRadius, same
-//  disc, same "actions" tally -- and, like CARL, at most one per step. A click queues the
-//  action rather than applying it on the spot; the next step stamps it in at exactly the
-//  point in the turn CARL's own action would land.
+//  Human actor: the same intervention CARL makes (same +-MA over CFG.actionRadius, same disc,
+//  same tally), at most one per step. A click queues the action; the next step stamps it in at
+//  exactly the point CARL's own action would land.
 // ------------------------------------------------------------------------------------
-// CARL's reach: the policy sees a CFG.netSize window centered on the soliton and returns one q
-// value per cell of exactly that window -- so a spot outside it is not a move CARL could make.
-// Same bound, same origin math, for the user.
+// CARL's reach: the policy returns one q value per cell of its CFG.netSize window, so a spot
+// outside it isn't a move CARL could make. Same bound, same origin math, for the user.
 function inAgentReach(gy, gx) {
   if (!lastCoM) return false;
   const S = CFG.netSize, [oy, ox] = agentWindowOrigin(lastCoM[0], lastCoM[1]);
@@ -1778,7 +1684,7 @@ function initTheme() {
 // ====================================================================================
 //  Boot
 // ====================================================================================
-// Stops the run without going through setRunning(), which would try to render -- fail() has to
+// Stops the run without going through setRunning() (which would try to render) -- fail() must
 // stay callable before the board exists, e.g. when GPU init itself is what failed.
 function fail(msg) {
   $('tip').innerHTML = msg;
@@ -1786,9 +1692,8 @@ function fail(msg) {
   $('play').textContent = 'Play';
   $('play').classList.remove('on');
 }
-// No inline fallback soliton here, unlike the CPU demo: this version fetches its shaders as
-// well as its model, so it cannot run from file:// under any circumstances, and the offline
-// case the fallback existed for cannot arise.
+// No inline fallback soliton, unlike the CPU demo: this version fetches shaders too, so it can't
+// run from file:// under any circumstances.
 async function loadSolitonBank() {
   let raw = null;
   try {
@@ -1800,8 +1705,7 @@ async function loadSolitonBank() {
     name: e.name, mu: e.mu, sigma: e.sigma, betas: e.betas, h: e.h, w: e.w,
     flat: Float32Array.from(e.state.flat()),
   }]));
-  // The picker's order is CFG.allowedRuleNames', not the JSON's -- the leading entries are the
-  // ones we want on the top row, so the bank is built in that order.
+  // Picker order is CFG.allowedRuleNames', not the JSON's, so the leading entries land on top row.
   bank = CFG.allowedRuleNames.map(name => ruleBank.get(name)).filter(Boolean);
   if (!bank.length) { fail('The soliton bank loaded but contained no usable entries.'); return false; }
 
@@ -1838,17 +1742,14 @@ function updateSolitonSelection() {
 }
 async function loadModel() {
   ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-  // Multi-threaded WASM needs SharedArrayBuffer, which needs the cross-origin isolation the
-  // coi-serviceworker provides; on a first visit (before the service worker has taken over)
-  // crossOriginIsolated is still false, so fall back to a single thread rather than let
-  // onnxruntime-web throw. Overridable via ?threads=N for re-tuning on other machines; the
-  // thread pool is sized once at wasm-module init, so each value needs a fresh page load.
+  // Multi-threaded WASM needs SharedArrayBuffer, which needs cross-origin isolation -- still false
+  // on a first visit before coi-serviceworker takes over, so fall back to one thread rather than
+  // let onnxruntime-web throw. ?threads=N overrides (needs a fresh page load to take effect).
   const threadsOverride = parseInt(new URLSearchParams(location.search).get('threads'), 10);
   ort.env.wasm.numThreads = threadsOverride > 0 ? threadsOverride
     : (window.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 6, 6) : 1);
 
-  // WASM pays a one-time JIT cost on its very first run. Absorb that here, before the model is
-  // used for real, instead of letting it land on the user's first real simulation step.
+  // Absorb WASM's one-time JIT cost here rather than on the user's first real sim step.
   const warmup = async s => {
     try {
       const S = CFG.netSize, SS = S * S;
