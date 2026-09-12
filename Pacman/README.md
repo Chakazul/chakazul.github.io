@@ -6,6 +6,21 @@ free-running Lenia channels play the parts of the dots/pellets and the ghosts. S
 over http(s) and open `index.html` — it fetches its shaders and its model, so `file://` will not
 work.
 
+## URL parameters
+
+- `?sound=0` — mute (default on).
+- `?dots=0` — turn off the dots/pellets channel (default on).
+- `?ghost=0` — turn off the ghosts channel; nothing but Pac-Man's own dynamics can kill him (default on).
+- `?god=1` — god mode: deaths still play out but never cost a life, for testing deep levels without a game over cutting the run short (default off).
+- `?level=N` — starting level, i.e. starting ghost count (default `3`).
+- `?chase=N` (`0`-`100`) — ghost chase-bias difficulty dial: `0` wanders, `100` always closes at a junction (default `60`).
+- `?net=N` — override the policy's input window size, for off-distribution experiments (default `96`, matching training).
+- `?sometimes=N` — steps CARL stays active per window in "CARL acts sometimes" mode before going idle again (default `100`).
+- `?stride=N` — infer the model only every Nth active step, taking no action in between; cheaper but reacts more slowly to a moving soliton (default `1`, i.e. every step).
+- `?budget=N` — per-frame sim-step time budget in ms, to tune per device (default `10`).
+- `?ep=wasm` — force the CPU-only WASM execution provider instead of the default WebGPU-with-WASM-fallback, for re-comparing on a new device.
+- `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 6); needs a fresh page load to take effect.
+
 ## What's Pac-Man about it
 
 - **The maze.** `MAZE_LAYOUT` in `app.js` hand-authors a fixed 5×11-cell level in the standard

@@ -259,22 +259,15 @@
           <span>simulation fps
             <span class="info-badge" tabindex="0" role="note" title="" aria-label="Setting the speed too high can make the simulation stutter. Try 15-30 steps/sec, and if it's still slow, switch your device to performance/high-power mode." data-tip="Setting the speed too high can make the simulation stutter. Try 15-30 steps/sec, and if it's still slow, switch your device to performance/high-power mode.">?</span>
           </span>
-          <input type="range" id="spd" min="1" max="480" step="1" value="60">
+          <input type="range" id="spd" min="10" max="480" step="10" value="60">
           <b id="v-spd">60/s</b>
-        </label>
-        <label class="mini" title="Only used in 'CARL acts sometimes' mode.">
-          <span>sometimes window
-            <span class="info-badge" tabindex="0" role="note" title="" aria-label="In 'CARL acts sometimes' mode, CARL only runs for this many steps after the episode starts or after you last changed direction, then goes idle until you steer again. A shorter window means CARL runs less often (faster, but slower to react); a longer one keeps it closer to 'CARL acts always'." data-tip="In 'CARL acts sometimes' mode, CARL only runs for this many steps after the episode starts or after you last changed direction, then goes idle until you steer again. A shorter window means CARL runs less often (faster, but slower to react); a longer one keeps it closer to 'CARL acts always'.">?</span>
-          </span>
-          <input type="range" id="window" min="10" max="500" step="10" value="100">
-          <b id="v-window">100</b>
         </label>
       </div>
     </div>
 
     <!-- Setup: the occasional choices, each of which restarts the episode. -->
     <div class="deck-setup">
-      <h3>Setup (v1.01)</h3>
+      <h3>Setup</h3>
       <label class="field" title="Pick which update rule's soliton to steer -- click a thumbnail">
         <div class="row">
           <span class="name">soliton
@@ -283,10 +276,6 @@
           <button id="shuffle" title="Pick a random soliton">🎲</button>
         </div>
         <div id="soliton-grid" class="soliton-grid"></div>
-      </label>
-      <label class="field" style="margin-top:10px" title="Toggle the maze walls. When off, the grid is empty and the soliton moves freely.">
-        <div class="row"><span class="name">maze</span></div>
-        <button id="maze-toggle" class="on" style="width:100%">On</button>
       </label>
     </div>
   </div>

@@ -136,7 +136,7 @@ const CFG = {
   // bonusFruitTimeout steps, it disappears instead (the next threshold, if any, still arms in its
   // own time -- see updateBonusFruit()). Configurable -- just change the numbers.
   bonusFruitThresholds: [0.3, 0.7],
-  bonusFruitTimeout: 700,
+  bonusFruitTimeout: 800,
 };
 // Pickup distance from Pac-Man's own centre of mass -- his kernel radius (CFG.R), since the fruit
 // is picked up on contact rather than dissolved like an ordinary dot (see updateBonusFruit()).
@@ -269,7 +269,7 @@ let bank = [], currentIndex = 0;
 // Every usable JSON entry by name, whether or not the picker offers it -- the free-running
 // channels look their rules up here rather than in `bank`.
 let ruleBank = new Map();
-let mazeEnabled = true;
+const mazeEnabled = true;
 // Chrome on/off: the control deck and CARL's overlay hide together, so the board reads as a game.
 let showOverlay = true;
 // 'sometimes' (default) queries CARL only for sometimesWindow steps after a spawn/steer, then
@@ -278,8 +278,13 @@ let showOverlay = true;
 // user's own clicks are the only actions.
 let actorMode = 'sometimes';
 let humanActs = false;                 // derived from actorMode === 'human', kept for readability
-let sometimesWindow = 100;             // configurable steps CARL stays active for in 'sometimes' mode
+let sometimesWindow = intParam('sometimes', 100);  // ?sometimes=N -- steps CARL stays active for in 'sometimes' mode
 let sometimesRemaining = 0;            // steps left in the current active window ('sometimes' mode only)
+// Further thins out inference within an active window: 1 infers every step, N>1 infers only every
+// Nth active step and skips the action in between -- the sim step, readback and rendering still
+// run every step, just without a fresh intervention.
+let inferenceStride = intParam('stride', 1);  // ?stride=N
+let strideCounter = 0;                 // active steps left to skip before the next inference is due
 // User's queued action, {gx,gy,sign}, or null. At most one held: a step consumes it exactly where
 // agentAct() would run, so a human turn and a CARL turn are the same turn.
 let pendingAction = null;
@@ -974,6 +979,7 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   if (resetLives) lives = STARTING_LIVES;
   if (resetLives) score = 0;
   sometimesRemaining = sometimesWindow;
+  strideCounter = 0;
   lastAction = null; lastQ = null;
   actionTrail.length = 0;
   pendingAction = null;
@@ -994,7 +1000,7 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
 // Held paused through the start jingle, then runs the instant it ends. Skipped for the automatic
 // death respawn (see placeSoliton()).
 //
-// Browsers block audio until a user gesture. Restart/maze-toggle/etc. are already inside a click
+// Browsers block audio until a user gesture. Restart/respawn/etc. are already inside a click
 // so they play immediately, but the very first call from page load has no gesture yet and gets
 // rejected -- so instead of starting silently, show a prompt and retry once the page sees its
 // actual first gesture.
@@ -1175,8 +1181,14 @@ async function agentStep() {
     lastMs = 0; lastQ = null; lastAction = null;      // CARL idle this step -- no inference, no action
   }
   else if (!session) return;
+  else if (strideCounter > 0) {
+    strideCounter--;
+    lastMs = 0; lastQ = null; lastAction = null;      // stride-skipped step -- no inference, no action
+    if (actorMode === 'sometimes') sometimesRemaining--;
+  }
   else {
     action = await agentAct();
+    strideCounter = inferenceStride - 1;
     if (actorMode === 'sometimes') sometimesRemaining--;
   }
 
@@ -1535,6 +1547,7 @@ function steerTo(dy, dx) {
   if (ny * dir[0] + nx * dir[1] < 0.9999) courseChanges++;
   dir = [ny, nx];
   sometimesRemaining = sometimesWindow;    // a fresh steer wakes CARL up again in 'sometimes' mode
+  strideCounter = 0;                       // ...and gets an immediate inference, not a stale skip
   render();
 }
 cv.addEventListener('click', e => {
@@ -1618,6 +1631,7 @@ function setActorMode(mode) {
   $('legend-target').hidden = humanActs;         // no blue arrow on the board, no key for it
   cv.classList.toggle('human', humanActs);
   if (mode === 'sometimes') sometimesRemaining = sometimesWindow;   // fresh window on entering the mode
+  strideCounter = 0;
   lastMs = 0; lastQ = null; lastAction = null; pendingAction = null;
   render();
 }
@@ -1630,12 +1644,6 @@ $('shuffle').addEventListener('click', () => {
   updateSolitonSelection();
   respawnCurrentSoliton();
 });
-$('maze-toggle').addEventListener('click', () => {
-  mazeEnabled = !mazeEnabled;
-  $('maze-toggle').textContent = mazeEnabled ? 'On' : 'Off';
-  $('maze-toggle').classList.toggle('on', mazeEnabled);
-  newMaze();       // respawns the soliton, which plays the start jingle and then starts the game
-});
 function setActionCost(v) {
   actionCost = v;
   const el = $('v-cost');
@@ -1646,10 +1654,6 @@ function setActionCost(v) {
 }
 $('cost').addEventListener('input', e => setActionCost(+e.target.value));
 $('spd').addEventListener('input', e => { sps = +e.target.value; $('v-spd').textContent = sps + '/s'; });
-$('window').addEventListener('input', e => {
-  sometimesWindow = +e.target.value;
-  $('v-window').textContent = sometimesWindow;
-});
 
 // Chrome toggle: the deck and CARL's overlay go together. The button itself stays put, since it
 // is the only way back to the controls.
