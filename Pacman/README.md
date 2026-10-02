@@ -19,8 +19,10 @@ work.
 - `?stride=N` — infer the model only every Nth active step, taking no action in between; cheaper but reacts more slowly to a moving soliton (default `1`, i.e. every step).
 - `?budget=N` — per-frame sim-step time budget in ms, to tune per device (default `10`).
 - `?ep=wasm` — force the CPU-only WASM execution provider instead of the default WebGPU-with-WASM-fallback, for re-comparing on a new device.
+- `?dotsim=N` — run the dots channel's full Lenia step only every Nth step; the steps in between only apply Pac-Man's erase, so eating stays instant while the dots breathe, and a bitten dot dissolves, N times slower (default `3` on phones and tablets, `1` elsewhere). The dots are the most expensive channel on the board; see PERF.md.
+- `?kernel=tex` — read convolution weights from a texture (the original path) instead of the default uniform buffer, to A/B the two on a new device (see Fidelity, below).
 - `?debug=1` — performance instrumentation panel (`debug.js`): live per-step timings, a policy benchmark per execution provider and crop size, a thread-count sweep, and a copyable JSON report. See PERF.md, "Measuring on a device".
-- `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 6); needs a fresh page load to take effect.
+- `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 4); needs a fresh page load to take effect.
 
 ## What's Pac-Man about it
 
@@ -42,7 +44,7 @@ work.
   reduction, alongside the CoM one, that measures how much dot mass sits under Pac-Man's channel
   above `EAT_THRESHOLD` each step, split into total and power-pellet-only; `sim.glsl` erases that
   mass as part of the same step. Whether anything (or any pellet) was eaten comes back in the same
-  readback as the CoM and crop, and drives the `eat_dot_0`/`eat_dot_1` "waka waka" loop
+  readback as the CoM, and drives the `eat_dot_0`/`eat_dot_1` "waka waka" loop
   (`noteEating()`) and the frightened window (below).
 - **The ghosts.** A third Lenia channel (`channel3RuleName` in `CFG`), rendered per-ghost from
   `COLORS.ghosts`, gets one full-size free-running soliton per numbered spawn (`1`-`9`) in the
@@ -262,6 +264,8 @@ shader passes.
 | ghost center of mass (per ghost) | n/a (no ghost channel) | `shaders/tilered.glsl` → `shaders/tilecom.glsl` |
 | ghost 90° turn | n/a (no ghost channel) | `shaders/rotate.glsl` |
 | ghost tiles → board space | n/a (no ghost channel) | `shaders/ghostblit.glsl` |
+| dots off-step (erase only, see `?dotsim`) | n/a (no dots channel) | `shaders/erase.glsl` |
+| every small result → one row for the readback | n/a | `shaders/gather.glsl` |
 | policy input window | JS crop of 4 stored boards | `shaders/crop.glsl` |
 | board rendering (walls, all three channels) | per-pixel JS + `putImageData` | `shaders/draw.glsl` |
 | **policy network** | onnxruntime-web (WASM) | onnxruntime-web (WebGPU by default, falling back to WASM per-op; `?ep=wasm` forces CPU-only) |
@@ -272,15 +276,20 @@ shader passes.
 The policy runs on the CPU, so something has to cross back from the GPU every step. Each step
 queues its passes with no readback between them — action, sim, reduce, com, eatreduce+eatsum,
 dotsites, crop, plus the two free-running channels' own sim passes and the ghost reduction — and the
-CPU then collects everything it needs in a single `readback()`:
+CPU then collects everything it needs in a single `readback()`. `shaders/gather.glsl` first copies
+every small result into one row, so that is one `readPixels`, not one per result:
 
-- the **CoM** (a 1×1 texture: row, col, mass, valid) for the episode bookkeeping and the overlay
-- the **eaten-mass totals** (dot and power-pellet, a 1×1 texture), thresholded on the CPU into
+- the **CoM** (row, col, mass, valid) for the episode bookkeeping and the overlay
+- the **eaten-mass totals** (dot and power-pellet), thresholded on the CPU into
   "something/a pellet was eaten"
-- the **mass left per dot** (one row, one texel per dot) for the score
-- the **per-ghost CoM** (one row, one texel per ghost) for the turn logic — free, in that the
-  stall has already happened by the time it is read
-- the **96×96×4 crop** the policy reads
+- the **dots channel's total mass**, for the board-cleared check
+- the **per-ghost CoM** (one texel per ghost) for the turn logic
+- the **mass left per dot** (one texel per dot) for the score
+
+The **96×96×4 crop** the policy reads (144 KB) is not part of it: `readCrop()` fetches it at the
+top of `agentAct()`, only on steps where CARL is about to infer. Nothing writes the crop texture
+between the step that computed it and that read, so it is the same data the per-step readback
+used to carry, and idle steps (most of them, in "CARL acts sometimes") no longer pay for it.
 
 The crop pass reads the CoM out of a *texture* rather than a uniform, which is what makes one stall
 enough: it does not have to wait for the CPU to be told where the soliton is before it can crop
@@ -304,8 +313,13 @@ The step order is deliberately identical to the CPU demo's `agentStep()` — act
 board, then step, then locate, then judge — because the policy is sensitive to it. Beyond that:
 
 - The kernel is built by the same arithmetic as the CPU demo's `buildKernel()`, including the
-  1e-7 tap threshold and normalization by the unthresholded sum, and uploaded as a texture. So the
-  weights are the ones the CPU version used, not a shader re-derivation of them.
+  1e-7 tap threshold and normalization by the unthresholded sum, so the weights are the ones the
+  CPU version used, not a shader re-derivation of them. They reach the shader as each row's
+  nonzero run, zero-padded to vec4 chunks, in a uniform buffer (`makeKernel()`), so the loop costs
+  one state fetch per tap instead of a kernel fetch per box position plus a state fetch per
+  nonzero tap (R=18: 1068 fetches against 2341). Checked against the texture path in float32 for
+  every bank rule, at board-wrap and tile edges: identical sums, bit for bit. `?kernel=tex`
+  switches back to the texture path.
 - The shader sums `state[p+d]`; the CPU's FFT computes the `state[p-d]` form. These agree because
   the kernel is radially symmetric (verified: max asymmetry ~1e-17). Direct sum vs. FFT circular
   convolution agree to ~4e-15.

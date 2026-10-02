@@ -55,7 +55,7 @@
     inferred = true;
     const t = now();
     const r = await origAct();
-    rec('infer', now() - t);   // de-interleave + session.run + argmax
+    rec('infer', now() - t);   // crop read + de-interleave + session.run + argmax
     return r;
   };
   const origRender = render;
@@ -66,11 +66,15 @@
   SimGL.readback = function () { const t = now(); const r = origReadback(); rec('gpu.readback', now() - t); return r; };
 
   const origRun = ort.InferenceSession.prototype.run;
+  let inFlight = 0;   // runs in progress on any session, the game's warm-up included
   ort.InferenceSession.prototype.run = async function (...a) {
     const t = now();
-    const r = await origRun.apply(this, a);
-    if (!benching) rec('infer.run', now() - t);
-    return r;
+    inFlight++;
+    try {
+      const r = await origRun.apply(this, a);
+      if (!benching) rec('infer.run', now() - t);
+      return r;
+    } finally { inFlight--; }
   };
 
   // Independent rAF ticker: frame gaps show main-thread blocking however it's caused.
@@ -124,11 +128,11 @@
   // ------------------------------------------------------------------------------------------
   //  Bench: the policy alone, per execution provider and crop size
   // ------------------------------------------------------------------------------------------
-  const ready = () => new Promise(res => { (function w() { session && lastCrop ? res() : setTimeout(w, 200); })(); });
+  const ready = () => new Promise(res => { (function w() { session && lastCoM ? res() : setTimeout(w, 200); })(); });
 
   // The live crop's centre SxS, so the bench sees a real soliton rather than an empty window.
   function feeds(S) {
-    const net = CFG.netSize, off = (net - S) >> 1, SS = S * S;
+    const net = CFG.netSize, off = (net - S) >> 1, SS = S * S, lastCrop = SimGL.readCrop();
     const data = new Float32Array(CFG.K * SS);
     for (let k = 0; k < CFG.K; k++)
       for (let y = 0; y < S; y++)
@@ -155,7 +159,10 @@
     await ready();
     const wasRunning = running;
     setRunning(false);
-    while (busy) await new Promise(r => setTimeout(r, 20));   // let an in-flight game step finish
+    // Let an in-flight game step finish, and the game's warm-up run too: loadModel() sets `session`
+    // before awaiting its warm-up, and a bench session started alongside it fails with "Session
+    // already started" on WebGPU.
+    while (busy || inFlight) await new Promise(r => setTimeout(r, 20));
     benching = true;
     const out = { when: new Date().toISOString(), threads: ort.env.wasm.numThreads, crossOriginIsolated: window.crossOriginIsolated, results: [] };
     const eps = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
@@ -163,9 +170,10 @@
       for (const ep of eps) {
         const r = { ep };
         status(`bench: ${ep} …`);
+        let s = null;
         try {
           let t = now();
-          const s = await ort.InferenceSession.create(CFG.modelUrl, { executionProviders: [ep] });
+          s = await ort.InferenceSession.create(CFG.modelUrl, { executionProviders: [ep] });
           r.createMs = Math.round(now() - t);
           for (const S of [96, 64, 48]) {
             if (S > CFG.netSize) continue;
@@ -179,8 +187,10 @@
           }
           status(`bench: ${ep} main-thread test …`);
           r.blocking = await blocking(s, feeds(Math.min(96, CFG.netSize)));
-          await s.release?.();
         } catch (e) { r.error = String(e?.message || e); }
+        // Released even after an error: leaked sessions are the likely cause of the "memory access
+        // out of bounds" seen on the last step of some sweeps.
+        try { await s?.release(); } catch (e) {}
         out.results.push(r);
       }
     } finally {
@@ -233,7 +243,8 @@
       reportVersion: 1, when: new Date().toISOString(), url: location.href,
       env: envCache,
       game: { actorMode, sps, measSps: Math.round(measSps), level, stride: inferenceStride, sometimesWindow,
-              frameBudgetMs: FRAME_BUDGET_MS, netSize: CFG.netSize, board: `${W}x${H}` },
+              frameBudgetMs: FRAME_BUDGET_MS, netSize: CFG.netSize, board: `${W}x${H}`,
+              kernel: KERNEL_MODE, dotsEvery: DOTS_EVERY },
       live, bench: load(localStorage, BENCH_KEY, []),
     };
   }
@@ -276,7 +287,7 @@
     let ep = EXECUTION_PROVIDERS.join('>');
     try { ep += ort.env.webgpu?.adapter ? ' (webgpu up)' : ''; } catch (e) {}
     el('live').textContent =
-      `${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  ${actorMode}  L${level}\n` +
+      `${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
       `p50/p90 ms  infer ${p('infer')}  run ${p('infer.run')}  readback ${p('gpu.readback')}  submit ${p('gpu.submit')}\n` +
       `step carl ${p('step.carl')}  idle ${p('step.idle')}  frame ${p('frame')}  render ${p('render')}\n` +
       `rate ${Math.round(measSps)}/${sps} steps/s`;

@@ -46,6 +46,16 @@ const GOD_MODE = boolParam('god', false);
 // conv work. `?ep=wasm` forces CPU-only, for re-comparing on a new device.
 const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'wasm'
   ? ['wasm'] : ['webgpu', 'wasm'];
+// How the convolutions read kernel weights: a uniform buffer by default, `?kernel=tex` for the
+// original texture path, kept to A/B the two on a new device (see PERF.md).
+const KERNEL_MODE = new URLSearchParams(location.search).get('kernel') === 'tex' ? 'tex' : 'ubo';
+// The dots channel takes a full Lenia step only every Nth step (eating stays instant; see
+// setDotsEvery() in glsim.js). They are the most expensive channel on the board and purely
+// decorative motion, so phones, whose GPUs measured 18-20ms per step, step them every 3rd.
+// `?dotsim=N` overrides.
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));   // iPadOS reports as a Mac
+const DOTS_EVERY = intParam('dotsim', IS_MOBILE ? 3 : 1);
 
 // ====================================================================================
 //  CONFIG -- locked to the canonical direction run (models/meta_direction.json)
@@ -191,9 +201,6 @@ let maze = { start: [0, 0] };
 let dir = [0, 1];                             // current target direction (dy,dx), unit length
 let comHistory = [[0, 0], [0, 0], [0, 0], [0, 0]];
 let lastCoM = null, initialMass = 0;
-// Most recent crop readback, channel-packed. Held by reference (the engine reuses one buffer),
-// always consumed into a tensor before the next readback overwrites it.
-let lastCrop = null;
 let steps = 0, actions = 0, solitonDead = false;
 let courseChanges = 0;          // target direction changes the user made this episode
 // Pending auto-respawn from a death, so a manual Restart/etc. during the gap can cancel it.
@@ -988,7 +995,6 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   // come from the same place every later step gets them from.
   SimGL.prime();
   const rb = SimGL.readback();
-  lastCrop = rb.crop;
   lastCoM = rb.valid ? [rb.row, rb.col, rb.mass] : null;
   initialMass = lastCoM ? lastCoM[2] : 0;
   comHistory = Array.from({ length: CFG.windowSize }, () => lastCoM ? [lastCoM[0], lastCoM[1]] : [tr, tc]);
@@ -1128,23 +1134,29 @@ function buildContext() {
   ]);
 }
 
+// The policy's input: the crop from the last step (fetched now, only because an inference is
+// about to use it -- see readCrop() in glsim.js) plus the context vector. The crop arrives
+// channel-packed; the model wants frame-major [1,K,S,S]. This de-interleave is the whole cost of
+// the GPU input path.
+function cropFeeds() {
+  const S = CFG.netSize, SS = S * S, crop = SimGL.readCrop();
+  const data = new Float32Array(CFG.K * SS);
+  for (let k = 0; k < CFG.K; k++) {
+    const base = k * SS;
+    for (let i = 0; i < SS; i++) data[base + i] = crop[i * 4 + k];
+  }
+  return {
+    state:   new ort.Tensor('float32', data, [1, CFG.K, S, S]),
+    context: new ort.Tensor('float32', buildContext(), [1, 4]),
+  };
+}
+
 // CARL's half of a turn: pick a spot + sign from the policy. Unlike the CPU version this only
 // *returns* the intervention -- applying it is a GPU pass inside SimGL.step().
 async function agentAct() {
   const t0 = performance.now();
   const S = CFG.netSize, SS = S * S;
-  // The crop arrives channel-packed; the model wants frame-major [1,K,S,S]. This de-interleave is
-  // the whole cost of the GPU input path.
-  const data = new Float32Array(CFG.K * SS);
-  for (let k = 0; k < CFG.K; k++) {
-    const base = k * SS;
-    for (let i = 0; i < SS; i++) data[base + i] = lastCrop[i * 4 + k];
-  }
-  const feeds = {
-    state:   new ort.Tensor('float32', data, [1, CFG.K, S, S]),
-    context: new ort.Tensor('float32', buildContext(), [1, 4]),
-  };
-  const out = await session.run(feeds);
+  const out = await session.run(cropFeeds());
   const q = out.q.data;
   lastMs = performance.now() - t0;
   let best = 0, bv = q[0];
@@ -1197,7 +1209,6 @@ async function agentStep() {
   // pushGhostTiles() at the end of steerGhosts(), not as an argument here.
   SimGL.step(action);
   const rb = SimGL.readback();
-  lastCrop = rb.crop;
   steps++;
   updateFrightened(rb);
   updateScore(rb);
@@ -1748,23 +1759,17 @@ async function loadModel() {
   ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
   // Multi-threaded WASM needs SharedArrayBuffer, which needs cross-origin isolation -- still false
   // on a first visit before coi-serviceworker takes over, so fall back to one thread rather than
-  // let onnxruntime-web throw. ?threads=N overrides (needs a fresh page load to take effect).
+  // let onnxruntime-web throw. Capped at 4: more is slower on phones, whose big.LITTLE cores make
+  // hardwareConcurrency overstate what helps (Pixel: 17ms at 4 threads, 60ms at 8; see PERF.md).
+  // ?threads=N overrides (needs a fresh page load to take effect).
   const threadsOverride = parseInt(new URLSearchParams(location.search).get('threads'), 10);
   ort.env.wasm.numThreads = threadsOverride > 0 ? threadsOverride
-    : (window.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 6, 6) : 1);
+    : (window.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 4) : 1);
 
   // Absorb WASM's one-time JIT cost here rather than on the user's first real sim step.
   const warmup = async s => {
-    try {
-      const S = CFG.netSize, SS = S * S;
-      const data = new Float32Array(CFG.K * SS);
-      for (let k = 0; k < CFG.K; k++) {
-        const base = k * SS;
-        for (let i = 0; i < SS; i++) data[base + i] = lastCrop[i * 4 + k];
-      }
-      const feeds = { state: new ort.Tensor('float32', data, [1, CFG.K, S, S]), context: new ort.Tensor('float32', buildContext(), [1, 4]) };
-      await s.run(feeds);
-    } catch (e) { /* best-effort -- worst case the first real step pays this cost instead */ }
+    try { await s.run(cropFeeds()); }
+    catch (e) { /* best-effort -- worst case the first real step pays this cost instead */ }
   };
 
   try {
@@ -1782,7 +1787,8 @@ async function loadModel() {
   initTheme();
   setActionCost(+$('cost').value);
   try {
-    await SimGL.init(cv, CFG.netSize);
+    await SimGL.init(cv, CFG.netSize, { kernel: KERNEL_MODE });
+    SimGL.setDotsEvery(DOTS_EVERY);
   } catch (e) {
     console.error(e);
     fail('<b>GPU init failed:</b> ' + e.message);

@@ -4,7 +4,8 @@ The game runs smoothly on a reasonably fast desktop, but stutters on weaker lapt
 mobile — worst when CARL is acting. This is where the per-step budget actually goes, and what
 can be done about it, cheapest first.
 
-Nothing here has been implemented yet; it is a work list, not a changelog.
+Started as a work list. Items marked **(done)** have since been implemented; the rest is still
+a list, not a changelog. Measured device numbers are in "Device measurements" below.
 
 ## Where the time goes
 
@@ -56,21 +57,22 @@ This is very likely the largest mobile cost after the convolution itself.
 
 ### Tier 1 — small diffs, behaviour bit-identical
 
-1. **Read the crop only when something is about to infer.**
+1. **Read the crop only when something is about to infer.** **(done: `readCrop()`)**
    `agentAct()` consumes `lastCrop` from the *previous* step's readback, so moving the crop
    `readPixels` out of `readback()` and into the top of `agentAct()` reads exactly the same pixels
    from exactly the same pass — the crop FBO still holds them, and nothing overwrites it in
    between. It removes 144 KB and a pipeline flush from every step where CARL is idle, which is
    most steps in the default actor mode and all of them in "You act". Biggest win per line changed.
 
-2. **Skip the zero taps with per-row extents.**
+2. **Skip the zero taps with per-row extents.** **(done, together with #3)**
    The kernel is a disc, so its nonzero taps in each row are a *contiguous* run — checked: the sum
    of per-row `[lo,hi]` extents is 973 against 972 actual nonzero taps at R=18, and 241 against 240
    at R=9, so bounding the inner loop by the extents skips exactly one zero tap more than the
    `w == 0.0` guard does and never skips a nonzero one. Pass `lo`/`hi` as a `uniform int[2R+1]` and
    loop over the run instead of the full row. Exact, not an approximation. **−18% fetches.**
 
-3. **Bake the kernel weights into the shader instead of fetching them.**
+3. **Bake the kernel weights into the shader instead of fetching them.** **(done, as a uniform
+   buffer rather than a const array: see the note at the end of this item)**
    Generate `const float K[973] = float[](...)` into the shader source at link time and index it by
    the loop counter, which removes the kernel `texelFetch` entirely. The weights are still the ones
    `kernelData()` produces, so this stays bit-identical to the CPU demo the way the README's
@@ -89,7 +91,19 @@ This is very likely the largest mobile cost after the convolution itself.
    Mali/Adreno drivers materialize a ~1000-entry constant array badly, and if this is one of those
    cases, #2 alone still stands on its own.
 
-4. **Collapse the four 1×1 readbacks into one.**
+   *As implemented:* weights go in a uniform buffer object, not a generated `const` array. That
+   sidesteps the const-array risk above, and UBO reads in the same order across fragments are
+   the usual fast path for this, but it is still unmeasured on a phone. Each row's nonzero run is
+   zero-padded to whole vec4 chunks, so the shader reads four weights at a time with constant
+   component indices. The padding costs a little: up to 1068 state fetches per cell at R=18 (vs.
+   973 unpadded) and 292 at R=9 (vs. 241), so the saving is −54% / −51% per cell rather than
+   the table's −59%. With #6 at its phone default (`dotsim` 3), level 3 comes to ~61M fetches per
+   step against 185.7M (−67%), and ~87M (−53%) on desktop, where the dots still step every
+   step. Fetches are a proxy, not a timing: the device re-run is what counts. The sums are bit-identical to
+   the texture path (checked in float32 over every bank rule, at wrap and tile edges), and
+   `?kernel=tex` keeps the texture path for an on-device A/B.
+
+4. **Collapse the four 1×1 readbacks into one.** **(done: `gather.glsl`, the per-dot row included)**
    A tiny gather pass that writes CoM, eaten mass, ghost CoM and dots CoM into a single
    12×1 RGBA32F texture, read with one `readPixels`. The data is trivial either way; what this
    removes is three driver round-trips per step, which are not free on mobile.
@@ -102,7 +116,7 @@ This is very likely the largest mobile cost after the convolution itself.
 
 ### Tier 2 — a visible tradeoff, but the dots are 44% of the GPU cost
 
-6. **Stop stepping the dots every step.**
+6. **Stop stepping the dots every step.** **(done: `?dotsim=N`, default 3 on phones/tablets, 1 elsewhere)**
    They are stationary — `CFG`'s own comment says the dots channel "never moves", which is why
    `sim.glsl` skips wall masking for it. Either step the channel every N steps (cost ÷N, they just
    breathe more slowly) or do not step it at all (stamp once, keep only the erase). Eating has to
@@ -124,7 +138,7 @@ This is very likely the largest mobile cost after the convolution itself.
    meet. The speed slider's tooltip currently asks the player to do this by hand ("try 15–30
    steps/sec"), which is the right diagnosis and the wrong owner.
 
-9. **Thread count on mobile.**
+9. **Thread count on mobile.** **(done: capped at 4, from the device measurements)**
    `loadModel()` sets `numThreads = min(hardwareConcurrency || 6, 6)`. Phones commonly report 8
    cores of which four are tiny, and oversubscribing them is slower than 2–4 threads. Also worth
    confirming `crossOriginIsolated` is actually true on the target phones: if `coi-serviceworker`
@@ -342,6 +356,86 @@ What the numbers decide:
 - `infer` − `run` → the JS de-interleave cost (expected to be negligible).
 - `webgpuBackendUp`, `crossOriginIsolated`, `wasmThreads` → configuration problems, which
   are free to fix.
+
+## Device measurements (2026-10-02)
+
+Six devices, `?debug=1&sound=0`, default "CARL acts sometimes" mode at level 3 and 60 steps/s
+requested, plus a thread sweep on each. Medians in ms. "GPU sim" is `gpu.readback`, the stall
+waiting for a step's queued passes, which approximates the sim's GPU cost.
+
+| device | GPU (WebGPU adapter) | WebGPU 96 | WASM 1 / 2 / 4 / 8 threads, 96 | fastest CARL | GPU sim / step | step with CARL / idle | steps/s |
+|---|---|---|---|---|---|---|---|
+| Windows laptop, Chrome | AMD 890M (rdna-3) | 6.7 | 23 / 12.5 / 7.0 / 7.7 | tie, ~7 | 3.6 | 10.5 / 4.3 | 59 |
+| Windows laptop, Chrome | Intel Xe3-LPG | 8.1 | 21 / 12.4 / 8.8 / 6.2 | WASM 8t | 6.3 | 15.7 / 11.6 | 59 |
+| MacBook, Chrome | Apple M2 (metal-3) | 8.3 | 25 / 13.2 / 15.2 / 18.2 | WebGPU | 8.6 | 17.2 / 10.4 | 60 |
+| Pixel, Chrome | Mali-G715 (valhall) | 24–30 | 38 / 30 / 17 / 60 | WASM 4t | 18.5 | 44.7 / 21.3 | 22 |
+| iPhone, Chrome (WebKit) | Apple GPU | ~30 | 52 / 66 / 70 / – (4 cores) | WebGPU | 20.2 | – / 20.4 ¹ | 28 |
+| old MacBook, Chrome 128 ² | Intel Iris Pro (gen-7) | 47, **wrong output** | 45 / 26 / 15 / – (4 cores) | WASM 4t | 26.3 | 47.8 / 25.4 | 35 |
+
+¹ No CARL steps were recorded in the iPhone's live run (CARL stayed idle); its CARL cost comes
+from the bench. ² Old MacBook: run with `?ep=wasm` because WebGPU inference there returns wrong
+actions (interventions land ~3–4 cells above Pac-Man; WASM on the same machine is correct). Kept
+for completeness only, not an optimization target.
+
+Smaller crops, at each device's best WASM thread count (64 / 48): Windows AMD 3.7 / 2.5,
+Pixel 8.5 / 5.6, iPhone 24 / 15, M2 6.2 / 4.1, Intel Xe3 3.6 / 2.7. WebGPU at 64 / 48 is within
+~1–3 ms of its 96 figure on every device except the old MacBook.
+
+### Findings
+
+1. **On phones the GPU sim is as expensive as CARL.** 18–20 ms per step on Pixel and iPhone
+   before any inference, which caps them at ~50 steps/s with CARL idle. Desktops are 4–9 ms.
+   The GPU work list above (Tier 1 #1–#4, Tier 2 #6) is now as important as anything on the
+   CARL side, not a separate concern.
+
+2. **WebGPU inference has a floor of ~6.5–8.5 ms, even on fast desktop GPUs, and it barely
+   moves with crop size.** So its cost is per-node dispatch overhead in onnxruntime's JS, not
+   arithmetic: the 694-node graph is the problem. The main-thread test agrees: WebGPU holds the
+   main thread for most of each run on the Pixel (max gap 20–27 ms of ~30). The lever for WebGPU
+   is the graph simplification (CARL inference #3). A smaller network or crop does not help it.
+
+3. **WASM inference is arithmetic-bound.** 96 → 64 → 48 gives ~2× and ~3–4× on every device, so
+   distillation and a smaller-window retrain pay off on WASM. WASM also blocks the main thread
+   for the whole run (zero ticks in the test), so pipelining (CARL inference #2) needs inference
+   moved into a worker first.
+
+4. **The best WASM thread count is device-specific, and more threads can be slower:** 2 on M2,
+   4 on Pixel, 8 on Intel Xe3, 1 on iPhone, and 8 on the Pixel is 3.5× slower than 4. The
+   current default, `min(hardwareConcurrency, 6)`, oversubscribes phones with big.LITTLE cores.
+   4 is the best single default: best or near-best everywhere WASM is the faster backend.
+
+5. **No single backend is fastest everywhere.** WebGPU wins on M2 and iPhone and ties on AMD;
+   WASM wins on Pixel (17 vs 25–30 ms) and Intel Xe3 (6.2 vs 8.1). WebGPU stays the right
+   default: it is best or within ~2 ms on every target device except the Pixel.
+
+6. **Pipelining pays more than first estimated.** CARL and the sim cost about the same on most
+   devices (M2 8.7 vs 8.6, Pixel on WASM 17 vs 18.5), so overlapping them approaches the 2×
+   ceiling on CARL steps rather than the ~11% feared when inference was assumed to dominate.
+
+7. **The two newest desktops reach 60 steps/s, with no headroom.** A CARL step is 15.7–17.2 ms
+   against a 16.7 ms budget.
+
+8. **The WebGPU output bug is not Mac-wide.** The M2 MacBook runs WebGPU by default at full
+   speed. If its steering is confirmed correct, the bug is specific to the old Intel Iris Pro
+   driver.
+
+### Revised order
+
+1. Default WASM threads to 4. WebGPU stays the default backend. (Done.)
+2. GPU sim Tier 1 (#1 crop read only when inferring, #2 row extents, #3 weights in shader, #4
+   one 1×1 readback) and Tier 2 #6 (step the dots less often): targets the phones' 18–20 ms.
+   (Done; not yet re-measured on the devices.)
+3. Inference in a worker, pipelined with the sim: CARL steps cost `max(infer, sim)`.
+4. Graph simplification (fold FiLM, static shapes, conv padding), mainly for WebGPU's
+   per-node floor. Then distillation / a smaller window (retraining) for WASM.
+
+### Debug-tool flaws seen in these runs (fixed since)
+
+- `Session already started` (some WebGPU bench rows): the bench can start while the game's own
+  warm-up inference is still running, because `loadModel()` sets `session` before awaiting
+  the warm-up. The bench should wait for in-flight runs.
+- `memory access out of bounds` on the last step of a sweep (Pixel 8 threads, iPhone 4 threads):
+  most likely sessions accumulating across benches. A session that errors is never released.
 
 ## Considered and rejected
 

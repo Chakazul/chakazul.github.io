@@ -13,7 +13,15 @@ precision highp int;      // fragment-stage int defaults to mediump -- see actio
 
 uniform sampler2D uAtlas;    // source atlas, R = cell value
 uniform sampler2D uWall;     // board wall mask
+#ifdef KERNEL_TEX
 uniform sampler2D uKernel;   // (2R+1)^2 normalized growth kernel
+#else
+// Per-row nonzero runs, same layout as sim.glsl's -- see makeKernel() in glsim.js.
+layout(std140) uniform Kernel {
+    ivec4 uRows[37];
+    vec4  uK[370];
+};
+#endif
 uniform sampler2D uPacman;   // Pac-Man's board-space state, post-step -- read for a tile only when
                              // uFrightened[i], to erase that ghost on overlap (per-tile, so one
                              // frightened ghost doesn't affect its packmates)
@@ -39,6 +47,7 @@ void main() {
 
     // Taps outside this tile read as empty rather than wrapping into the neighbouring ghost's tile.
     float conv = 0.0;
+#ifdef KERNEL_TEX
     for (int dy = -uR; dy <= uR; dy++) {
         int y = sl.y + dy;
         if (y < 0 || y >= uWin) continue;
@@ -50,6 +59,22 @@ void main() {
             conv += w * texelFetch(uAtlas, ivec2(base + x, y), 0).r;
         }
     }
+#else
+    for (int r = 0; r <= 2 * uR; r++) {
+        int y = sl.y + r - uR;
+        if (y < 0 || y >= uWin) continue;
+        ivec4 row = uRows[r];
+        for (int c = 0; c < row.y; c++) {
+            vec4 w = uK[row.z + c];
+            int x = sl.x + row.x + 4 * c;
+            // Out-of-tile taps contribute 0, the same as being skipped, in tap order.
+            conv += w.x * (x     >= 0 && x     < uWin ? texelFetch(uAtlas, ivec2(base + x,     y), 0).r : 0.0);
+            conv += w.y * (x + 1 >= 0 && x + 1 < uWin ? texelFetch(uAtlas, ivec2(base + x + 1, y), 0).r : 0.0);
+            conv += w.z * (x + 2 >= 0 && x + 2 < uWin ? texelFetch(uAtlas, ivec2(base + x + 2, y), 0).r : 0.0);
+            conv += w.w * (x + 3 >= 0 && x + 3 < uWin ? texelFetch(uAtlas, ivec2(base + x + 3, y), 0).r : 0.0);
+        }
+    }
+#endif
 
     float s = (sl.x >= 0 && sl.x < uWin && sl.y >= 0 && sl.y < uWin)
             ? texelFetch(uAtlas, ivec2(base + sl.x, sl.y), 0).r : 0.0;
