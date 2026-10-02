@@ -6,7 +6,8 @@
 //  change to their code paths) to time every step, and adds a small panel with:
 //   - a live readout: inference vs. sim+readback vs. frame time, split by whether CARL inferred;
 //   - Bench: pauses the game and times the policy alone, per execution provider (webgpu, wasm)
-//     and per crop size (96/64/48), plus whether inference blocks the main thread;
+//     and per policy graph (orig / slice / gather, see ?model=), plus whether inference blocks
+//     the main thread;
 //   - Sweep threads: reloads the page with ?threads=1,2,4,max and benches each, since onnxruntime's
 //     WASM thread count is fixed for the life of a page;
 //   - Copy report: everything above as one JSON blob, kept across reloads in localStorage.
@@ -126,19 +127,9 @@
   }
 
   // ------------------------------------------------------------------------------------------
-  //  Bench: the policy alone, per execution provider and crop size
+  //  Bench: the policy alone, per execution provider and policy graph
   // ------------------------------------------------------------------------------------------
   const ready = () => new Promise(res => { (function w() { session && lastCoM ? res() : setTimeout(w, 200); })(); });
-
-  // The live crop's centre SxS, so the bench sees a real soliton rather than an empty window.
-  function feeds(S) {
-    const net = CFG.netSize, off = (net - S) >> 1, SS = S * S, lastCrop = SimGL.readCrop();
-    const data = new Float32Array(CFG.K * SS);
-    for (let k = 0; k < CFG.K; k++)
-      for (let y = 0; y < S; y++)
-        for (let x = 0; x < S; x++) data[k * SS + y * S + x] = lastCrop[((y + off) * net + x + off) * 4 + k];
-    return { state: new ort.Tensor('float32', data, [1, CFG.K, S, S]), context: new ort.Tensor('float32', buildContext(), [1, 4]) };
-  }
 
   // A MessageChannel ping-pong runs alongside inference: its longest gap says how long the main
   // thread was held. ~runMs means inference blocks the page (pipelining can't overlap it);
@@ -155,44 +146,43 @@
     return { runMs: Math.round(runMs * 100) / 100, maxMainThreadGapMs: Math.round(maxGap * 100) / 100, ticksPerRun: Math.round(ticks / RUNS) };
   }
 
+  // Every policy graph the game can run (see CFG.coreUrl, ?model=), on every backend, on the live
+  // crop, so the report shows which pairing is fastest on this device. 'gather' exists only at the
+  // default 96 crop. The FiLM model's own cost isn't counted: it runs once per steer, not per step.
   async function bench() {
     await ready();
     const wasRunning = running;
     setRunning(false);
-    // Let an in-flight game step finish, and the game's warm-up run too: loadModel() sets `session`
-    // before awaiting its warm-up, and a bench session started alongside it fails with "Session
-    // already started" on WebGPU.
+    // Let an in-flight game step finish, and any other inference with it: a bench session started
+    // alongside a running one fails with "Session already started" on WebGPU.
     while (busy || inFlight) await new Promise(r => setTimeout(r, 20));
     benching = true;
     const out = { when: new Date().toISOString(), threads: ort.env.wasm.numThreads, crossOriginIsolated: window.crossOriginIsolated, results: [] };
     const eps = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
+    const models = CFG.netSize === 96 ? ['orig', 'slice', 'gather'] : ['orig', 'slice'];
     try {
-      for (const ep of eps) {
-        const r = { ep };
-        status(`bench: ${ep} …`);
-        let s = null;
-        try {
-          let t = now();
-          s = await ort.InferenceSession.create(CFG.modelUrl, { executionProviders: [ep] });
-          r.createMs = Math.round(now() - t);
-          for (const S of [96, 64, 48]) {
-            if (S > CFG.netSize) continue;
-            status(`bench: ${ep} ${S}² …`);
-            const f = feeds(S);
-            t = now(); await s.run(f); r[`firstRun${S}`] = Math.round(now() - t);   // JIT / shader compile
+      for (const ep of eps)
+        for (const model of models) {
+          const r = { ep, model };
+          status(`bench: ${ep} ${model} …`);
+          let s = null;
+          try {
+            const f = await feedsFor(model, stateTensor());
+            let t = now();
+            s = await ort.InferenceSession.create(model === 'orig' ? CFG.modelUrl : CFG.coreUrl[model], { executionProviders: [ep] });
+            r.createMs = Math.round(now() - t);
+            t = now(); await s.run(f); r.firstRun = Math.round(now() - t);   // JIT / shader compile
             await s.run(f); await s.run(f);
-            const xs = [], RUNS = S === 96 ? 20 : 10;
-            for (let i = 0; i < RUNS; i++) { t = now(); await s.run(f); xs.push(now() - t); }
-            r[`run${S}`] = summarize(xs);
-          }
-          status(`bench: ${ep} main-thread test …`);
-          r.blocking = await blocking(s, feeds(Math.min(96, CFG.netSize)));
-        } catch (e) { r.error = String(e?.message || e); }
-        // Released even after an error: leaked sessions are the likely cause of the "memory access
-        // out of bounds" seen on the last step of some sweeps.
-        try { await s?.release(); } catch (e) {}
-        out.results.push(r);
-      }
+            const xs = [];
+            for (let i = 0; i < 20; i++) { t = now(); await s.run(f); xs.push(now() - t); }
+            r.run = summarize(xs);
+            r.blocking = await blocking(s, f);
+          } catch (e) { r.error = String(e?.message || e); }
+          // Released even after an error: leaked sessions are the likely cause of the "memory access
+          // out of bounds" seen on the last step of some sweeps.
+          try { await s?.release(); } catch (e) {}
+          out.results.push(r);
+        }
     } finally {
       benching = false;
       if (wasRunning) setRunning(true);
@@ -240,11 +230,11 @@
     const live = {};
     for (const k of Object.keys(series).sort()) live[k] = summarize(series[k]);
     return {
-      reportVersion: 1, when: new Date().toISOString(), url: location.href,
+      reportVersion: 2, when: new Date().toISOString(), url: location.href,
       env: envCache,
       game: { actorMode, sps, measSps: Math.round(measSps), level, stride: inferenceStride, sometimesWindow,
               frameBudgetMs: FRAME_BUDGET_MS, netSize: CFG.netSize, board: `${W}x${H}`,
-              kernel: KERNEL_MODE, dotsEvery: DOTS_EVERY },
+              kernel: KERNEL_MODE, dotsEvery: DOTS_EVERY, model: policyModel },
       live, bench: load(localStorage, BENCH_KEY, []),
     };
   }
@@ -287,7 +277,7 @@
     let ep = EXECUTION_PROVIDERS.join('>');
     try { ep += ort.env.webgpu?.adapter ? ' (webgpu up)' : ''; } catch (e) {}
     el('live').textContent =
-      `${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
+      `${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  model ${policyModel}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
       `p50/p90 ms  infer ${p('infer')}  run ${p('infer.run')}  readback ${p('gpu.readback')}  submit ${p('gpu.submit')}\n` +
       `step carl ${p('step.carl')}  idle ${p('step.idle')}  frame ${p('frame')}  render ${p('render')}\n` +
       `rate ${Math.round(measSps)}/${sps} steps/s`;

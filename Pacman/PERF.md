@@ -266,6 +266,32 @@ which is why skipping steps is tempting, and why skipping the few that matter hu
    the original. Expected gain on CPU is 0–20%. On WebGPU every node is a separate dispatch, so
    the gain could be much larger, but that is unmeasured.
 
+   **(Done, partly: `tools/split_model.py`.)** What was built:
+   - **FiLM split out** into `agent_direction_film.onnx` (context → 28 γ/β tensors, 112 ops),
+     run on WASM once per context change and cached (`filmFeeds()`). The core takes γ/β as
+     inputs, which removes the MLPs, the reshapes and all the shape arithmetic.
+   - **Upsamples by a constant scale of 2** instead of a size computed from the skip's shape.
+     Identical at every level of this net, and it keeps the core fully convolutional.
+   - Two cores: `agent_direction_core.onnx` keeps the Slice/Concat circular padding (150 ops,
+     any crop size). `agent_direction_core_gather.onnx` does each circular pad as two `Gather`s
+     with constant indices `[n-1, 0..n-1, 0]` (94 ops, fixed at 96×96).
+   - Both reproduce the original's Q map **bit for bit**: max |Δq| = 0, same action on 400/400
+     crops from closed-loop rollouts (2 solitons × 4 directions, random action costs). The
+     Slice core also matches at 64, 80 and 128.
+   - Native CPU, 1 thread: original 7.1 ms, Slice core 6.8 ms, **Gather core 9.9 ms**: `Gather`
+     is slow on CPU (37% of that model's time). Hence the default: Gather core on WebGPU at
+     96, Slice core otherwise. `?model=orig|slice|gather` overrides, and the debug Bench times
+     all three on each backend.
+
+   Rejected along the way:
+   - **Zero padding.** Same action on only 22/400 crops: the net depends on the wraparound.
+   - **`Pad` with `mode='wrap'`.** One op per conv instead of 6, and onnxruntime-web 1.20.1 has
+     a WebGPU kernel for it. But that kernel's shader source has a stray `]`
+     (`k += i32(uniforms.x_shape[…]]);`), so it would very likely fail to compile. Worth
+     revisiting on a newer onnxruntime-web.
+   - Folding γ/β into conv weights: the weights would become per-context inputs, re-uploaded
+     every inference (0.79M floats).
+
 4. **fp16 on WebGPU, static int8 on WASM.** Dynamic int8 bought nothing (7.2 → 6.9 ms). Static
    QDQ int8, calibrated on real crops, is where WASM speedups usually come from (~2×). Either
    precision needs an argmax-agreement check against fp32.
@@ -322,8 +348,10 @@ context input. Only port the network to WebGL (#5) if a distilled model is still
   between animation frames, which shows any main-thread blocking. `rate` is achieved against
   requested steps/s.
 - **Bench** pauses the game and times the policy alone. It creates a fresh session per
-  execution provider (WebGPU if the browser has it, then WASM) and times 96², 64² and 48² crops,
-  including the first run (shader compile / JIT) and session creation. It also runs a
+  execution provider (WebGPU if the browser has it, then WASM) and per policy graph (`orig`,
+  `slice`, `gather`; see `?model=`), timing the first run (shader compile / JIT), session
+  creation and 20 runs on the live crop. (Reports before `reportVersion` 2 timed the original
+  model at 96², 64² and 48² crops instead.) It also runs a
   main-thread test: `maxMainThreadGapMs` ≈ `runMs` means inference blocks the page, so
   pipelining could not overlap it; a few ms means inference runs off-thread.
 - **Sweep threads** reloads the page with `?threads=1,2,4,max` and benches each. WASM's thread
@@ -352,7 +380,8 @@ What the numbers decide:
 - `blocking` → whether pipelining can work on that device, and with which EP.
 - `infer` vs. `readback` on CARL steps → the pipelining payoff (`max` vs. `sum`), and whether
   the GPU tiers above matter more than inference.
-- `run64` / `run48` → what a smaller-window retrain would buy.
+- `run64` / `run48` (version-1 reports) → what a smaller-window retrain would buy.
+- `run` per `model` and `ep` (version-2 reports) → which policy graph to default to per backend.
 - `infer` − `run` → the JS de-interleave cost (expected to be negligible).
 - `webgpuBackendUp`, `crossOriginIsolated`, `wasmThreads` → configuration problems, which
   are free to fix.
@@ -425,9 +454,40 @@ Pixel 8.5 / 5.6, iPhone 24 / 15, M2 6.2 / 4.1, Intel Xe3 3.6 / 2.7. WebGPU at 64
 2. GPU sim Tier 1 (#1 crop read only when inferring, #2 row extents, #3 weights in shader, #4
    one 1×1 readback) and Tier 2 #6 (step the dots less often): targets the phones' 18–20 ms.
    (Done; not yet re-measured on the devices.)
-3. Inference in a worker, pipelined with the sim: CARL steps cost `max(infer, sim)`.
-4. Graph simplification (fold FiLM, static shapes, conv padding), mainly for WebGPU's
-   per-node floor. Then distillation / a smaller window (retraining) for WASM.
+3. Graph simplification (fold FiLM, static shapes, conv padding), mainly for WebGPU's
+   per-node floor. Moved ahead of pipelining by the second round of measurements (below).
+   (Done as the FiLM split + Slice/Gather cores; not yet measured on the devices.)
+4. Inference in a worker, pipelined with the sim: CARL steps cost `max(infer, sim)`. Then
+   distillation / a smaller window (retraining) for WASM.
+
+### After the GPU sim fixes (same day, second round)
+
+Kernel uniform buffer, crop read only when inferring, one gathered readback, and dots stepped
+every 3rd step on phones (`dotsim` 3; desktop stays at 1). Medians in ms:
+
+| | Windows (AMD) | iPhone | Pixel | Pixel, `?kernel=tex` |
+|---|---|---|---|---|
+| GPU sim per step, before → now | 3.6 → **2.3** (−37%) | 20.2 → **11.0** (−45%) | 18.5 → **9.5** (−49%) | 12.4 |
+| step without CARL, before → now | 4.3 → 2.6 | 20.4 → 13.6 | 21.3 → 9.7 | 12.5 |
+| CARL inference (WebGPU, incl. crop read) | 7.3 | 34.2 | 35.0 | 34.7 |
+| step with CARL, before → now | 10.5 → 9.5 | – → 39.1 | 44.7 → 45.3 | 47.9 |
+
+- Both halves earn their place. On the Pixel, the dots change alone takes the sim from 18.5 to
+  12.4 ms (the `kernel=tex` run), and the uniform-buffer kernel takes it on to 9.5 ms. The UBO
+  path stays the default.
+- The crop read now sits inside `infer` (`infer` − `run` grew to ~2.6 ms on the Pixel and
+  ~0.5–0.8 ms elsewhere). It is paid on inferring steps only, rather than every step.
+- The Pixel's CARL step did not improve (44.7 → 45.3 ms): WebGPU `run` measured ~32 ms this
+  round against ~29 last time, probably run-to-run noise or a warmer phone. That ate the
+  sim's 9 ms saving, along with the crop read.
+- `measSps` in a report is a snapshot taken at the moment of Copy, so ignore it; compare step
+  times instead.
+
+**Consequence for the order.** On phones CARL is now ~3× the sim (~33 vs ~10 ms), so pipelining
+hides only ~10 ms of a 40–45 ms CARL step. Graph simplification moves ahead of it: it attacks
+WebGPU's per-node overhead directly, and the iPhone has no faster backend to switch to.
+Pipelining follows, and pairs best with WASM on the Pixel (17 ms at 4 threads, against ~32 ms
+for WebGPU).
 
 ### Debug-tool flaws seen in these runs (fixed since)
 

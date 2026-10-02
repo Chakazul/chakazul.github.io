@@ -20,6 +20,7 @@ work.
 - `?budget=N` — per-frame sim-step time budget in ms, to tune per device (default `10`).
 - `?ep=wasm` — force the CPU-only WASM execution provider instead of the default WebGPU-with-WASM-fallback, for re-comparing on a new device.
 - `?dotsim=N` — run the dots channel's full Lenia step only every Nth step; the steps in between only apply Pac-Man's erase, so eating stays instant while the dots breathe, and a bitten dot dissolves, N times slower (default `3` on phones and tablets, `1` elsewhere). The dots are the most expensive channel on the board; see PERF.md.
+- `?model=orig|slice|gather` — which policy graph runs: `orig` is the export as-is, `slice` and `gather` are the same network split by `tools/split_model.py` into a FiLM model (run only when the target direction or action cost changes) and a conv core with far fewer ops. Bit-identical outputs. Default: `gather` on WebGPU at the default crop size, `slice` otherwise (see PERF.md, "CARL inference").
 - `?kernel=tex` — read convolution weights from a texture (the original path) instead of the default uniform buffer, to A/B the two on a new device (see Fidelity, below).
 - `?debug=1` — performance instrumentation panel (`debug.js`): live per-step timings, a policy benchmark per execution provider and crop size, a thread-count sweep, and a copyable JSON report. See PERF.md, "Measuring on a device".
 - `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 4); needs a fresh page load to take effect.
@@ -305,7 +306,10 @@ The policy's own compute runs on onnxruntime-web's WebGPU execution provider by 
 faster than WASM on the mobile devices this was tuned on; `?ep=wasm` forces CPU-only for
 re-comparing on a new device). This does not remove the synchronization point above: the sim runs
 in a WebGL2 context, and WebGL2 and WebGPU share no GPU memory, so the crop still has to cross
-through the CPU to reach the net either way. WebGPU only speeds up the net's own conv work.
+through the CPU to reach the net either way. WebGPU only speeds up the net's own conv work. What runs by default is not the export itself
+but the same network split into two graphs (`?model=`, above): WebGPU charges per graph node, and
+the export spends ~680 of its 694 nodes on per-block FiLM MLPs, shape arithmetic and
+padding-by-slicing rather than on its 15 convolutions.
 
 ## Fidelity to the CPU version
 

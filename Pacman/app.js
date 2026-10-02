@@ -46,6 +46,10 @@ const GOD_MODE = boolParam('god', false);
 // conv work. `?ep=wasm` forces CPU-only, for re-comparing on a new device.
 const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'wasm'
   ? ['wasm'] : ['webgpu', 'wasm'];
+// Which policy graph runs: 'gather' (fewest ops, WebGPU only -- Gather is slow on CPU -- and
+// fixed at a 96 crop), 'slice' (any backend, any crop), or 'orig' (the export as-is). Default is
+// gather on WebGPU at the default crop size, slice otherwise; `?model=` overrides. See loadModel().
+const MODEL_PARAM = new URLSearchParams(location.search).get('model');
 // How the convolutions read kernel weights: a uniform buffer by default, `?kernel=tex` for the
 // original texture path, kept to A/B the two on a new device (see PERF.md).
 const KERNEL_MODE = new URLSearchParams(location.search).get('kernel') === 'tex' ? 'tex' : 'ubo';
@@ -90,6 +94,11 @@ const CFG = {
   // room to spare while staying well under a real runaway (6% of the 128-window's capacity).
   massExplodeLimit: 1000,
   modelUrl: 'models/agent_direction.onnx',
+  // The same policy split by tools/split_model.py, bit-identical output: a FiLM model run only
+  // when the context changes, and a conv core without the per-block MLPs and shape plumbing --
+  // 150 or 94 ops against the export's 694, which is what WebGPU's per-op overhead charges for.
+  filmUrl: 'models/agent_direction_film.onnx',
+  coreUrl: { slice: 'models/agent_direction_core.onnx', gather: 'models/agent_direction_core_gather.onnx' },
   solitonsUrl: 'models/solitons_direction.json',
   thumbDir: 'assets/solitons/',        // one PNG per allowed rule, named "<rule name>.png"
   // Curated subset of the 48 rules the maze agent was trained on, in picker order (five per row,
@@ -1134,29 +1143,45 @@ function buildContext() {
   ]);
 }
 
-// The policy's input: the crop from the last step (fetched now, only because an inference is
-// about to use it -- see readCrop() in glsim.js) plus the context vector. The crop arrives
-// channel-packed; the model wants frame-major [1,K,S,S]. This de-interleave is the whole cost of
-// the GPU input path.
-function cropFeeds() {
+// The policy's state input: the crop from the last step, fetched now, only because an inference
+// is about to use it (see readCrop() in glsim.js). The crop arrives channel-packed; the model
+// wants frame-major [1,K,S,S]. This de-interleave is the whole cost of the GPU input path.
+function stateTensor() {
   const S = CFG.netSize, SS = S * S, crop = SimGL.readCrop();
   const data = new Float32Array(CFG.K * SS);
   for (let k = 0; k < CFG.K; k++) {
     const base = k * SS;
     for (let i = 0; i < SS; i++) data[base + i] = crop[i * 4 + k];
   }
-  return {
-    state:   new ort.Tensor('float32', data, [1, CFG.K, S, S]),
-    context: new ort.Tensor('float32', buildContext(), [1, 4]),
-  };
+  return new ort.Tensor('float32', data, [1, CFG.K, S, S]);
 }
+
+// FiLM gamma/beta for the current context, from the split-off FiLM model. The context only
+// changes on a steer or a cost-slider move, so this runs on those, not per inference. CPU (WASM)
+// on purpose: it is 112 tiny ops, and its outputs feed the core as ordinary CPU tensors.
+let filmSession = null, filmCache = { key: null, feeds: null };
+async function filmFeeds() {
+  const ctx = buildContext(), key = ctx.join(',');
+  if (key !== filmCache.key) {
+    if (!filmSession) filmSession = await ort.InferenceSession.create(CFG.filmUrl, { executionProviders: ['wasm'] });
+    filmCache = { key, feeds: await filmSession.run({ context: new ort.Tensor('float32', ctx, [1, 4]) }) };
+  }
+  return filmCache.feeds;
+}
+
+// Inputs for a given policy graph (`policyModel`, or another for ?debug=1's bench).
+async function feedsFor(model, state) {
+  if (model === 'orig') return { state, context: new ort.Tensor('float32', buildContext(), [1, 4]) };
+  return { state, ...(await filmFeeds()) };
+}
+let policyModel = 'orig';   // which graph `session` runs -- set by loadModel()
 
 // CARL's half of a turn: pick a spot + sign from the policy. Unlike the CPU version this only
 // *returns* the intervention -- applying it is a GPU pass inside SimGL.step().
 async function agentAct() {
   const t0 = performance.now();
   const S = CFG.netSize, SS = S * S;
-  const out = await session.run(cropFeeds());
+  const out = await session.run(await feedsFor(policyModel, stateTensor()));
   const q = out.q.data;
   lastMs = performance.now() - t0;
   let best = 0, bv = q[0];
@@ -1768,13 +1793,24 @@ async function loadModel() {
 
   // Absorb WASM's one-time JIT cost here rather than on the user's first real sim step.
   const warmup = async s => {
-    try { await s.run(cropFeeds()); }
+    try { await s.run(await feedsFor(policyModel, stateTensor())); }
     catch (e) { /* best-effort -- worst case the first real step pays this cost instead */ }
   };
 
+  // The gather core only pays off on WebGPU (its Gathers are slow on CPU) and only exists at the
+  // default 96 crop. An available adapter is the test for WebGPU actually running, since the
+  // session would otherwise fall back to WASM silently.
+  const gpu = EXECUTION_PROVIDERS[0] === 'webgpu' && !!navigator.gpu
+    && !!(await navigator.gpu.requestAdapter().catch(() => null));
+  policyModel = ['orig', 'slice', 'gather'].includes(MODEL_PARAM) ? MODEL_PARAM
+    : (gpu && CFG.netSize === 96 ? 'gather' : 'slice');
+  if (policyModel === 'gather' && CFG.netSize !== 96) policyModel = 'slice';
+  const url = policyModel === 'orig' ? CFG.modelUrl : CFG.coreUrl[policyModel];
+
   try {
-    session = await ort.InferenceSession.create(CFG.modelUrl, { executionProviders: EXECUTION_PROVIDERS });
-    await warmup(session);
+    const s = await ort.InferenceSession.create(url, { executionProviders: EXECUTION_PROVIDERS });
+    await warmup(s);
+    session = s;   // set only once warm: agentStep() starts inferring the moment it is
   } catch (e) {
     console.error(e);
     fail('Model failed to load — serve over http(s), not file://.');
