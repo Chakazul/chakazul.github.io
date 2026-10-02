@@ -296,20 +296,17 @@ const mazeEnabled = true;
 let showOverlay = true;
 // 'sometimes' (default) queries CARL only for sometimesWindow steps after a spawn/steer, then
 // goes idle -- much cheaper than 'always' since inference is the expensive part of a step, and
-// looks the same whenever the player is actually engaged. 'human': CARL is never queried; the
-// user's own clicks are the only actions.
+// looks the same whenever the player is actually engaged. 'always': CARL is queried every step.
 let actorMode = 'sometimes';
-let humanActs = false;                 // derived from actorMode === 'human', kept for readability
 let sometimesWindow = intParam('sometimes', 100);  // ?sometimes=N -- steps CARL stays active for in 'sometimes' mode
 let sometimesRemaining = 0;            // steps left in the current active window ('sometimes' mode only)
+// Whether CARL is steering right now -- what the target arrow on the board shows.
+const carlActive = () => actorMode === 'always' || sometimesRemaining > 0;
 // Further thins out inference within an active window: 1 infers every step, N>1 infers only every
 // Nth active step and skips the action in between -- the sim step, readback and rendering still
 // run every step, just without a fresh intervention.
 let inferenceStride = intParam('stride', 1);  // ?stride=N
 let strideCounter = 0;                 // active steps left to skip before the next inference is due
-// User's queued action, {gx,gy,sign}, or null. At most one held: a step consumes it exactly where
-// agentAct() would run, so a human turn and a CARL turn are the same turn.
-let pendingAction = null;
 // 90deg spawn rotation, rolled once per maze (not per spawn) so Respawn repeats the same heading.
 let spawnRotation = 0;
 let sps = 60, stepAcc = 0, lastT = 0, measSps = 0, rateSteps = 0, rateTime = 0;
@@ -1004,7 +1001,6 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   strideCounter = 0;
   lastAction = null; nextAction = null;
   actionTrail.length = 0;
-  pendingAction = null;
 
   // One analysis pass with no step behind it, so the spawn CoM and the policy's first window
   // come from the same place every later step gets them from.
@@ -1137,7 +1133,7 @@ function respawnAfterWin() { level++; placeSoliton(bank[currentIndex], true, fal
 //  Agent step
 // ====================================================================================
 // CPU-side copy of crop.glsl's origin math, used to map the policy's per-cell output back to
-// board coordinates and to bound what the user may click in human mode.
+// board coordinates.
 function agentWindowOrigin(cy, cx) {
   const half = CFG.netSize >> 1;
   return [Math.round(cy) - half, Math.round(cx) - half];
@@ -1309,22 +1305,10 @@ async function agentAct() {
   return { x: c, y: r, delta: sign * MA, radius: CFG.actionRadius };
 }
 
-// The user's half of a turn: hand over the one queued action, if any, and clear the queue.
-function takePendingAction() {
-  const a = pendingAction;
-  if (!a) return null;
-  pendingAction = null;
-  actions++;
-  actionTrail.push({ r: ((a.gy % H) + H) % H, c: ((a.gx % W) + W) % W, sign: a.sign, step: steps });
-  if (actionTrail.length > MAX_TRAIL) actionTrail.shift();
-  return { x: a.gx, y: a.gy, delta: a.sign * MA, radius: CFG.actionRadius };
-}
-
 async function agentStep() {
   if (!lastCoM) return;
   let action = null, infer = false;
-  if (humanActs) { lastMs = 0; nextAction = null; action = takePendingAction(); }   // no inference -- readout shows "--"
-  else if (actorMode === 'sometimes' && sometimesRemaining <= 0) {
+  if (actorMode === 'sometimes' && sometimesRemaining <= 0) {
     lastMs = 0; lastAction = null;                    // CARL idle this step -- no inference
   }
   else if (!policy) return;
@@ -1345,7 +1329,7 @@ async function agentStep() {
   // replaces it, and the decision keeps the board position it was aimed at. A decision made on
   // the last active step of a "sometimes" window still lands, one step late, on the first idle one.
   let pending = null;
-  if (!humanActs && pipelining()) {
+  if (pipelining()) {
     action = nextAction; nextAction = null;
     if (infer) pending = agentAct().catch(inferenceFailed);
   } else if (infer) action = await agentAct().catch(inferenceFailed);
@@ -1591,18 +1575,6 @@ function drawScorePopup(sc, p) {
   octx.fillStyle = '#fff'; octx.fillText(p.text, px, py);
 }
 
-// The queued-but-not-yet-applied action, as a hollow dashed ring.
-function drawPendingAction(sc) {
-  if (!pendingAction) return;
-  const { gx, gy, sign } = pendingAction, rad = CFG.actionRadius * sc;
-  const rgb = sign > 0 ? '83,185,121' : '222,73,104';
-  octx.beginPath(); octx.arc((gx + 0.5) * sc, (gy + 0.5) * sc, rad, 0, 7);
-  octx.setLineDash([rad * 0.55, rad * 0.45]);
-  octx.strokeStyle = `rgba(${rgb},.9)`;
-  octx.lineWidth = 2 * Math.max(1, sc * 0.5);
-  octx.stroke();
-  octx.setLineDash([]);
-}
 let boardReady = false;   // render() can be reached from UI handlers before the first initBoard()
 function render() {
   if (!boardReady) return;
@@ -1634,13 +1606,12 @@ function render() {
       const cs = getComputedStyle(document.documentElement);
       // Hide the target arrow while CARL is idle -- nothing is acting on it, so it would claim an
       // agent is working when it isn't.
-      if (!humanActs) drawArrow(octx, cx, cy, dir[1], dir[0], alen, cs.getPropertyValue('--target').trim());
+      if (carlActive()) drawArrow(octx, cx, cy, dir[1], dir[0], alen, cs.getPropertyValue('--target').trim());
       const old = comHistory[0];
       const [vdy, vdx] = toroidalDelta(lastCoM[0], lastCoM[1], old[0], old[1]);
       drawArrow(octx, cx, cy, vdx, vdy, alen, cs.getPropertyValue('--current').trim());
     }
     drawActionTrail(sc);
-    drawPendingAction(sc);
   }
 
   $('r-mass').textContent = lastCoM ? lastCoM[2].toFixed(0) : '0';
@@ -1709,7 +1680,7 @@ function steerTo(dy, dx) {
   render();
 }
 cv.addEventListener('click', e => {
-  if (humanActs || !lastCoM) return;   // in human mode the left button acts instead; arrows still steer
+  if (!lastCoM) return;
   const r = cv.getBoundingClientRect();
   const px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H;
   steerTo(py - lastCoM[0], px - lastCoM[1]);
@@ -1734,63 +1705,14 @@ async function stepOnce() {
 }
 $('step1').addEventListener('click', stepOnce);
 
-// ------------------------------------------------------------------------------------
-//  Human actor: the same intervention CARL makes (same +-MA over CFG.actionRadius, same disc,
-//  same tally), at most one per step. A click queues the action; the next step stamps it in at
-//  exactly the point CARL's own action would land.
-// ------------------------------------------------------------------------------------
-// CARL's reach: the policy returns one q value per cell of its CFG.netSize window, so a spot
-// outside it isn't a move CARL could make. Same bound, same origin math, for the user.
-function inAgentReach(gy, gx) {
-  if (!lastCoM) return false;
-  const S = CFG.netSize, [oy, ox] = agentWindowOrigin(lastCoM[0], lastCoM[1]);
-  return ((gy - oy) % H + H) % H < S && ((gx - ox) % W + W) % W < S;
-}
-let toastTimer = 0;
-function showToast(msg) {
-  const el = $('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
-}
-function humanAct(e, sign) {
-  if (solitonDead) return;
-  if (pendingAction || busy) return;              // one action per step, no queue-jumping
-  const r = cv.getBoundingClientRect();
-  const gx = Math.floor((e.clientX - r.left) / r.width * W), gy = Math.floor((e.clientY - r.top) / r.height * H);
-  if (!inAgentReach(gy, gx)) {
-    showToast(`Out of reach — only actions close to the soliton are.`);
-    return;
-  }
-  pendingAction = { gx, gy, sign };
-  if (running) render();                        // show it queued
-  else stepOnce();                              // paused: act and advance in one motion
-}
-cv.addEventListener('pointerdown', e => {
-  if (!humanActs) return;
-  if (e.button === 0) humanAct(e, 1);
-  else if (e.button === 2) humanAct(e, -1);
-  else if (e.button === 1) stepOnce();
-  else return;
-  e.preventDefault();               // no text selection, and no middle-click autoscroll
-});
-// Right- and middle-click are actions here, not browser gestures.
-cv.addEventListener('contextmenu', e => { if (humanActs) e.preventDefault(); });
-cv.addEventListener('auxclick', e => { if (humanActs) e.preventDefault(); });
-const ACTOR_MODES = ['sometimes', 'always', 'human'];
-const ACTOR_LABELS = { sometimes: 'CARL acts sometimes', always: 'CARL acts always', human: 'You act' };
+const ACTOR_MODES = ['sometimes', 'always'];
+const ACTOR_LABELS = { sometimes: 'CARL acts sometimes', always: 'CARL acts always' };
 function setActorMode(mode) {
   actorMode = mode;
-  humanActs = mode === 'human';
   $('actor').textContent = ACTOR_LABELS[mode];
-  $('actor').classList.toggle('on', humanActs);
-  $('human-hint').hidden = !humanActs;
-  $('legend-target').hidden = humanActs;         // no blue arrow on the board, no key for it
-  cv.classList.toggle('human', humanActs);
   if (mode === 'sometimes') sometimesRemaining = sometimesWindow;   // fresh window on entering the mode
   strideCounter = 0;
-  lastMs = 0; lastAction = null; nextAction = null; pendingAction = null;
+  lastMs = 0; lastAction = null; nextAction = null;
   render();
 }
 $('actor').addEventListener('click', () => {

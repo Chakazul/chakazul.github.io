@@ -232,12 +232,13 @@ work.
   eaten ghost and an eaten fruit flash a floating score-number popup slightly below where they died
   or were picked up (`ghostEatPopup`/`fruitEatPopup`), live for exactly as long as the board holds
   for the jingle — set alongside `ghostEatPause`/`fruitEatPause` and cleared the same moment.
-- **Three actor modes**, cycled by the one button: **CARL acts sometimes** (default) only queries
+- **Two actor modes**, switched by the one button: **CARL acts sometimes** (default) only queries
   the policy for a configurable window of steps after the episode starts or after you last steer,
-  then goes idle — same per-step cost as **You act** the rest of the time, which matters because
-  policy inference, not the GPU work, is what a step actually costs (see Differences on purpose,
-  below). **CARL acts always** queries it every step, as `CARL-WebGL` always did. **You act** turns
-  the policy off entirely; left/right-click add or remove mass yourself.
+  then goes idle and lets Pac-Man move freely, which matters because policy inference, not the GPU
+  work, is what a step actually costs (see Differences on purpose, below). **CARL acts always**
+  queries it every step, as `CARL-WebGL` always did. The blue target-direction arrow is drawn only
+  while CARL is steering. (`CARL-WebGL`'s third mode, where you add and remove mass yourself with
+  the mouse, was dropped: in a game, clicks and taps are for steering.)
 - **No board-size picker.** `CARL-WebGL`'s 100–250 size choices are gone — the maze layout fixes
   the cell count, and the fixed 550×250 board is sized so wall thickness and cell width match what
   the layout needs (see the sizing comment above `MAZE_LAYOUT`). Undersized cells would clip the
@@ -341,15 +342,15 @@ board, then step, then locate, then judge — because the policy is sensitive to
 
 ## Differences on purpose
 
-- The FPS slider goes to 480 (was 120), and a frame absorbs as many steps as fit a wall-clock
+- The FPS slider goes to 100 (was 120), and a frame absorbs as many steps as fit a wall-clock
   budget (`?budget=`, 10ms) rather than a fixed count. A fixed count is wrong here because a step
-  costs wildly different amounts depending on who's acting: pure GPU work while you are, plus a
-  policy inference while CARL is. Sixteen of the latter ran for most of a second before the one
+  costs wildly different amounts depending on whether CARL is acting: pure GPU work while it is
+  idle, plus a policy inference while it steers. Sixteen of the latter ran for most of a second before the one
   repaint at the end of the batch, which read as the board freezing. The `rate` readout shows the
   rate actually achieved, which is where the real ceiling shows up.
-- A third actor mode, "CARL acts sometimes" (the default), only pays for inference for a
-  configurable window of steps after the episode starts or after you last steer, then goes idle —
-  same cheap per-step cost as "You act" the rest of the time. This is the mode that benefits most
+- A second actor mode, "CARL acts sometimes" (the default), only pays for inference for a
+  configurable window of steps after the episode starts or after you last steer, then goes idle,
+  costing pure GPU work the rest of the time. This is the mode that benefits most
   from the wall-clock budget above, since its per-step cost keeps switching between the two
   extremes mid-run.
 - No inline fallback soliton. The CPU demo carried one for the `file://` case; this version fetches

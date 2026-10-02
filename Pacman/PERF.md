@@ -268,7 +268,9 @@ which is why skipping steps is tempting, and why skipping the few that matter hu
    action as the original on every input), and `policy-worker.js`'s message protocol in a Node
    worker thread, including an error reply to a malformed request.
 
-   **The one-step delay is not validated.** A closed-loop check in the numpy mirror (5 easy
+   **The one-step delay is fine in play:** steering judged as good as before on the Pixel, with
+   and without `?pipeline=0` (2026-10-02). For the record, the offline check said nothing either
+   way. A closed-loop check in the numpy mirror (5 easy
    solitons × 4 directions × 600 steps, delay 0 vs. 1) was inconclusive: 4/20 vs. 3/20 deaths,
    and that mirror steers poorly even with no delay (e.g. rule73 drifts the wrong way in all
    four directions), so it is missing something the game has (walls, perhaps a `dt` the policy
@@ -477,8 +479,8 @@ Pixel 8.5 / 5.6, iPhone 24 / 15, M2 6.2 / 4.1, Intel Xe3 3.6 / 2.7. WebGPU at 64
    (Done as the FiLM split + Slice/Gather cores. Measured: −8 to −16% on WebGPU, see the third
    round below; plus the backend is now picked per device at load.)
 4. Inference in a worker, pipelined with the sim: CARL steps cost `max(infer, sim)`. Then
-   distillation / a smaller window (retraining) for WASM. (Pipelining done; not yet measured on
-   the devices, and the one-step delay still needs a by-feel steering check.)
+   distillation / a smaller window (retraining) for WASM. (Pipelining done and measured, fourth
+   round below; steering confirmed unaffected.)
 
 ### After the GPU sim fixes (same day, second round)
 
@@ -538,6 +540,43 @@ The Windows report in this round came from cached pre-split scripts and is not c
 - **Pipelining is now worth doing.** Pixel on WASM: 16.6 ms of inference against a ~10 ms sim,
   so a worker-pipelined CARL step could reach ~17–19 ms, about 2× today. On the iPhone
   (~30 ms WebGPU, ~7–13 ms sim) it would save ~15%.
+
+### After the worker + pipelining (fourth round, final)
+
+CARL step time, median ms, across all rounds:
+
+| | start | GPU sim fixes | graph split | worker + pipelining |
+|---|---|---|---|---|
+| Windows (AMD 890M) | 10.5 | 9.5 | 9.4 | **7.5** (`worker:webgpu/gather`) |
+| Pixel (Mali-G715) | 44.7 | 45.3 | 39.1 | **28.7** (`worker:wasm/slice`) |
+| iPhone (Apple GPU) | – | 39.1 | ~39 | **37.3** (`worker:webgpu/gather`) |
+
+- **Pipelining hides the sim completely:** a CARL step now costs what the inference costs
+  (Windows 7.45 vs. 7.43 ms, Pixel 28.7 vs. 28.7, iPhone 37.3 vs. 37.2). Same Pixel session with
+  `?pipeline=0`: 51.8 ms. The phone was probably warmer by then, but not enough to explain
+  that gap.
+- **The load-time pick chose as predicted** (WASM on the Pixel, WebGPU on the iPhone), and
+  WebGPU works inside the worker on all three devices.
+- **The iPhone barely moved because both halves run on its GPU.** Overlap in time doesn't add
+  GPU throughput: ~27 ms inference + ~10 ms sim ≈ the 37 ms observed. Pipelining pays when
+  inference is on the CPU, as on the Pixel.
+- **Inference is slower in play than in the bench** (Pixel WASM 24 vs. 16.6 ms, iPhone WebGPU
+  36 vs. 27 ms): it competes with the game for CPU cores or the GPU.
+- **The worker's start-up is noticeably slow on the iPhone**: it times both backends on every
+  load, and iOS WASM runs 126 ms per inference.
+- **Steering is unaffected** by any of the changes, pipelining's one-step delay included.
+
+**Closed here.** What's left, should it be picked up again:
+- **A smaller policy network (needs the training code, outside this repo).** The one lever that
+  helps both phones. The Pixel is now bound purely by WASM inference, so ~4× fewer MACs would
+  bring ~24 ms to ~6–8 ms. On the iPhone, a small enough net would make WASM beat WebGPU and run
+  on the CPU in parallel with the GPU sim, which is the case pipelining is built for.
+- Start-up: remember each device's backend choice and skip the timing on later visits, or drop
+  a candidate as soon as it is clearly slower.
+- `?threads=3` on the Pixel, in case 4 WASM threads plus the main thread oversubscribe its fast
+  cores.
+- The WebGL-shader policy (CARL inference #5), mainly for the iPhone. A big job, and an uncertain
+  gain while its GPU is the bottleneck.
 
 ### Debug-tool flaws seen in these runs (fixed since)
 
