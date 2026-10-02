@@ -150,12 +150,23 @@
   // crop, so the report shows which pairing is fastest on this device. 'gather' exists only at the
   // default 96 crop. The FiLM model's own cost isn't counted: it runs once per steer, not per step.
   async function bench() {
+    // Both waits below are silent by nature, so say what is being waited on: a bench that never
+    // starts is otherwise indistinguishable from a dead button.
+    status('bench: waiting for the model to load …');
     await ready();
     const wasRunning = running;
     setRunning(false);
     // Let an in-flight game step finish, and any other inference with it: a bench session started
     // alongside a running one fails with "Session already started" on WebGPU.
-    while (busy || inFlight) await new Promise(r => setTimeout(r, 20));
+    status('bench: waiting for the running inference to finish …');
+    const t0 = now();
+    while (busy || inFlight) {
+      if (now() - t0 > 15000) {
+        if (wasRunning) setRunning(true);
+        throw new Error(`still waiting after 15 s (busy=${busy}, inference in flight=${inFlight})`);
+      }
+      await new Promise(r => setTimeout(r, 20));
+    }
     benching = true;
     const out = { when: new Date().toISOString(), threads: ort.env.wasm.numThreads, crossOriginIsolated: window.crossOriginIsolated, results: [] };
     const eps = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
@@ -208,7 +219,7 @@
     store(sessionStorage, SWEEP_KEY, list);
     gotoThreads(list[0]);
   }
-  async function continueSweep() {
+  async function continueSweep() {   // errors surface in the status line, via the caller
     const list = load(sessionStorage, SWEEP_KEY, null);
     if (!list || !list.length) return;
     if (+params.get('threads') !== list[0]) { gotoThreads(list[0]); return; }
@@ -254,7 +265,7 @@
   const el = id => panel.querySelector('#dbg-' + id);
   function status(msg) { el('status').textContent = msg; }
 
-  el('bench').onclick = () => bench();
+  el('bench').onclick = () => bench().catch(e => status('bench failed: ' + (e?.message || e)));
   el('sweep').onclick = () => startSweep();
   el('reset').onclick = () => { for (const k in series) delete series[k]; status('live stats reset'); };
   el('clear').onclick = () => { store(localStorage, BENCH_KEY); status('stored benches cleared'); };
@@ -277,11 +288,11 @@
     let ep = EXECUTION_PROVIDERS.join('>');
     try { ep += ort.env.webgpu?.adapter ? ' (webgpu up)' : ''; } catch (e) {}
     el('live').textContent =
-      `${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  model ${policyModel}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
+      `${session ? '' : 'MODEL NOT LOADED  '}${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  model ${policyModel}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
       `p50/p90 ms  infer ${p('infer')}  run ${p('infer.run')}  readback ${p('gpu.readback')}  submit ${p('gpu.submit')}\n` +
       `step carl ${p('step.carl')}  idle ${p('step.idle')}  frame ${p('frame')}  render ${p('render')}\n` +
       `rate ${Math.round(measSps)}/${sps} steps/s`;
   }, 500);
 
-  continueSweep();
+  continueSweep().catch(e => status('sweep failed: ' + (e?.message || e)));
 })();

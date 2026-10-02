@@ -1813,7 +1813,7 @@ async function loadModel() {
     session = s;   // set only once warm: agentStep() starts inferring the moment it is
   } catch (e) {
     console.error(e);
-    fail('Model failed to load — serve over http(s), not file://.');
+    fail(`Model failed to load: ${e?.message || e}<br>(It must be served over http(s), not file://.)`);
     return;
   }
   render();
