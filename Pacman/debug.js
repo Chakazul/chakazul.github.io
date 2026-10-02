@@ -56,7 +56,10 @@
     inferred = true;
     const t = now();
     const r = await origAct();
-    rec('infer', now() - t);   // crop read + de-interleave + session.run + argmax
+    // Wall time from crop read to decision: de-interleave, worker messaging (if any), the FiLM
+    // model on a context change, session.run and argmax. When pipelined it overlaps the GPU step.
+    rec('infer', now() - t);
+    rec('infer.run', lastRunMs);   // session.run alone, as timed where it ran (worker or page)
     return r;
   };
   const origRender = render;
@@ -67,15 +70,12 @@
   SimGL.readback = function () { const t = now(); const r = origReadback(); rec('gpu.readback', now() - t); return r; };
 
   const origRun = ort.InferenceSession.prototype.run;
-  let inFlight = 0;   // runs in progress on any session, the game's warm-up included
+  // Runs in progress on this page's sessions (a worker's are counted by `busy`: agentStep()
+  // awaits its inference within the step).
+  let inFlight = 0;
   ort.InferenceSession.prototype.run = async function (...a) {
-    const t = now();
     inFlight++;
-    try {
-      const r = await origRun.apply(this, a);
-      if (!benching) rec('infer.run', now() - t);
-      return r;
-    } finally { inFlight--; }
+    try { return await origRun.apply(this, a); } finally { inFlight--; }
   };
 
   // Independent rAF ticker: frame gaps show main-thread blocking however it's caused.
@@ -97,10 +97,8 @@
       crossOriginIsolated: window.crossOriginIsolated, sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
       swControlled: !!navigator.serviceWorker?.controller,
       ortVersion: ort.env.versions?.web, wasmThreads: ort.env.wasm.numThreads, wasmSimd: ort.env.wasm.simd,
-      requestedEPs: EXECUTION_PROVIDERS, webgpuApi: !!navigator.gpu,
+      epParam: EP_PARAM, modelParam: MODEL_PARAM, webgpuApi: !!navigator.gpu,
     };
-    // Whether the game's own session really got the WebGPU backend, or fell back to WASM quietly.
-    try { env.webgpuBackendUp = !!ort.env.webgpu?.adapter; } catch (e) { env.webgpuBackendUp = 'unknown'; }
     if (navigator.gpu) {
       try {
         const ad = await navigator.gpu.requestAdapter();
@@ -129,7 +127,7 @@
   // ------------------------------------------------------------------------------------------
   //  Bench: the policy alone, per execution provider and policy graph
   // ------------------------------------------------------------------------------------------
-  const ready = () => new Promise(res => { (function w() { session && lastCoM ? res() : setTimeout(w, 200); })(); });
+  const ready = () => new Promise(res => { (function w() { policy && lastCoM ? res() : setTimeout(w, 200); })(); });
 
   // A MessageChannel ping-pong runs alongside inference: its longest gap says how long the main
   // thread was held. ~runMs means inference blocks the page (pipelining can't overlap it);
@@ -149,6 +147,7 @@
   // Every policy graph the game can run (see CFG.coreUrl, ?model=), on every backend, on the live
   // crop, so the report shows which pairing is fastest on this device. 'gather' exists only at the
   // default 96 crop. The FiLM model's own cost isn't counted: it runs once per steer, not per step.
+  let rt = null;   // a page-side policy runtime, only for its feeds (FiLM cache included)
   async function bench() {
     // Both waits below are silent by nature, so say what is being waited on: a bench that never
     // starts is otherwise indistinguishable from a dead button.
@@ -178,7 +177,8 @@
           status(`bench: ${ep} ${model} …`);
           let s = null;
           try {
-            const f = await feedsFor(model, stateTensor());
+            rt = rt || createPolicyRuntime(ort, POLICY_CFG);
+            const f = await rt.feedsFor(model, stateData(), buildContext());
             let t = now();
             s = await ort.InferenceSession.create(model === 'orig' ? CFG.modelUrl : CFG.coreUrl[model], { executionProviders: [ep] });
             r.createMs = Math.round(now() - t);
@@ -245,7 +245,7 @@
       env: envCache,
       game: { actorMode, sps, measSps: Math.round(measSps), level, stride: inferenceStride, sometimesWindow,
               frameBudgetMs: FRAME_BUDGET_MS, netSize: CFG.netSize, board: `${W}x${H}`,
-              kernel: KERNEL_MODE, dotsEvery: DOTS_EVERY, model: policyModel },
+              kernel: KERNEL_MODE, dotsEvery: DOTS_EVERY, pipelined: pipelining(), policyChoice },
       live, bench: load(localStorage, BENCH_KEY, []),
     };
   }
@@ -285,10 +285,10 @@
   setInterval(() => {
     if (el('live').hidden) return;
     const p = name => { const s = summarize(series[name]); return s ? `${s.p50}/${s.p90}` : '–'; };
-    let ep = EXECUTION_PROVIDERS.join('>');
-    try { ep += ort.env.webgpu?.adapter ? ' (webgpu up)' : ''; } catch (e) {}
+    // What runs the policy, as chosen at load: e.g. worker:wasm/slice, and whether it's pipelined.
+    const ep = policy ? `${policy.where}:${policy.ep}/${policy.model}${pipelining() ? ' piped' : ''}` : '';
     el('live').textContent =
-      `${session ? '' : 'MODEL NOT LOADED  '}${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  model ${policyModel}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
+      `${policy ? '' : 'MODEL NOT LOADED  '}${ep}  thr ${ort.env.wasm.numThreads}  COI ${window.crossOriginIsolated ? 'yes' : 'NO'}  kernel ${KERNEL_MODE}  dots 1/${DOTS_EVERY}  ${actorMode}  L${level}\n` +
       `p50/p90 ms  infer ${p('infer')}  run ${p('infer.run')}  readback ${p('gpu.readback')}  submit ${p('gpu.submit')}\n` +
       `step carl ${p('step.carl')}  idle ${p('step.idle')}  frame ${p('frame')}  render ${p('render')}\n` +
       `rate ${Math.round(measSps)}/${sps} steps/s`;

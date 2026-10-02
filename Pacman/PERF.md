@@ -257,6 +257,24 @@ which is why skipping steps is tempting, and why skipping the few that matter hu
    - Not to be confused with PBO async readback (Tier 3 #11), which hides the readback stall but
      not inference.
 
+   **(Done: `policy-worker.js` + `agentStep()`; `?pipeline=0` / `?worker=0` turn it off.)** The
+   policy runtime (`policy.js`: FiLM cache, the load-time backend timing, inference) is shared by
+   the page and the worker. The worker does its own backend timing at load. If the page has
+   WebGPU but the worker doesn't (WebGPU in workers isn't universal), main-thread WebGPU is
+   timed too and the faster wins: an un-overlapped main-thread WebGPU can still beat a worker
+   on WASM, as on the iPhone. A failed inference costs that step's action, not the game, and a
+   dead worker is replaced by the main thread. Verified off-device: `policy.js` under
+   onnxruntime-web's WASM backend in Node (`pick()` + `infer()` for all three graphs, same
+   action as the original on every input), and `policy-worker.js`'s message protocol in a Node
+   worker thread, including an error reply to a malformed request.
+
+   **The one-step delay is not validated.** A closed-loop check in the numpy mirror (5 easy
+   solitons × 4 directions × 600 steps, delay 0 vs. 1) was inconclusive: 4/20 vs. 3/20 deaths,
+   and that mirror steers poorly even with no delay (e.g. rule73 drifts the wrong way in all
+   four directions), so it is missing something the game has (walls, perhaps a `dt` the policy
+   wasn't trained at) and can't judge a delay. Check steering by feel on a device with and
+   without `?pipeline=0`.
+
 3. **Simplify the graph offline.** Ship a pre-optimized model made by a one-off Python script.
    The context changes only on a steer or a cost-slider move, so the 14 FiLM MLPs can run once
    per change, with their γ/β outputs fed to the conv graph as inputs. Even better, fold γ/β
@@ -268,7 +286,7 @@ which is why skipping steps is tempting, and why skipping the few that matter hu
 
    **(Done, partly: `tools/split_model.py`.)** What was built:
    - **FiLM split out** into `agent_direction_film.onnx` (context → 28 γ/β tensors, 112 ops),
-     run on WASM once per context change and cached (`filmFeeds()`). The core takes γ/β as
+     run on WASM once per context change and cached (`filmFeeds()` in `policy.js`). The core takes γ/β as
      inputs, which removes the MLPs, the reshapes and all the shape arithmetic.
    - **Upsamples by a constant scale of 2** instead of a size computed from the skip's shape.
      Identical at every level of this net, and it keeps the core fully convolutional.
@@ -456,9 +474,11 @@ Pixel 8.5 / 5.6, iPhone 24 / 15, M2 6.2 / 4.1, Intel Xe3 3.6 / 2.7. WebGPU at 64
    (Done; not yet re-measured on the devices.)
 3. Graph simplification (fold FiLM, static shapes, conv padding), mainly for WebGPU's
    per-node floor. Moved ahead of pipelining by the second round of measurements (below).
-   (Done as the FiLM split + Slice/Gather cores; not yet measured on the devices.)
+   (Done as the FiLM split + Slice/Gather cores. Measured: −8 to −16% on WebGPU, see the third
+   round below; plus the backend is now picked per device at load.)
 4. Inference in a worker, pipelined with the sim: CARL steps cost `max(infer, sim)`. Then
-   distillation / a smaller window (retraining) for WASM.
+   distillation / a smaller window (retraining) for WASM. (Pipelining done; not yet measured on
+   the devices, and the one-step delay still needs a by-feel steering check.)
 
 ### After the GPU sim fixes (same day, second round)
 
@@ -488,6 +508,36 @@ hides only ~10 ms of a 40–45 ms CARL step. Graph simplification moves ahead of
 WebGPU's per-node overhead directly, and the iPhone has no faster backend to switch to.
 Pipelining follows, and pairs best with WASM on the Pixel (17 ms at 4 threads, against ~32 ms
 for WebGPU).
+
+### After the graph split (third round)
+
+Bench at 96, 20 runs per cell, median ms. In-game default was `gather` on WebGPU:
+
+| | Pixel WebGPU | Pixel WASM | iPhone WebGPU | iPhone WASM |
+|---|---|---|---|---|
+| `orig` (694 nodes) | 30.7 | 19.1 | 29.0 | 60.6 |
+| `slice` (150) | 36.0 | **16.6** | 27.1 | 55.5 |
+| `gather` (94) | **25.9** | 22.8 | **26.7** | 73.6 |
+
+Live CARL step: Pixel 45.3 → 39.1 ms (inference `run` 32.4 → 26.2); iPhone ~39 ms, unchanged.
+The Windows report in this round came from cached pre-split scripts and is not comparable.
+
+- **The per-backend graph choice holds:** `gather` is fastest on WebGPU and `slice` on WASM, on
+  both phones.
+- **Node count was not WebGPU's main cost.** 694 → 94 nodes saved only 8–16% (3–5 ms). The
+  remaining ~26 ms floor doesn't shrink with crop size either (rounds 1–2), so it is per-run: GPU
+  execution plus the upload/readback round trip, not per-op dispatch. More graph surgery won't
+  move WebGPU on phones.
+- **The Pixel was on the wrong backend:** WASM + `slice` (16.6 ms) beats the WebGPU default
+  (25.9 ms) by ~35%. This made the fixed-default decision from round 1 too costly, so the
+  backend is now **chosen at load by timing** (`pick()` in `policy.js`): each available backend
+  with its best graph, a compile run, a warm run, then 5 timed runs; the faster median wins. It
+  costs ~0.5–1.3 s on a phone while the board waits, plus the second core's download (~2 MB).
+  `?ep=` skips it. The timing happens with the GPU idle, so it can slightly flatter WebGPU against
+  in-game conditions: the iPhone's WebGPU measured 27 ms in the bench but 33 ms in play.
+- **Pipelining is now worth doing.** Pixel on WASM: 16.6 ms of inference against a ~10 ms sim,
+  so a worker-pipelined CARL step could reach ~17–19 ms, about 2× today. On the iPhone
+  (~30 ms WebGPU, ~7–13 ms sim) it would save ~15%.
 
 ### Debug-tool flaws seen in these runs (fixed since)
 

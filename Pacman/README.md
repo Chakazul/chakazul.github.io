@@ -16,11 +16,13 @@ work.
 - `?chase=N` (`0`-`100`) — ghost chase-bias difficulty dial: `0` wanders, `100` always closes at a junction (default `60`).
 - `?net=N` — override the policy's input window size, for off-distribution experiments (default `96`, matching training).
 - `?sometimes=N` — steps CARL stays active per window in "CARL acts sometimes" mode before going idle again (default `100`).
+- `?worker=0` — run the policy on the main thread instead of in `policy-worker.js` (default: the worker, falling back to the main thread if it can't start, or if only the page can reach WebGPU and that times faster).
+- `?pipeline=0` — don't overlap inference with the GPU step. By default, with the worker, each step applies the action CARL decided on the previous step while the worker decides the next one, so a CARL step costs max(inference, sim) instead of their sum, for one step of action latency (see PERF.md).
 - `?stride=N` — infer the model only every Nth active step, taking no action in between; cheaper but reacts more slowly to a moving soliton (default `1`, i.e. every step).
 - `?budget=N` — per-frame sim-step time budget in ms, to tune per device (default `10`).
-- `?ep=wasm` — force the CPU-only WASM execution provider instead of the default WebGPU-with-WASM-fallback, for re-comparing on a new device.
+- `?ep=wasm` / `?ep=webgpu` — force the policy's backend. By default the game times both on the device at load (a few inferences each, while the board waits for the model) and keeps the faster: neither wins everywhere (see PERF.md, "Device measurements").
 - `?dotsim=N` — run the dots channel's full Lenia step only every Nth step; the steps in between only apply Pac-Man's erase, so eating stays instant while the dots breathe, and a bitten dot dissolves, N times slower (default `3` on phones and tablets, `1` elsewhere). The dots are the most expensive channel on the board; see PERF.md.
-- `?model=orig|slice|gather` — which policy graph runs: `orig` is the export as-is, `slice` and `gather` are the same network split by `tools/split_model.py` into a FiLM model (run only when the target direction or action cost changes) and a conv core with far fewer ops. Bit-identical outputs. Default: `gather` on WebGPU at the default crop size, `slice` otherwise (see PERF.md, "CARL inference").
+- `?model=orig|slice|gather` — which policy graph runs: `orig` is the export as-is, `slice` and `gather` are the same network split by `tools/split_model.py` into a FiLM model (run only when the target direction or action cost changes) and a conv core with far fewer ops. Bit-identical outputs. Default: each backend gets the graph measured fastest on it, `gather` on WebGPU (96 crop only) and `slice` on WASM; `?model=` forces one for both.
 - `?kernel=tex` — read convolution weights from a texture (the original path) instead of the default uniform buffer, to A/B the two on a new device (see Fidelity, below).
 - `?debug=1` — performance instrumentation panel (`debug.js`): live per-step timings, a policy benchmark per execution provider and crop size, a thread-count sweep, and a copyable JSON report. See PERF.md, "Measuring on a device".
 - `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 4); needs a fresh page load to take effect.
@@ -269,7 +271,7 @@ shader passes.
 | every small result → one row for the readback | n/a | `shaders/gather.glsl` |
 | policy input window | JS crop of 4 stored boards | `shaders/crop.glsl` |
 | board rendering (walls, all three channels) | per-pixel JS + `putImageData` | `shaders/draw.glsl` |
-| **policy network** | onnxruntime-web (WASM) | onnxruntime-web (WebGPU by default, falling back to WASM per-op; `?ep=wasm` forces CPU-only) |
+| **policy network** | onnxruntime-web (WASM) | onnxruntime-web in a worker (`policy-worker.js` + `policy.js`), pipelined with the GPU step; WebGPU or WASM, whichever times faster at load (`?ep=` forces one); split into FiLM model + conv core (`?model=`) |
 | maze layout, episode logic, overlay, UI, sound | JS | unchanged shape, new content (`app.js`) |
 
 ## The one synchronization point
@@ -302,9 +304,11 @@ each frame at the CoM it had when captured would show a stationary soliton and d
 signal the policy depends on. A step overwrites the four-steps-ago frame, which is exactly the one
 falling out of the stack, so four slots is the whole requirement.
 
-The policy's own compute runs on onnxruntime-web's WebGPU execution provider by default (measured
-faster than WASM on the mobile devices this was tuned on; `?ep=wasm` forces CPU-only for
-re-comparing on a new device). This does not remove the synchronization point above: the sim runs
+The policy's own compute runs on whichever of onnxruntime-web's WebGPU and WASM execution
+providers measured faster on this device at load (`pick()` in `policy.js`; `?ep=` forces one). Neither
+wins everywhere: WebGPU on the iPhone and M2, WASM on the Pixel. The timing runs while the board
+waits for the model, with the GPU otherwise idle, so it can flatter WebGPU slightly against
+in-game conditions where the sim shares the GPU. This does not remove the synchronization point above: the sim runs
 in a WebGL2 context, and WebGL2 and WebGPU share no GPU memory, so the crop still has to cross
 through the CPU to reach the net either way. WebGPU only speeds up the net's own conv work. What runs by default is not the export itself
 but the same network split into two graphs (`?model=`, above): WebGPU charges per graph node, and
@@ -358,9 +362,10 @@ board, then step, then locate, then judge — because the policy is sensitive to
 
 - Needs WebGL 2 **and** `EXT_color_buffer_float` (rendering to float textures). Both are checked
   at startup and reported in the page if missing.
-- The readback is synchronous, so the sim cannot run ahead of the policy. If that becomes the
-  bottleneck, the next step is PBO-based async readback (`readPixels` into a `PIXEL_PACK_BUFFER`
-  plus a fence), trading one frame of latency for no stall.
+- The readback is synchronous. With the worker and pipelining (the default), inference overlaps
+  it, so the sim waits for the policy only by whatever inference takes beyond the GPU step.
+  Without the worker the two still run back to back. PBO-based async readback (`readPixels` into
+  a `PIXEL_PACK_BUFFER` plus a fence) would hide the stall itself, for one more frame of latency.
 - Board edge is capped at 256 by the reduction's fixed 16×16 block loop; `setBoard` throws if that
   is exceeded rather than silently missing cells.
 - Up to `MAX_GHOSTS` (9) ghosts are supported, matching the layout's numbered spawns (`1`-`9`); a

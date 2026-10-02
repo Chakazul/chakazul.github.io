@@ -40,16 +40,22 @@ const GHOSTS_ENABLED = boolParam('ghost', true);
 // Dying still plays out (jingle, pause, respawn) but never costs a life -- for testing deep levels
 // without a game over cutting the run short.
 const GOD_MODE = boolParam('god', false);
-// WebGPU by default for the policy net (faster than WASM on the mobile devices this was tuned
-// on), falling back to wasm per-op. Doesn't remove the CPU roundtrip in agentStep() -- the sim
-// runs in a separate WebGL2 context sharing no memory with WebGPU -- but speeds up the net's own
-// conv work. `?ep=wasm` forces CPU-only, for re-comparing on a new device.
-const EXECUTION_PROVIDERS = new URLSearchParams(location.search).get('ep') === 'wasm'
-  ? ['wasm'] : ['webgpu', 'wasm'];
-// Which policy graph runs: 'gather' (fewest ops, WebGPU only -- Gather is slow on CPU -- and
-// fixed at a 96 crop), 'slice' (any backend, any crop), or 'orig' (the export as-is). Default is
-// gather on WebGPU at the default crop size, slice otherwise; `?model=` overrides. See loadModel().
-const MODEL_PARAM = new URLSearchParams(location.search).get('model');
+// Backend for the policy net. Neither is fastest everywhere (WebGPU wins on iPhone and M2, WASM
+// on the Pixel and Intel laptops -- PERF.md), so by default loadModel() times both on this device
+// and keeps the faster. `?ep=wasm` / `?ep=webgpu` skips that and forces one. Neither removes the
+// CPU roundtrip in agentStep(): the sim runs in a WebGL2 context sharing no memory with WebGPU.
+const EP_PARAM = ['wasm', 'webgpu'].includes(new URLSearchParams(location.search).get('ep'))
+  ? new URLSearchParams(location.search).get('ep') : null;
+// Which policy graph runs: 'gather' (fewest ops, fixed at a 96 crop; fastest on WebGPU, slow on
+// CPU), 'slice' (any crop; fastest on WASM), or 'orig' (the export as-is). By default each backend
+// gets the graph that suits it; `?model=` forces one for both. See pick() in policy.js.
+const MODEL_PARAM = ['orig', 'slice', 'gather'].includes(new URLSearchParams(location.search).get('model'))
+  ? new URLSearchParams(location.search).get('model') : null;
+// The policy runs in a worker (policy-worker.js) unless `?worker=0`, so that it can overlap the
+// main thread's GPU step instead of preceding it -- see agentStep()'s pipelining, which
+// `?pipeline=0` turns off (one step of action latency is the price; see PERF.md).
+const WORKER_ENABLED = boolParam('worker', true);
+const PIPELINE_ENABLED = boolParam('pipeline', true);
 // How the convolutions read kernel weights: a uniform buffer by default, `?kernel=tex` for the
 // original texture path, kept to A/B the two on a new device (see PERF.md).
 const KERNEL_MODE = new URLSearchParams(location.search).get('kernel') === 'tex' ? 'tex' : 'ubo';
@@ -274,7 +280,7 @@ let ghostChainMultiplier = 1;
 // eaten dot. Checked only where a new play starts (playNextEatSound), not off a separate timer,
 // so at most one sample plays at once.
 let eatActive = false, eatToggle = 0, eatDeadline = 0;
-let running = false, session = null, busy = false, lastMs = 0, lastAction = null, lastQ = null;
+let running = false, busy = false, lastMs = 0, lastAction = null;
 // True from playStartSound() until its jingle finishes (covers waiting for the unlocking gesture
 // too). setRunning() refuses to unpause while set, so Play/Space can't cut the intro short.
 let introPlaying = false;
@@ -996,7 +1002,7 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
   if (resetLives) score = 0;
   sometimesRemaining = sometimesWindow;
   strideCounter = 0;
-  lastAction = null; lastQ = null;
+  lastAction = null; nextAction = null;
   actionTrail.length = 0;
   pendingAction = null;
 
@@ -1146,55 +1152,159 @@ function buildContext() {
 // The policy's state input: the crop from the last step, fetched now, only because an inference
 // is about to use it (see readCrop() in glsim.js). The crop arrives channel-packed; the model
 // wants frame-major [1,K,S,S]. This de-interleave is the whole cost of the GPU input path.
-function stateTensor() {
+function stateData() {
   const S = CFG.netSize, SS = S * S, crop = SimGL.readCrop();
   const data = new Float32Array(CFG.K * SS);
   for (let k = 0; k < CFG.K; k++) {
     const base = k * SS;
     for (let i = 0; i < SS; i++) data[base + i] = crop[i * 4 + k];
   }
-  return new ort.Tensor('float32', data, [1, CFG.K, S, S]);
+  return data;
 }
 
-// FiLM gamma/beta for the current context, from the split-off FiLM model. The context only
-// changes on a steer or a cost-slider move, so this runs on those, not per inference. CPU (WASM)
-// on purpose: it is 112 tiny ops, and its outputs feed the core as ordinary CPU tensors.
-let filmSession = null, filmCache = { key: null, feeds: null };
-async function filmFeeds() {
-  const ctx = buildContext(), key = ctx.join(',');
-  if (key !== filmCache.key) {
-    if (!filmSession) filmSession = await ort.InferenceSession.create(CFG.filmUrl, { executionProviders: ['wasm'] });
-    filmCache = { key, feeds: await filmSession.run({ context: new ort.Tensor('float32', ctx, [1, 4]) }) };
+// What policy.js needs to know, shared by the worker, the main-thread fallback and ?debug=1's bench.
+const POLICY_CFG = {
+  filmUrl: CFG.filmUrl, modelUrl: CFG.modelUrl, coreUrl: CFG.coreUrl, netSize: CFG.netSize, K: CFG.K,
+  epParam: EP_PARAM, modelParam: MODEL_PARAM,
+};
+const ORT_WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+// Multi-threaded WASM needs SharedArrayBuffer, which needs cross-origin isolation -- still false
+// on a first visit before coi-serviceworker takes over, so fall back to one thread rather than let
+// onnxruntime-web throw. Capped at 4: more is slower on phones, whose big.LITTLE cores make
+// hardwareConcurrency overstate what helps (Pixel: 17ms at 4 threads, 60ms at 8; see PERF.md).
+// ?threads=N overrides (needs a fresh page load to take effect).
+function wasmThreads() {
+  const override = parseInt(new URLSearchParams(location.search).get('threads'), 10);
+  return override > 0 ? override
+    : (window.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 4) : 1);
+}
+
+// Whatever runs the policy, worker or main thread, behind one interface:
+// { infer(state, ctx) -> Promise<{best, runMs}>, release(), where, ep, model, choice }.
+let policy = null;
+let policyChoice = null;   // the load-time timings, for ?debug=1's report
+let lastRunMs = 0;         // the last inference's session.run time, excluding messaging (?debug=1)
+
+function mainThreadPolicy(state, ctx, eps) {
+  const rt = createPolicyRuntime(ort, POLICY_CFG);
+  return rt.pick(state, ctx, eps).then(choice => ({
+    infer: rt.infer, release: rt.release, where: 'main', ep: rt.ep, model: rt.model, choice,
+  }));
+}
+
+function workerPolicy(state, ctx) {
+  const w = new Worker('policy-worker.js');
+  const waiting = new Map();
+  let seq = 0, dead = false;
+  const failAll = err => { for (const p of waiting.values()) p.reject(err); waiting.clear(); };
+  return new Promise((resolve, reject) => {
+    // A worker that never answers must not leave the game without a policy: give up and let the
+    // caller fall back to the main thread.
+    const timer = setTimeout(() => { w.terminate(); reject(new Error('worker did not answer within 30 s')); }, 30000);
+    // After 'ready', an error means the worker is gone: everything waiting on it, and everything
+    // asked of it later, fails at once rather than never answering.
+    w.onerror = e => { clearTimeout(timer); dead = true; const err = new Error(e.message || 'worker failed'); failAll(err); reject(err); };
+    w.onmessage = ({ data: m }) => {
+      if (m.id === undefined) {
+        clearTimeout(timer);
+        if (m.type === 'ready') resolve({
+          infer(st, cx) {
+            if (dead) return Promise.reject(new Error('policy worker is gone'));
+            const id = ++seq;
+            return new Promise((res, rej) => {
+              waiting.set(id, { resolve: res, reject: rej });
+              w.postMessage({ type: 'infer', id, state: st, ctx: cx }, [st.buffer]);
+            });
+          },
+          release() { dead = true; w.terminate(); failAll(new Error('policy worker released')); },
+          where: 'worker', ep: m.choice.ep, model: m.choice.model, choice: m.choice,
+        });
+        else { w.terminate(); reject(new Error(m.message)); }
+        return;
+      }
+      const p = waiting.get(m.id);
+      waiting.delete(m.id);
+      if (m.type === 'result') p.resolve(m); else p.reject(new Error(m.message));
+    };
+    w.postMessage({ type: 'init', cfg: POLICY_CFG, threads: wasmThreads(), wasmPaths: ORT_WASM_PATHS, state, ctx },
+                  [state.buffer]);
+  });
+}
+
+// The worker by default. WebGPU in workers isn't universal, so if this page can reach WebGPU but
+// the worker couldn't, WebGPU is also timed here on the main thread and the faster of the two
+// wins -- an un-overlapped main-thread WebGPU can still beat a worker running WASM (the iPhone's
+// WASM is 2x slower than its WebGPU).
+async function choosePolicy() {
+  const ctx = buildContext();
+  let workerError = null;
+  if (WORKER_ENABLED) {
+    try {
+      const w = await workerPolicy(stateData(), ctx);
+      const workerGpu = w.choice.candidates.some(c => c.ep === 'webgpu' && !c.error);
+      if (!workerGpu && EP_PARAM !== 'wasm' && navigator.gpu
+          && await navigator.gpu.requestAdapter().catch(() => null)) {
+        try {
+          const m = await mainThreadPolicy(stateData(), ctx, ['webgpu']);
+          m.choice.workerChoice = w.choice;
+          if (m.choice.ms < w.choice.ms) { w.release(); return m; }
+          m.release();
+          w.choice.mainThreadWebgpu = m.choice;
+        } catch (e) { /* keep the worker */ }
+      }
+      return w;
+    } catch (e) {
+      console.warn('policy worker unavailable, running the policy on the main thread:', e);
+      workerError = String(e?.message || e);
+    }
   }
-  return filmCache.feeds;
+  const m = await mainThreadPolicy(stateData(), ctx);
+  if (workerError) m.choice.workerError = workerError;
+  return m;
 }
 
-// Inputs for a given policy graph (`policyModel`, or another for ?debug=1's bench).
-async function feedsFor(model, state) {
-  if (model === 'orig') return { state, context: new ort.Tensor('float32', buildContext(), [1, 4]) };
-  return { state, ...(await filmFeeds()) };
+// A failed inference costs that step's decision, not the game: the step goes ahead without an
+// action. A worker that fails is replaced by the main thread, once, in the background.
+let policyRecovering = false;
+function inferenceFailed(e) {
+  console.error('CARL inference failed:', e);
+  if (policy?.where === 'worker' && !policyRecovering) {
+    policyRecovering = true;
+    const old = policy;
+    policy = null;   // agentStep() waits for a policy rather than inferring on a dead one
+    old.release();
+    mainThreadPolicy(stateData(), buildContext())
+      .then(m => { policy = m; policyChoice = { where: 'main', ...m.choice, workerError: String(e?.message || e) }; })
+      .catch(err => fail(`Model failed to load: ${err?.message || err}`))
+      .finally(() => { policyRecovering = false; });
+  }
+  return null;
 }
-let policyModel = 'orig';   // which graph `session` runs -- set by loadModel()
+
+// Pipelined (worker + ?pipeline, the default): CARL's decision from the previous step, applied on
+// this one. See agentStep().
+let nextAction = null;
+const pipelining = () => PIPELINE_ENABLED && policy?.where === 'worker';
 
 // CARL's half of a turn: pick a spot + sign from the policy. Unlike the CPU version this only
 // *returns* the intervention -- applying it is a GPU pass inside SimGL.step().
 async function agentAct() {
   const t0 = performance.now();
   const S = CFG.netSize, SS = S * S;
-  const out = await session.run(await feedsFor(policyModel, stateTensor()));
-  const q = out.q.data;
-  lastMs = performance.now() - t0;
-  let best = 0, bv = q[0];
-  for (let i = 1; i < q.length; i++) if (q[i] > bv) { bv = q[i]; best = i; }
-  lastQ = q;
-  const at = Math.floor(best / SS), pos = best % SS, lr = Math.floor(pos / S), lc = pos % S;
+  // Everything about this step is captured before the first await: when pipelined, the GPU step
+  // runs -- and lastCoM moves on -- while the inference is still out.
+  const state = stateData(), ctx = buildContext(), step = steps;
   const [oy, ox] = agentWindowOrigin(lastCoM[0], lastCoM[1]);
+  const { best, runMs } = await policy.infer(state, ctx);
+  lastMs = performance.now() - t0;
+  lastRunMs = runMs;
+  const at = Math.floor(best / SS), pos = best % SS, lr = Math.floor(pos / S), lc = pos % S;
   const r = ((oy + lr) % H + H) % H, c = ((ox + lc) % W + W) % W;
   const sign = Math.sign(CFG.actionValue[at]);
   lastAction = { r, c, sign };
   if (sign === 0) return null;
   actions++;
-  actionTrail.push({ r, c, sign, step: steps });
+  actionTrail.push({ r, c, sign, step });
   if (actionTrail.length > MAX_TRAIL) actionTrail.shift();
   return { x: c, y: r, delta: sign * MA, radius: CFG.actionRadius };
 }
@@ -1212,28 +1322,40 @@ function takePendingAction() {
 
 async function agentStep() {
   if (!lastCoM) return;
-  let action = null;
-  if (humanActs) { lastMs = 0; action = takePendingAction(); }   // no inference -- readout shows "--"
+  let action = null, infer = false;
+  if (humanActs) { lastMs = 0; nextAction = null; action = takePendingAction(); }   // no inference -- readout shows "--"
   else if (actorMode === 'sometimes' && sometimesRemaining <= 0) {
-    lastMs = 0; lastQ = null; lastAction = null;      // CARL idle this step -- no inference, no action
+    lastMs = 0; lastAction = null;                    // CARL idle this step -- no inference
   }
-  else if (!session) return;
+  else if (!policy) return;
   else if (strideCounter > 0) {
     strideCounter--;
-    lastMs = 0; lastQ = null; lastAction = null;      // stride-skipped step -- no inference, no action
+    lastMs = 0; lastAction = null;                    // stride-skipped step -- no inference
     if (actorMode === 'sometimes') sometimesRemaining--;
   }
   else {
-    action = await agentAct();
+    infer = true;
     strideCounter = inferenceStride - 1;
     if (actorMode === 'sometimes') sometimesRemaining--;
   }
+
+  // Pipelined, this step applies the action decided on the last one and starts the inference for
+  // the next, which runs in the worker while the GPU runs this step: max(inference, sim) per step
+  // instead of their sum. agentAct() reads this step's crop synchronously, before step() below
+  // replaces it, and the decision keeps the board position it was aimed at. A decision made on
+  // the last active step of a "sometimes" window still lands, one step late, on the first idle one.
+  let pending = null;
+  if (!humanActs && pipelining()) {
+    action = nextAction; nextAction = null;
+    if (infer) pending = agentAct().catch(inferenceFailed);
+  } else if (infer) action = await agentAct().catch(inferenceFailed);
 
   // Action, step, reduction and the next crop, queued back to back; the readback below is the
   // only point the CPU waits on the GPU. Per-ghost frightened state rides along via
   // pushGhostTiles() at the end of steerGhosts(), not as an argument here.
   SimGL.step(action);
   const rb = SimGL.readback();
+  if (pending) nextAction = await pending;
   steps++;
   updateFrightened(rb);
   updateScore(rb);
@@ -1668,7 +1790,7 @@ function setActorMode(mode) {
   cv.classList.toggle('human', humanActs);
   if (mode === 'sometimes') sometimesRemaining = sometimesWindow;   // fresh window on entering the mode
   strideCounter = 0;
-  lastMs = 0; lastQ = null; lastAction = null; pendingAction = null;
+  lastMs = 0; lastAction = null; nextAction = null; pendingAction = null;
   render();
 }
 $('actor').addEventListener('click', () => {
@@ -1781,36 +1903,14 @@ function updateSolitonSelection() {
   });
 }
 async function loadModel() {
-  ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
-  // Multi-threaded WASM needs SharedArrayBuffer, which needs cross-origin isolation -- still false
-  // on a first visit before coi-serviceworker takes over, so fall back to one thread rather than
-  // let onnxruntime-web throw. Capped at 4: more is slower on phones, whose big.LITTLE cores make
-  // hardwareConcurrency overstate what helps (Pixel: 17ms at 4 threads, 60ms at 8; see PERF.md).
-  // ?threads=N overrides (needs a fresh page load to take effect).
-  const threadsOverride = parseInt(new URLSearchParams(location.search).get('threads'), 10);
-  ort.env.wasm.numThreads = threadsOverride > 0 ? threadsOverride
-    : (window.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 4) : 1);
-
-  // Absorb WASM's one-time JIT cost here rather than on the user's first real sim step.
-  const warmup = async s => {
-    try { await s.run(await feedsFor(policyModel, stateTensor())); }
-    catch (e) { /* best-effort -- worst case the first real step pays this cost instead */ }
-  };
-
-  // The gather core only pays off on WebGPU (its Gathers are slow on CPU) and only exists at the
-  // default 96 crop. An available adapter is the test for WebGPU actually running, since the
-  // session would otherwise fall back to WASM silently.
-  const gpu = EXECUTION_PROVIDERS[0] === 'webgpu' && !!navigator.gpu
-    && !!(await navigator.gpu.requestAdapter().catch(() => null));
-  policyModel = ['orig', 'slice', 'gather'].includes(MODEL_PARAM) ? MODEL_PARAM
-    : (gpu && CFG.netSize === 96 ? 'gather' : 'slice');
-  if (policyModel === 'gather' && CFG.netSize !== 96) policyModel = 'slice';
-  const url = policyModel === 'orig' ? CFG.modelUrl : CFG.coreUrl[policyModel];
-
+  // The main thread's onnxruntime is configured even when the worker runs the policy: it is the
+  // fallback, and what ?debug=1's bench runs on.
+  ort.env.wasm.wasmPaths = ORT_WASM_PATHS;
+  ort.env.wasm.numThreads = wasmThreads();
   try {
-    const s = await ort.InferenceSession.create(url, { executionProviders: EXECUTION_PROVIDERS });
-    await warmup(s);
-    session = s;   // set only once warm: agentStep() starts inferring the moment it is
+    // Set only once chosen and warm: agentStep() starts inferring the moment it is.
+    policy = await choosePolicy();
+    policyChoice = { where: policy.where, ...policy.choice };
   } catch (e) {
     console.error(e);
     fail(`Model failed to load: ${e?.message || e}<br>(It must be served over http(s), not file://.)`);
