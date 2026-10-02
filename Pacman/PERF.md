@@ -146,6 +146,200 @@ This is very likely the largest mobile cost after the convolution itself.
     `fenceSync`, trading one step of policy latency for no stall. Worth doing *after* #1, which
     removes most of the stalls this would otherwise be fixing.
 
+## CARL inference
+
+Everything above is about the GPU sim. Policy inference is a separate cost, and on slow devices
+it is the one players actually notice: a step with CARL acting is a step without CARL plus one
+`session.run()`. "CARL acts sometimes" limits how *often* that cost is paid; the items below are
+about making each payment cheaper. Lowering the inference rate with `?stride=N` was tried first,
+and it makes pattern maintenance visibly worse.
+
+### What one inference costs
+
+`models/agent_direction.onnx` is a 4-level U-Net with FiLM conditioning: the 4-float context
+(time, direction, cost) goes through a small MLP that scales and shifts each conv layer's output.
+It has 0.79M parameters and **0.377 GMAC per call at 96×96**, in 694 ONNX nodes, of which only
+15 are convolutions. The other nodes are circular padding built from Slice/Concat (124 nodes),
+14 separate FiLM MLPs (56 `Gemm`), and shape bookkeeping (`Shape`/`Gather`/`Unsqueeze`/...).
+
+| layer group | MMAC | share |
+|---|---|---|
+| encoders (96² → 48² → 24²) | 90 | 24% |
+| bottleneck (12²) | 32 | 8% |
+| **decoders** (skips are concatenated, so each block's first conv sees 3× the channels) | **255** | **68%** |
+
+Native onnxruntime on CPU, single thread, on the desktop the game runs smoothly on:
+
+| variant | ms / inference |
+|---|---|
+| 96, basic graph optimization | 9.0 |
+| 96, full optimization | 7.2 |
+| 96, full optimization + static input shape | 7.2 |
+| 96, dynamic int8 quantization | 6.9 |
+| 64 crop | 3.3 |
+| 48 crop | 2.0 |
+
+WASM is typically 2–3× slower than native, and a phone CPU is several times slower again, so an
+estimate of 50–100+ ms per inference on mobile is plausible. That is many times a whole sim step.
+The cost is in arithmetic, not per-node overhead, so on CPU it only shrinks by doing fewer MACs.
+
+### Closed-loop check of the cheap ideas
+
+A numpy copy of the game's step order (act → Lenia step at `dt × channel1Speed` → toroidal CoM →
+4-frame crop at the current CoM), driving the real ONNX policy. 160² torus, **no maze walls**, 2
+solitons (`rule74`, `rule73`) × 4 directions × 500 steps per config. It is not validated against
+the game, so read it as a sanity check, not a measurement:
+
+| config | deaths / 8 |
+|---|---|
+| 96 crop, infer every step (current) | 0 |
+| `?net=64` | 2 |
+| `?net=48` | 3 |
+| stride 2, no action on skipped steps (current `?stride=2`) | 0 |
+| stride 4, no action on skipped steps | 0 |
+| stride 2, **repeat** last action on skipped steps | 0 |
+| stride 4, **repeat** last action on skipped steps | **8** (all within ~100 steps) |
+
+Steering progress was too noisy across 8 runs to rank configs, and without walls the stride
+rows can't show the maintenance loss seen in the game. One pattern was clear: at 96, every
+step, the policy chose **no-op on ~90–95% of steps**. Most inference only confirms "do nothing",
+which is why skipping steps is tempting, and why skipping the few that matter hurts.
+
+### In this repo, no retraining
+
+1. **Measure on the target devices first.** Mobile has no console, so put a diagnostics line on
+   the page: which execution provider actually loaded (WebGPU, or the silent WASM fallback),
+   `crossOriginIsolated`, `numThreads`, and per-step inference ms against sim+readback ms.
+   Without cross-origin isolation, WASM drops to 1 thread, which alone is 4–6× slower.
+   Check that `coi-serviceworker` really takes control on iOS Safari.
+
+2. **Pipeline the sim with inference (one step of action latency).** Today a step runs one
+   thing after another:
+
+   ```
+   [ infer on crop(t) ][ GPU: act + sim + reduce + crop  →  readback ]  → step t+1
+   ```
+
+   Per-step time is `infer + sim + readback`. Pipelined, as soon as the readback returns crop(t),
+   start inference on it *without awaiting it*. Then immediately queue the next GPU step using
+   the action from the inference that just finished, the one started on crop(t−1):
+
+   ```
+   CPU/worker:  [ infer crop(t-1) ][ infer crop(t)   ][ infer crop(t+1) ]
+   GPU:              [ step t+1 + readback ][ step t+2 + readback ] ...
+   ```
+
+   Per-step time becomes `max(infer, sim + readback)`. This is not a stride: CARL still decides
+   every step, but each decision is based on a state one step old. Notes:
+   - It only overlaps if inference really runs off the main thread. That holds for WebGPU, or
+     for WASM with `ort.env.wasm.proxy = true`, which runs it in a worker. Plain WASM computes on
+     the main thread and serializes again.
+   - The gain is largest when the two halves are similar in cost (up to 2×). If inference is
+     80 ms against a 10 ms sim step, it saves ~11%. The other benefit is that the page keeps
+     drawing frames while inference runs.
+   - The one-step delay is a distribution shift: the policy was trained to act on the state it
+     sees. The soliton moves under 0.5 px/step against a 7 px action disc, so it is probably
+     tolerable, but it has to be checked in play. Retraining item 4 below removes the doubt.
+   - Not to be confused with PBO async readback (Tier 3 #11), which hides the readback stall but
+     not inference.
+
+3. **Simplify the graph offline.** Ship a pre-optimized model made by a one-off Python script.
+   The context changes only on a steer or a cost-slider move, so the 14 FiLM MLPs can run once
+   per change, with their γ/β outputs fed to the conv graph as inputs. Even better, fold γ/β
+   into each conv's weights and bias. Replacing the Slice/Concat circular padding with `Conv`
+   zero padding removes ~124 nodes, each a full feature-map copy. That changes the network's
+   math at the crop edge, where the crop is usually empty, so check action agreement against
+   the original. Expected gain on CPU is 0–20%. On WebGPU every node is a separate dispatch, so
+   the gain could be much larger, but that is unmeasured.
+
+4. **fp16 on WebGPU, static int8 on WASM.** Dynamic int8 bought nothing (7.2 → 6.9 ms). Static
+   QDQ int8, calibrated on real crops, is where WASM speedups usually come from (~2×). Either
+   precision needs an argmax-agreement check against fp32.
+
+5. **Run the U-Net in WebGL2 shaders (the big one).** The crop is already a texture in the sim's
+   context. 15 conv passes, 3 max-pools, 3 upsamples, FiLM folded into the conv weights per
+   context, then an argmax pass, with only the chosen action read back. That removes the 144 KB
+   crop readback, the CPU hop between the WebGL2 and WebGPU contexts, and the dependence on
+   threads or WebGPU support. 0.38 GMAC of fragment-shader work competes with the sim for the
+   GPU, so do Tier 1 first. It needs the same fidelity check against onnxruntime that the sim
+   had against the CPU demo.
+
+### Needs retraining or distillation (outside this repo)
+
+1. **Distill into a smaller student.** Train it to reproduce the current model's Q maps and
+   argmax on the current model's own rollouts. This is supervised learning, no RL loop. Halving
+   every channel width gives ~4× fewer MACs. Adding skip connections instead of concatenating
+   them shrinks the decoders, which are 68% of the cost. Best expected payoff for the effort.
+
+2. **Coarser action map.** Output Q at 48×48 instead of 96×96. The action is a radius-7 disc,
+   so 1 px placement precision buys little. This drops the last decoder level (85 MMAC, 23%) and
+   shrinks the output 4×.
+
+3. **Train for a lower decision rate, rather than skipping decisions.** The current model was
+   only ever trained to act every step, so `?stride=N` just leaves it blind in between, and
+   repeating its action is worse (above). Train with one decision per k Lenia steps, and add k
+   to the context (as the cost already is) so a single model covers k = 1–4 and the game can pick
+   k per device. Optionally allow a stronger or multi-site intervention per decision, so a
+   low-rate agent keeps the same control authority.
+
+4. **Train with one step of action latency,** so in-repo item 2 is in-distribution rather than
+   an approximation.
+
+5. **Train on a smaller window with zero padding.** The game board is not a 96² torus anyway,
+   and cost scales with crop area: 64² is 2.2× cheaper, 48² is 3.7×. Running the existing model
+   at those sizes (`?net=`) killed solitons above, so a retrain is the only way to get there.
+
+6. **A tiny "act now?" gate.** With ~90%+ of decisions being no-op, a small classifier trained
+   on the full policy's no-op vs act labels could decide when the full net needs to run,
+   replacing the fixed `sometimes` window and `stride` with a learned trigger.
+
+Suggested order: diagnostics on a real phone (#1), then pipelining (#2) if the measured split
+says it helps. Externally: distillation plus a coarser action head, then decision rate k as a
+context input. Only port the network to WebGL (#5) if a distilled model is still too slow.
+
+## Measuring on a device
+
+`?debug=1` loads `debug.js`, which adds a panel to the page. It is inert without the param.
+
+- **Live line** (p50/p90 ms): `infer` is the whole policy call (de-interleave + `session.run` +
+  argmax), and `run` is `session.run` alone. `readback` is the synchronous stall waiting for the
+  GPU, i.e. roughly the sim's GPU cost. `submit` is the CPU cost of queueing the passes.
+  `step carl` / `step idle` are whole steps with and without an inference. `frame` is the gap
+  between animation frames, which shows any main-thread blocking. `rate` is achieved against
+  requested steps/s.
+- **Bench** pauses the game and times the policy alone. It creates a fresh session per
+  execution provider (WebGPU if the browser has it, then WASM) and times 96², 64² and 48² crops,
+  including the first run (shader compile / JIT) and session creation. It also runs a
+  main-thread test: `maxMainThreadGapMs` ≈ `runMs` means inference blocks the page, so
+  pipelining could not overlap it; a few ms means inference runs off-thread.
+- **Sweep threads** reloads the page with `?threads=1,2,4,max` and benches each. WASM's thread
+  count is fixed for the life of a page, so this can't be done in one load.
+- **Copy report** gives one JSON blob: device/browser/GPU info, cross-origin isolation, the live
+  stats, and every stored bench. Benches accumulate in `localStorage` across reloads until
+  **Clear benches**.
+
+Protocol per device:
+
+1. Open `index.html?debug=1` and wait for the model to load. If **COI** shows `NO`, reload
+   once (the service worker takes over on the second load). If it stays `NO`, that is a finding.
+2. **Sweep threads** and wait until it says done (about a minute on a phone).
+3. Back on the plain `?debug=1` page, play in each actor mode for ~60 s at the default speed,
+   tapping **Reset live** and then **Copy report** per mode: "You act" gives the sim-only cost,
+   and "CARL acts always" gives the full cost.
+4. Paste the reports, labelled with the device name.
+
+What the numbers decide:
+
+- `run96` per EP across devices → whether a smaller network is mandatory. That means
+  distillation, or the coarser action map.
+- `blocking` → whether pipelining can work on that device, and with which EP.
+- `infer` vs. `readback` on CARL steps → the pipelining payoff (`max` vs. `sum`), and whether
+  the GPU tiers above matter more than inference.
+- `run64` / `run48` → what a smaller-window retrain would buy.
+- `infer` − `run` → the JS de-interleave cost (expected to be negligible).
+- `webgpuBackendUp`, `crossOriginIsolated`, `wasmThreads` → configuration problems, which
+  are free to fix.
+
 ## Considered and rejected
 
 - **`textureGather`.** Would fetch 2×2 texels per instruction, a clean 4×. Not available: WebGL 2
@@ -165,3 +359,10 @@ Nonzero and per-row-extent tap counts come from running `glsim.js`'s own `kernel
 `quad4()` arithmetic, same 1e-7 threshold — and counting. "Fetches" is
 `fragments × (grid + nonzero)`: one kernel fetch per grid position, plus one state fetch per
 nonzero tap.
+
+The CARL inference numbers come from loading `models/agent_direction.onnx` with the `onnx` Python
+package, running shape inference at a 1×4×96×96 input, and summing `out_H × out_W × C_out × C_in ×
+3 × 3` over the 15 convs. Timings are native `onnxruntime` CPU, `intra_op_num_threads = 1`, 40
+runs after 5 warm-ups, on random input (latency does not depend on the values). The closed-loop
+table uses an FFT Lenia built from `kernelData()`'s arithmetic, `action.glsl`'s disc rule, and
+`crop.glsl`'s frame order and origin. The scripts were throwaway and are not in the repo.

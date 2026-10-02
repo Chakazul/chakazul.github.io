@@ -19,6 +19,7 @@ work.
 - `?stride=N` — infer the model only every Nth active step, taking no action in between; cheaper but reacts more slowly to a moving soliton (default `1`, i.e. every step).
 - `?budget=N` — per-frame sim-step time budget in ms, to tune per device (default `10`).
 - `?ep=wasm` — force the CPU-only WASM execution provider instead of the default WebGPU-with-WASM-fallback, for re-comparing on a new device.
+- `?debug=1` — performance instrumentation panel (`debug.js`): live per-step timings, a policy benchmark per execution provider and crop size, a thread-count sweep, and a copyable JSON report. See PERF.md, "Measuring on a device".
 - `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 6); needs a fresh page load to take effect.
 
 ## What's Pac-Man about it
