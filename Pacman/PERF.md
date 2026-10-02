@@ -322,11 +322,14 @@ Protocol per device:
 
 1. Open `index.html?debug=1` and wait for the model to load. If **COI** shows `NO`, reload
    once (the service worker takes over on the second load). If it stays `NO`, that is a finding.
-2. **Sweep threads** and wait until it says done (about a minute on a phone).
-3. Back on the plain `?debug=1` page, play in each actor mode for ~60 s at the default speed,
-   tapping **Reset live** and then **Copy report** per mode: "You act" gives the sim-only cost,
-   and "CARL acts always" gives the full cost.
-4. Paste the reports, labelled with the device name.
+2. **Sweep threads** and wait until it says done (about a minute on a phone). No need to copy
+   anything yet: the benches are stored and go into every later report.
+3. Re-open the plain `?debug=1` URL, so the sweep's last `?threads=` doesn't stick. Tap **Reset
+   live**, then play ~90 s in the default "CARL acts sometimes" mode, steering every few
+   seconds. The live stats split steps by whether CARL inferred (`step.carl` / `step.idle`), so
+   this one run gives both the full cost and the sim-only cost. "You act" adds nothing beyond
+   the idle steps.
+4. **Copy report** and paste it, labelled with the device name.
 
 What the numbers decide:
 
