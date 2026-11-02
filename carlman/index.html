@@ -221,8 +221,9 @@
       <div class="transport">
         <button id="play">Pause</button>
         <button id="step1">Step</button>
-        <button id="actor" title="When CARL steers Carlman. Click to switch: CARL acts sometimes (only for a while after you steer -- fastest), CARL acts always (queries CARL every step).">CARL acts sometimes</button>
+        <button id="actor" hidden style="display:none" title="When CARL steers Carlman. Click to switch: CARL acts sometimes (only for a while after you steer -- fastest), CARL acts always (queries CARL every step).">CARL acts always</button>
         <div class="reset-group">
+          <button id="sound" title="Turn the game sounds on or off" aria-pressed="true">Sound ON</button>
           <button id="respawn" title="Re-place the current soliton at the maze start">Restart</button>
         </div>
       </div>
@@ -230,15 +231,15 @@
         <span><i class="disc add"></i>adding mass</span>
         <span><i class="disc rem"></i>removing mass</span>
         <span id="legend-target"><svg width="20" height="9" viewBox="0 0 20 9" style="color:var(--target)" aria-hidden="true"><path d="M0 4.5h12" stroke="currentColor" stroke-width="2"/><path d="M12 .8l6 3.7-6 3.7z" fill="currentColor"/></svg>target direction</span>
-        <span><svg width="20" height="9" viewBox="0 0 20 9" style="color:var(--current)" aria-hidden="true"><path d="M0 4.5h12" stroke="currentColor" stroke-width="2"/><path d="M12 .8l6 3.7-6 3.7z" fill="currentColor"/></svg>current direction</span>
+        <!-- current-direction arrow, switched off: <span><svg width="20" height="9" viewBox="0 0 20 9" style="color:var(--current)" aria-hidden="true"><path d="M0 4.5h12" stroke="currentColor" stroke-width="2"/><path d="M12 .8l6 3.7-6 3.7z" fill="currentColor"/></svg>current direction</span> -->
       </div>
       <p class="tip" id="tip">
         Maze-chase game played inside
         <a href="https://en.wikipedia.org/wiki/Lenia" target="_blank" rel="noopener"><b>Lenia</b></a>, a continuous cellular automaton.
+        Carlman is steered by <a href="https://developmentalsystems.org/carl/" target="_blank" rel="noopener"><b>CARL</b></a>, a reinforcement learning agent that keeps him on course by adding or removing a little mass at a time.
         The Carlman, the ghosts and the dots are all <b>solitons</b>: self-organizing patterns that move and hold together by the automaton's own rules.
         Eat every dot to clear the level and move on to more ghosts, grab a power pellet to make the ghosts edible for a while,
         and keep away from them otherwise: a ghost's touch dissolves Carlman.
-        Carlman is steered by <a href="https://developmentalsystems.org/carl/" target="_blank" rel="noopener"><b>CARL</b></a>, a reinforcement learning agent that keeps him on course by adding or removing a little mass at a time.
         <b>Use the arrow keys, or click or tap the maze, to choose which way Carlman goes.</b></p>
 
       <div class="playback">
@@ -248,6 +249,11 @@
           </span>
           <input type="range" id="cost" min="0" max="10" step="0.1" value="2.5">
           <b id="v-cost">2.50</b>
+        </label>
+        <label class="mini" title="CARL only intervenes when its best add/remove is worth at least this much more (in predicted return) than doing nothing. Raise it to stop CARL reacting to a soliton's natural wobble. The report found 0.3-0.6 halves the actions without hurting steering; 1 or more breaks steering.">
+          <span>action threshold</span>
+          <input type="range" id="act-thr" min="0" max="2" step="0.05" value="0">
+          <b id="v-act-thr">0.00</b>
         </label>
         <label class="mini" title="How fast the simulation runs, in target steps per second. The rate readout above shows the actual measured rate.">
           <span>FPS
@@ -262,6 +268,18 @@
     <!-- Setup: the occasional choices, each of which restarts the episode. -->
     <div class="deck-setup">
       <h3>Setup</h3>
+      <!-- Model lab (carlman/model-lab branch): which trained policy steers Carlman. -->
+      <label class="field" title="Which trained CARL policy steers Carlman. Switching reloads the page.">
+        <div class="row"><span class="name">model</span></div>
+        <select id="agent"></select>
+        <div class="readout" title="Totals for this page visit, across restarts">
+          <span title="Actions per CARL query (lower = sparser)"><span class="k">act/query</span> <b id="lab-rate">–</b></span>
+          <span title="CARL queries this visit"><span class="k">queries</span> <b id="lab-queries">0</b></span>
+          <span title="Share of queries the action threshold turned into a no-op"><span class="k">held back</span> <b id="lab-supp">–</b></span>
+          <span title="Deaths by mass runaway (the soliton exploded)"><span class="k">exploded</span> <b id="lab-expl">0</b></span>
+          <span title="Other deaths: dissolved, ghosts included (play with ?ghost=0 to isolate CARL)"><span class="k">died</span> <b id="lab-deaths">0</b></span>
+        </div>
+      </label>
       <label class="field" title="Pick which update rule's soliton to steer -- click a thumbnail">
         <div class="row">
           <span class="name">soliton

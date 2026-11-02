@@ -30,7 +30,8 @@ function pctParam(name, def) {
   const v = parseInt(new URLSearchParams(location.search).get(name), 10);
   return v >= 0 && v <= 100 ? v / 100 : def;
 }
-const SOUND_ENABLED = boolParam('sound', true);
+// Also switchable live by the Sound button (setSound(), which keeps ?sound= in the address bar).
+let soundEnabled = boolParam('sound', true);
 // Pellet (channel-2) field. Off: placeDots() never sets a rule, so channel 2's sim pass and its
 // contribution to the drawn board are both skipped -- only Carlman's channel moves.
 const DOTS_ENABLED = boolParam('dots', true);
@@ -68,16 +69,65 @@ const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)
 const DOTS_EVERY = intParam('dotsim', IS_MOBILE ? 3 : 1);
 
 // ====================================================================================
-//  CONFIG -- locked to the canonical direction run (models/meta_direction.json)
+//  Model lab -- which trained policy steers Carlman (?agent=<id>, or the picker under Setup)
+// ====================================================================================
+// Candidates from the steering_small report (rlca/experiments/steering_small/REPORT.md), plus the
+// paper model the site has always run. Each ships its export and its training metadata; the meta
+// decides the kernel radius it was trained at, its window size and its context layout, so a new
+// candidate is one entry here plus its folder under models/agents/ (scripts/export_demo_model_small.py
+// in rlca writes both files).
+//
+// The whole game runs at the agent's training radius, the way the agent was trained: an R12 agent
+// gets an R12 world, with the board, maze walls, soliton bank, dots, ghosts and every pixel- or
+// mass-based threshold scaled by kernel_R / NATIVE_R (CFG.scale; masses by its square). See
+// loadAgent(). Lenia is close to scale-invariant, so a soliton resampled to the new radius moves
+// and holds together like the original -- the report checked R=12 and R=15/16 for the 5 easy
+// solitons, and found R=13-14 makes rule57 explode on its own and R=9 breaks two of them.
+//
+// `cost` and `thr` are the starting action cost and action threshold (?cost= / ?thr= override).
+// DEFAULT_AGENT is the one loaded without ?agent=.
+const AGENTS = [
+  { id: 'r12-med-band600', label: 'R12 medium, mass band, with time',
+    meta: 'models/agents/r12-med-band600/meta.json', model: 'models/agents/r12-med-band600/agent.onnx',
+    cost: 5, thr: 0.15 },
+  { id: 'r15-med-l900', label: 'R15 medium-large, mass band, with time',
+    meta: 'models/agents/r15-med-l900/meta.json', model: 'models/agents/r15-med-l900/agent.onnx',
+    cost: 2.5, thr: 0 },
+  { id: 'r16-med-l950', label: 'R16 medium-large, mass band, with time',
+    meta: 'models/agents/r16-med-l950/meta.json', model: 'models/agents/r16-med-l950/agent.onnx',
+    cost: 2.5, thr: 0 },
+  { id: 'r18-med-orig950', label: 'R18 medium, original reward, with time',
+    meta: 'models/agents/r18-med-orig950/meta.json', model: 'models/agents/r18-med-orig950/agent.onnx',
+    cost: 2.5, thr: 0 },
+  { id: 'paper', label: 'R18 (paper model)', net: 96,
+    meta: 'models/meta_direction.json', model: 'models/agent_direction.onnx',
+    film: 'models/agent_direction_film.onnx',
+    core: { slice: 'models/agent_direction_core.onnx', gather: 'models/agent_direction_core_gather.onnx' },
+    cost: 2.5, thr: 0 },
+];
+const DEFAULT_AGENT = 'r18-med-orig950';
+const AGENT = AGENTS.find(a => a.id === new URLSearchParams(location.search).get('agent'))
+  || AGENTS.find(a => a.id === DEFAULT_AGENT);
+function floatParam(name, def) {
+  const v = parseFloat(new URLSearchParams(location.search).get(name));
+  return v >= 0 ? v : def;
+}
+
+// ====================================================================================
+//  CONFIG -- written for the canonical direction run's R=18; the fields marked "per agent" are
+//  set from the chosen agent's meta by loadAgent(), which also rescales the R=18 geometry
 // ====================================================================================
 const CFG = {
   K: 4,                       // frame stack
-  R: 18,                      // kernel radius (fixed -- all 48 training solitons share it)
-  // The model was trained on 96x96 toroidal grids with no mazes; every inference crops a 96x96
-  // toroidal window centred on the CoM out of the larger board, so input always matches training
-  // regardless of board size. ?net=N overrides this for experiments (fully convolutional, so it
-  // still runs, but off-distribution) and also sets the crop size the one readback carries.
-  netSize: intParam('net', 96),
+  R: 18,                      // per agent: the kernel radius everything runs at (bank solitons are R=18 natively)
+  scale: 1,                    // per agent: CFG.R / NATIVE_R -- pixel lengths scale by this, masses by its square
+  // Per agent. The paper model was trained on 115x115 toroidal grids with no mazes; every inference
+  // crops a 96x96 toroidal window centred on the CoM out of the larger board, so input always
+  // matches training regardless of board size. The R12 agents crop their own training board (56).
+  // ?net=N overrides this for experiments (fully convolutional, so it still runs, but
+  // off-distribution) and also sets the crop size the one readback carries.
+  netSize: 96,
+  ctxDim: 4,                   // per agent: 4 = [time, dy, dx, cost], 3 = no time input
   dt: 0.1,
   // Per-channel dt multipliers -- Carlman's and the ghosts' own speed, independent of each other
   // and of the stationary dots channel. Each layers under glsim.js's frightened-window multiplier
@@ -85,38 +135,33 @@ const CFG = {
   channel1Speed: 1.5,
   channel3Speed: 1.5,
   actionValue: [0.3, -0.3, 0.0],  // add / remove / no-op (output channel order)
-  actionRadius: 7,
+  actionRadius: 7,             // per agent
   windowSize: 4,               // steps of CoM history kept for the "current direction" arrow
-  pinnedTime: 0.005,           // 50/10000 -- see meta_direction.json for why this is pinned
+  pinnedTime: 0.005,           // 50/10000 -- see meta_direction.json for why this is pinned (time-input agents only)
   // The true action_cost_range from meta_direction.json -- the model normalizes against this, so
   // it must match training regardless of the UI slider's own range. The slider deliberately runs
   // past costMax (to 10): clamping would make its top half inert, and rescaling to the slider's
   // own range would silently change what every existing cost value means.
-  costMin: 0, costMax: 5,
+  costMin: 0, costMax: 5,      // per agent
   massDeathFraction: 0.3,      // soliton counts as "dead" below this fraction of its spawn mass
   // ...and as blown up above this absolute mass. Lowered from the CPU demo's 1500, which windowing
   // made unreachable: an undisturbed rule74 soliton peaks at 437 (146% of spawn) and one fed
   // CARL-sized mass every step plateaus at 679, so 1500 never fired. 1000 clears both peaks with
   // room to spare while staying well under a real runaway (6% of the 128-window's capacity).
-  massExplodeLimit: 1000,
-  modelUrl: 'models/agent_direction.onnx',
-  // The same policy split by tools/split_model.py, bit-identical output: a FiLM model run only
+  massExplodeLimit: 1000,      // at R=18; loadAgent() scales it
+  modelUrl: AGENT.model,
+  // The paper policy split by tools/split_model.py, bit-identical output: a FiLM model run only
   // when the context changes, and a conv core without the per-block MLPs and shape plumbing --
   // 150 or 94 ops against the export's 694, which is what WebGPU's per-op overhead charges for.
-  filmUrl: 'models/agent_direction_film.onnx',
-  coreUrl: { slice: 'models/agent_direction_core.onnx', gather: 'models/agent_direction_core_gather.onnx' },
+  // Null for the other agents, which run their export as-is.
+  filmUrl: AGENT.film || null,
+  coreUrl: AGENT.core || null,
   solitonsUrl: 'models/solitons_direction.json',
   thumbDir: 'assets/solitons/',        // one PNG per allowed rule, named "<rule name>.png"
-  // Curated subset of the 48 rules the maze agent was trained on, in picker order (five per row,
-  // so the leading five are the ones a first-time visitor sees) -- these survive the maze best.
+  // 3 of the 5 rules the candidate agents were trained on (include_solitons in their configs), in
+  // picker order. models/solitons_direction.json holds these plus the dots' and ghosts' rules below.
   allowedRuleNames: [
     'rule73_mu0.2250_s0.0250_R18', 'rule74_mu0.2300_s0.0350_R18', 'rule67_mu0.2800_s0.0410_R18',
-    'rule72_mu0.1650_s0.0200_R18', 'rule57_mu0.2350_s0.0360_R18',
-    'rule75_mu0.2600_s0.0420_R18', 'rule55_mu0.2750_s0.0450_R18', 'rule58_mu0.2250_s0.0340_R18',
-    'rule60_mu0.2850_s0.0520_R18', 'rule23_mu0.2650_s0.0390_R18', 'rule81_mu0.2700_s0.0480_R18',
-    'rule68_mu0.3050_s0.0580_R18', 'rule76_mu0.2850_s0.0290_R18', 'rule33_mu0.2100_s0.0250_R18',
-    'rule37_mu0.2650_s0.0330_R18', 'rule7_mu0.3200_s0.0560_R18', 'rule21_mu0.2400_s0.0240_R18',
-    'rule46_mu0.2500_s0.0270_R18', 'rule63_mu0.3200_s0.0660_R18',
   ],
   defaultRuleName: 'rule74_mu0.2300_s0.0350_R18',  // or rule73_mu0.2250_s0.0250_R18
   // Dots channel's rule: one soliton per '.' in the layout, free-running under its own growth,
@@ -124,7 +169,7 @@ const CFG = {
   channel2RuleName: 'rule0_mu0.3800_s0.0700_R18',
   // Half CFG.R, shrinking the dots to half size -- see resizeSoliton() in placeDots(), which
   // always resamples by exactly channel2R/R.
-  channel2R: 9,
+  channel2R: 9,                // at R=18; loadAgent() scales it
   // Ghost channel's rule: one soliton per 'M', respawned alongside Carlman. Kept at the native
   // CFG.R (unlike the dots) since a Lenia pattern only moves like itself at the radius it was
   // found at, and a ghost should be Carlman-sized. Free-running -- CARL never sees or steers it.
@@ -165,7 +210,7 @@ const CFG = {
 };
 // Pickup distance from Carlman's own centre of mass -- his kernel radius (CFG.R), since the fruit
 // is picked up on contact rather than dissolved like an ordinary dot (see updateBonusFruit()).
-const BONUS_FRUIT_RADIUS = CFG.R;
+let BONUS_FRUIT_RADIUS = CFG.R;   // re-set by loadAgent()
 const MA = CFG.actionValue[0]; // action magnitude (0.3)
 // Keyed by level (1-9, i.e. index level-1) rather than by which of a level's two fruits it is --
 // see updateBonusFruit(). Array.from(), not a plain string split: every one of these is outside
@@ -208,6 +253,7 @@ const COLORS = {
 // 5 rows x 11 columns of maze cells; 550x250 is exactly 11:5 so both axes land on ~40px cells
 // (see MAZE_LAYOUT below). No board-size control -- the layout fixes the cell count, and any
 // other size just starves the corridors.
+// At R=18; loadAgent() scales both to the agent's radius (an R12 world is 367x167, cw ~26).
 const BOARD_H = 250, BOARD_W = 550;
 let H = BOARD_H, W = BOARD_W, N = H * W;
 let mu = 0.24, sig = 0.024, betas = [1.0, 0.5];
@@ -294,10 +340,10 @@ let ruleBank = new Map();
 const mazeEnabled = true;
 // Chrome on/off: the control deck and CARL's overlay hide together, so the board reads as a game.
 let showOverlay = true;
-// 'sometimes' (default) queries CARL only for sometimesWindow steps after a spawn/steer, then
+// 'sometimes' queries CARL only for sometimesWindow steps after a spawn/steer, then
 // goes idle -- much cheaper than 'always' since inference is the expensive part of a step, and
-// looks the same whenever the player is actually engaged. 'always': CARL is queried every step.
-let actorMode = 'sometimes';
+// looks the same whenever the player is actually engaged. 'always' (default): CARL is queried every step.
+let actorMode = 'always';
 let sometimesWindow = intParam('sometimes', 100);  // ?sometimes=N -- steps CARL stays active for in 'sometimes' mode
 let sometimesRemaining = 0;            // steps left in the current active window ('sometimes' mode only)
 // Whether CARL is steering right now -- what the target arrow on the board shows.
@@ -334,6 +380,7 @@ const sndEat = [new Audio('assets/sound/eat_dot_0.wav'), new Audio('assets/sound
 // an extra concurrent call the next time that element finishes naturally, playing two tracks at
 // once. playNextEatSound() itself decides whether to keep going.
 sndEat.forEach(snd => snd.addEventListener('ended', playNextEatSound));
+const ALL_SOUNDS = [sndStart, sndDeath, sndIntermission, sndFright, sndEatGhost, sndEatFruit, ...sndEat];
 
 // ====================================================================================
 //  Toroidal helper (the CoM itself is computed on the GPU -- see com.glsl)
@@ -386,7 +433,8 @@ const GHOST_TURN_CHARS = '+-O^123456789';
 const GHOST_NORTH_CHAR = '^';   // the one that doesn't leave the choice open -- always sent north
 // Wall thickness and outer border, matching the old generator (ww=9, edgeWall=9). At 5x5 cells
 // that leaves cw=39, tighter than the widest curated soliton (46px) -- see placeSoliton()'s clip.
-const MAZE_WW = 9, MAZE_EDGE = 9;
+// Both at R=18; loadAgent() scales them.
+let MAZE_WW = 9, MAZE_EDGE = 9;
 
 // 5 rows x 11 cols, mirrored left-to-right about the centre column: the right half is the left
 // half reflected, except that 'C' is not duplicated -- the soliton spawns on the left only.
@@ -757,7 +805,7 @@ function placeGhosts() {
 // stamp rotation would be wrong for any rule not facing right in the bank. -1 until it has
 // travelled far enough (6px) for the answer to be trustworthy at 0.3-0.45px/step and up to ~30deg
 // off-axis.
-const GHOST_HEADING_MIN_PX = 6;
+let GHOST_HEADING_MIN_PX = 6;   // at R=18; loadAgent() scales it
 function ghostHeading(g) {
   const [dy, dx] = toroidalDelta(g.y, g.x, g.anchor[0], g.anchor[1]);
   if (dy * dy + dx * dx < GHOST_HEADING_MIN_PX * GHOST_HEADING_MIN_PX) return -1;
@@ -1022,7 +1070,7 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
 // rejected -- so instead of starting silently, show a prompt and retry once the page sees its
 // actual first gesture.
 function playStartSound() {
-  if (!SOUND_ENABLED) { setRunning(true); return; }
+  if (!soundEnabled) { setRunning(true); return; }
   setRunning(false);
   introPlaying = true;
   const attempt = () => { sndStart.currentTime = 0; return sndStart.play(); };
@@ -1139,10 +1187,43 @@ function agentWindowOrigin(cy, cx) {
   return [Math.round(cy) - half, Math.round(cx) - half];
 }
 function buildContext() {
-  return Float32Array.from([
-    CFG.pinnedTime, dir[0], dir[1],
-    (actionCost - CFG.costMin) / (CFG.costMax - CFG.costMin),
-  ]);
+  const c = [dir[0], dir[1], (actionCost - CFG.costMin) / (CFG.costMax - CFG.costMin)];
+  return Float32Array.from(CFG.ctxDim === 4 ? [CFG.pinnedTime, ...c] : c);
+}
+
+// Reads the chosen agent's training metadata into the per-agent CFG fields, and rescales the
+// R=18 world to the agent's radius. Runs before SimGL.init() (window size) and before the
+// soliton bank and board are built.
+const NATIVE_R = 18;
+const DOTS_MIN_R = 8;
+async function loadAgent() {
+  const res = await fetch(AGENT.meta);
+  if (!res.ok) throw new Error(`could not load ${AGENT.meta} (${res.status})`);
+  const m = await res.json();
+  CFG.netSize = intParam('net', AGENT.net || m.board_size[0]);
+  CFG.ctxDim = m.conditioning_dim;
+  CFG.actionRadius = m.action_radius;
+  [CFG.costMin, CFG.costMax] = m.action_cost_range;
+
+  const s = CFG.scale = Math.round(m.kernel_R) / NATIVE_R;
+  CFG.R = Math.round(m.kernel_R);
+  // Not below DOTS_MIN_R: the dot rule can't live smaller. Measured in the R12 world (cells 26px):
+  // at R=6 and 7 every dot dissolves within ~35 steps, which the game reads as a cleared board and
+  // loops level-clear jingles; R=8 breathes like the R=18 world's dots; R=9 is too wide for the
+  // closer dot spacing and the dots merge into a labyrinth filling the board.
+  CFG.channel2R = Math.max(DOTS_MIN_R, Math.round(CFG.channel2R * s));
+  CFG.massExplodeLimit *= s * s;
+  H = Math.round(BOARD_H * s); W = Math.round(BOARD_W * s); N = H * W;
+  MAZE_WW = Math.max(1, Math.round(MAZE_WW * s)); MAZE_EDGE = Math.max(1, Math.round(MAZE_EDGE * s));
+  GHOST_HEADING_MIN_PX *= s;
+  BONUS_FRUIT_RADIUS = CFG.R;
+
+  if (m.pinned_time_context !== undefined) CFG.pinnedTime = m.pinned_time_context;
+  POLICY_CFG = {
+    filmUrl: CFG.filmUrl, modelUrl: CFG.modelUrl, coreUrl: CFG.coreUrl, netSize: CFG.netSize, K: CFG.K,
+    ctxDim: CFG.ctxDim, epParam: EP_PARAM, modelParam: MODEL_PARAM,
+  };
+  return m;
 }
 
 // The policy's state input: the crop from the last step, fetched now, only because an inference
@@ -1158,11 +1239,9 @@ function stateData() {
   return data;
 }
 
-// What policy.js needs to know, shared by the worker, the main-thread fallback and ?debug=1's bench.
-const POLICY_CFG = {
-  filmUrl: CFG.filmUrl, modelUrl: CFG.modelUrl, coreUrl: CFG.coreUrl, netSize: CFG.netSize, K: CFG.K,
-  epParam: EP_PARAM, modelParam: MODEL_PARAM,
-};
+// What policy.js needs to know, shared by the worker, the main-thread fallback and ?debug=1's
+// bench. Set by loadAgent().
+let POLICY_CFG = null;
 const ORT_WASM_PATHS = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 // Multi-threaded WASM needs SharedArrayBuffer, which needs cross-origin isolation -- still false
 // on a first visit before coi-serviceworker takes over, so fall back to one thread rather than let
@@ -1204,12 +1283,12 @@ function workerPolicy(state, ctx) {
       if (m.id === undefined) {
         clearTimeout(timer);
         if (m.type === 'ready') resolve({
-          infer(st, cx) {
+          infer(st, cx, thr) {
             if (dead) return Promise.reject(new Error('policy worker is gone'));
             const id = ++seq;
             return new Promise((res, rej) => {
               waiting.set(id, { resolve: res, reject: rej });
-              w.postMessage({ type: 'infer', id, state: st, ctx: cx }, [st.buffer]);
+              w.postMessage({ type: 'infer', id, state: st, ctx: cx, thr }, [st.buffer]);
             });
           },
           release() { dead = true; w.terminate(); failAll(new Error('policy worker released')); },
@@ -1291,15 +1370,18 @@ async function agentAct() {
   // runs -- and lastCoM moves on -- while the inference is still out.
   const state = stateData(), ctx = buildContext(), step = steps;
   const [oy, ox] = agentWindowOrigin(lastCoM[0], lastCoM[1]);
-  const { best, runMs } = await policy.infer(state, ctx);
+  const { best, runMs, suppressed } = await policy.infer(state, ctx, actThreshold);
   lastMs = performance.now() - t0;
   lastRunMs = runMs;
   const at = Math.floor(best / SS), pos = best % SS, lr = Math.floor(pos / S), lc = pos % S;
   const r = ((oy + lr) % H + H) % H, c = ((ox + lc) % W + W) % W;
   const sign = Math.sign(CFG.actionValue[at]);
   lastAction = { r, c, sign };
+  lab.queries++;
+  if (suppressed) lab.suppressed++;
   if (sign === 0) return null;
   actions++;
+  lab.actions++;
   actionTrail.push({ r, c, sign, step });
   if (actionTrail.length > MAX_TRAIL) actionTrail.shift();
   return { x: c, y: r, delta: sign * MA, radius: CFG.actionRadius };
@@ -1404,7 +1486,7 @@ function handleBonusFruitEaten(r, c, points) {
   fruitEatPause = true;
   fruitEatPopup = { r, c, text: `${points}` };
   const finish = () => { fruitEatPause = false; fruitEatPopup = null; };
-  if (!SOUND_ENABLED) { finish(); return; }
+  if (!soundEnabled) { finish(); return; }
   sndEatFruit.currentTime = 0;
   sndEatFruit.play()
     .then(() => sndEatFruit.addEventListener('ended', finish, { once: true }))
@@ -1417,7 +1499,7 @@ const EAT_SOUND_MIN_MASS = 1e-4;
 // rather than queuing another sample, so a sample already playing always finishes uncut and never
 // overlaps a fresh start.
 function noteEating() {
-  if (!SOUND_ENABLED) return;
+  if (!soundEnabled) return;
   eatDeadline = performance.now() + CFG.eatSoundGraceMs;
   if (!eatActive) { eatActive = true; playNextEatSound(); }
 }
@@ -1443,11 +1525,12 @@ const DEATH_PAUSE_MS = 1000;
 // could have steered around the way a ghost is -- same beat and jingle otherwise.
 function handleDeath(exploded = false) {
   solitonDead = true;
+  if (exploded) lab.explosions++; else lab.deaths++;
   if (!exploded && !GOD_MODE) lives = Math.max(0, lives - 1);
   // Lives run out: hold on a "Game over" banner rather than restarting immediately -- the player
   // chooses when the next game begins.
   const next = lives > 0 ? respawnAfterDeath : showGameOverPrompt;
-  if (!SOUND_ENABLED) { deathTimer = setTimeout(next, DEATH_PAUSE_MS); return; }
+  if (!soundEnabled) { deathTimer = setTimeout(next, DEATH_PAUSE_MS); return; }
   sndDeath.currentTime = 0;
   // Timed off the jingle actually ending; if playback is blocked, fall back to the pause alone.
   const afterSound = () => { deathTimer = setTimeout(next, DEATH_PAUSE_MS); };
@@ -1466,7 +1549,7 @@ function handleWin() {
   lives = Math.min(MAX_LIVES, lives + 1);
   stopEatingSound();      // the last dot's chomp shouldn't bleed into the intermission jingle
   const next = level >= MAX_LEVEL ? showWinPrompt : respawnAfterWin;
-  if (!SOUND_ENABLED) { winTimer = setTimeout(next, WIN_PAUSE_MS); return; }
+  if (!soundEnabled) { winTimer = setTimeout(next, WIN_PAUSE_MS); return; }
   sndIntermission.currentTime = 0;
   const afterSound = () => { winTimer = setTimeout(next, WIN_PAUSE_MS); };
   sndIntermission.play()
@@ -1477,7 +1560,7 @@ function handleWin() {
 // Fire-and-forget, unlike the death/win/eat-ghost jingles -- the game keeps running underneath
 // it, so it's just restarted from the top on every pellet eaten rather than queued or awaited.
 function playFrightSound() {
-  if (!SOUND_ENABLED) return;
+  if (!soundEnabled) return;
   sndFright.currentTime = 0;
   sndFright.play().catch(() => {});
 }
@@ -1490,7 +1573,7 @@ function handleGhostEaten(r, c, points) {
   ghostEatPause = true;
   ghostEatPopup = { r, c, text: `${points}` };
   const finish = () => { ghostEatPause = false; ghostEatPopup = null; };
-  if (!SOUND_ENABLED) { finish(); return; }
+  if (!soundEnabled) { finish(); return; }
   sndEatGhost.currentTime = 0;
   sndEatGhost.play()
     .then(() => sndEatGhost.addEventListener('ended', finish, { once: true }))
@@ -1607,9 +1690,10 @@ function render() {
       // Hide the target arrow while CARL is idle -- nothing is acting on it, so it would claim an
       // agent is working when it isn't.
       if (carlActive()) drawArrow(octx, cx, cy, dir[1], dir[0], alen, cs.getPropertyValue('--target').trim());
-      const old = comHistory[0];
-      const [vdy, vdx] = toroidalDelta(lastCoM[0], lastCoM[1], old[0], old[1]);
-      drawArrow(octx, cx, cy, vdx, vdy, alen, cs.getPropertyValue('--current').trim());
+      // Current-direction arrow, switched off:
+      // const old = comHistory[0];
+      // const [vdy, vdx] = toroidalDelta(lastCoM[0], lastCoM[1], old[0], old[1]);
+      // drawArrow(octx, cx, cy, vdx, vdy, alen, cs.getPropertyValue('--current').trim());
     }
     drawActionTrail(sc);
   }
@@ -1622,6 +1706,7 @@ function render() {
   $('r-rate').textContent = measSps ? measSps.toFixed(0) + '/s' : '–';
   $('lives').textContent = '💛'.repeat(lives);
   $('score').textContent = score;
+  renderLab();
 }
 
 // ====================================================================================
@@ -1668,6 +1753,11 @@ function setRunning(v) {
 //  Input: click-to-steer, arrow keys, sliders/buttons/selects
 // ====================================================================================
 let actionCost = 2.5;
+let actThreshold = 0;   // see infer() in policy.js; set from the agent's default / ?thr= at boot
+// Model-lab tallies, kept across restarts for the whole page visit so agents can be compared over
+// several games: CARL queries, actions taken, actions the threshold turned into no-ops, and how
+// Carlman died (explosion = mass runaway; death = dissolved, a ghost included).
+const lab = { queries: 0, actions: 0, suppressed: 0, explosions: 0, deaths: 0 };
 // Every user-initiated steer goes through here. Re-issuing the direction already being chased
 // (holding an arrow key, clicking straight ahead) isn't counted as a change of course.
 function steerTo(dy, dx) {
@@ -1715,9 +1805,28 @@ function setActorMode(mode) {
   lastMs = 0; lastAction = null; nextAction = null;
   render();
 }
+// The actor button is hidden in index.html to keep the UI simple; the 'sometimes' mode and this
+// toggle are kept for reference. Unhide the button to bring the switch back.
 $('actor').addEventListener('click', () => {
   setActorMode(ACTOR_MODES[(ACTOR_MODES.indexOf(actorMode) + 1) % ACTOR_MODES.length]);
 });
+// Sound button. Turning it off mutes rather than pauses: the death/win/ghost jingles hold the
+// board until their 'ended' event, so a paused one would freeze the game, while a muted one just
+// finishes silently. Later plays are skipped outright through the soundEnabled checks.
+function setSound(on) {
+  soundEnabled = on;
+  for (const snd of ALL_SOUNDS) snd.muted = !on;
+  if (!on) stopEatingSound();
+  const btn = $('sound');
+  btn.textContent = on ? 'Sound ON' : 'Sound OFF';
+  btn.setAttribute('aria-pressed', String(on));
+  const q = new URLSearchParams(location.search);
+  q.set('sound', on ? '1' : '0');
+  history.replaceState(null, '', '?' + q);
+}
+$('sound').textContent = soundEnabled ? 'Sound ON' : 'Sound OFF';
+$('sound').setAttribute('aria-pressed', String(soundEnabled));
+$('sound').addEventListener('click', () => setSound(!soundEnabled));
 $('respawn').addEventListener('click', respawnCurrentSoliton);
 $('shuffle').addEventListener('click', () => {
   currentIndex = (Math.random() * bank.length) | 0;
@@ -1732,7 +1841,39 @@ function setActionCost(v) {
   el.classList.toggle('ood', ood);
   el.title = ood ? `Beyond the 0-${CFG.costMax} range CARL was trained on -- it is extrapolating here.` : '';
 }
-$('cost').addEventListener('input', e => setActionCost(+e.target.value));
+$('cost').addEventListener('input', e => { setActionCost(+e.target.value); syncLabUrl(); });
+function setActThreshold(v) {
+  actThreshold = v;
+  $('v-act-thr').textContent = v.toFixed(2);
+}
+$('act-thr').addEventListener('input', e => { setActThreshold(+e.target.value); syncLabUrl(); });
+// Keeps ?agent/?cost/?thr in the address bar current, so a setting that plays well can be shared
+// as a link. Switching agent reloads: the window size and context layout are fixed at boot.
+function syncLabUrl() {
+  const q = new URLSearchParams(location.search);
+  q.set('agent', AGENT.id); q.set('cost', actionCost.toFixed(1)); q.set('thr', actThreshold.toFixed(2));
+  history.replaceState(null, '', '?' + q);
+}
+function initLab() {
+  const sel = $('agent');
+  for (const a of AGENTS) sel.add(new Option(a.label, a.id, false, a === AGENT));
+  sel.addEventListener('change', () => {
+    const q = new URLSearchParams(location.search);
+    q.set('agent', sel.value); q.delete('cost'); q.delete('thr');   // the new agent's own defaults
+    location.search = '?' + q;
+  });
+  const cost = floatParam('cost', AGENT.cost), thr = floatParam('thr', AGENT.thr);
+  $('cost').value = cost; setActionCost(cost);
+  $('act-thr').value = thr; setActThreshold(thr);
+}
+function renderLab() {
+  const pct = (n, d) => d ? (100 * n / d).toFixed(0) + '%' : '–';
+  $('lab-rate').textContent = lab.queries ? (lab.actions / lab.queries).toFixed(2) : '–';
+  $('lab-queries').textContent = lab.queries;
+  $('lab-supp').textContent = pct(lab.suppressed, lab.queries);
+  $('lab-expl').textContent = lab.explosions;
+  $('lab-deaths').textContent = lab.deaths;
+}
 $('spd').addEventListener('input', e => { sps = +e.target.value; $('v-spd').textContent = sps + '/s'; });
 
 // Chrome toggle: the deck and CARL's overlay go together. The button itself stays put, since it
@@ -1785,10 +1926,12 @@ async function loadSolitonBank() {
     if (res.ok) raw = await res.json();
   } catch (e) { /* reported below */ }
   if (!raw) { fail('Could not load the soliton bank — serve this folder over http(s), not file://.'); return false; }
-  ruleBank = new Map(raw.filter(e => Math.max(e.h, e.w) <= 80).map(e => [e.name, {
-    name: e.name, mu: e.mu, sigma: e.sigma, betas: e.betas, h: e.h, w: e.w,
-    flat: Float32Array.from(e.state.flat()),
-  }]));
+  ruleBank = new Map(raw.filter(e => Math.max(e.h, e.w) <= 80).map(e => {
+    let b = { h: e.h, w: e.w, flat: Float32Array.from(e.state.flat()) };
+    // The bank is R=18; an agent at another radius gets every pattern resampled to it.
+    if (CFG.scale !== 1) b = resizeSoliton(b, CFG.scale);
+    return [e.name, { name: e.name, mu: e.mu, sigma: e.sigma, betas: e.betas, ...b }];
+  }));
   // Picker order is CFG.allowedRuleNames', not the JSON's, so the leading entries land on top row.
   bank = CFG.allowedRuleNames.map(name => ruleBank.get(name)).filter(Boolean);
   if (!bank.length) { fail('The soliton bank loaded but contained no usable entries.'); return false; }
@@ -1843,7 +1986,9 @@ async function loadModel() {
 
 (async function init() {
   initTheme();
-  setActionCost(+$('cost').value);
+  try { await loadAgent(); }
+  catch (e) { console.error(e); fail('<b>Agent failed to load:</b> ' + e.message); return; }
+  initLab();
   try {
     await SimGL.init(cv, CFG.netSize, { kernel: KERNEL_MODE });
     SimGL.setDotsEvery(DOTS_EVERY);

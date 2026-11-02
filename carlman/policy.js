@@ -8,12 +8,18 @@
 //  is decided per device at load by timing (pick()): neither backend wins everywhere -- see
 //  PERF.md, "Device measurements".
 //
-//  State goes in as a frame-major Float32Array [K*S*S] and context as Float32Array [4]; infer()
-//  returns the flat argmax index into the [3,S,S] Q map. The caller turns that into a board
-//  position, since only it knows where the crop was taken.
+//  Agents other than the paper model (see AGENTS in app.js) ship only the export itself, so they
+//  always run 'orig'.
+//
+//  State goes in as a frame-major Float32Array [K*S*S] and context as Float32Array [ctxDim] (4
+//  with the time input, 3 without); infer() returns the flat argmax index into the [3,S,S] Q map.
+//  The caller turns that into a board position, since only it knows where the crop was taken.
 // ============================================================================================
 
-// `cfg`: { filmUrl, modelUrl, coreUrl: {slice, gather}, netSize, K, epParam, modelParam }.
+// `cfg`: { filmUrl, modelUrl, coreUrl: {slice, gather} | null, netSize, K, ctxDim, epParam, modelParam }.
+// Output channel order is add / remove / no-op (CFG.actionValue in app.js).
+const NOOP_CHANNEL = 2;
+
 function createPolicyRuntime(ort, cfg) {
   const S = cfg.netSize, now = () => performance.now();
 
@@ -25,14 +31,14 @@ function createPolicyRuntime(ort, cfg) {
     const key = Array.prototype.join.call(ctx, ',');
     if (key !== filmCache.key) {
       if (!filmSession) filmSession = await ort.InferenceSession.create(cfg.filmUrl, { executionProviders: ['wasm'] });
-      filmCache = { key, feeds: await filmSession.run({ context: new ort.Tensor('float32', ctx, [1, 4]) }) };
+      filmCache = { key, feeds: await filmSession.run({ context: new ort.Tensor('float32', ctx, [1, cfg.ctxDim]) }) };
     }
     return filmCache.feeds;
   }
 
   async function feedsFor(model, state, ctx) {
     const st = new ort.Tensor('float32', state, [1, cfg.K, S, S]);
-    if (model === 'orig') return { state: st, context: new ort.Tensor('float32', ctx, [1, 4]) };
+    if (model === 'orig') return { state: st, context: new ort.Tensor('float32', ctx, [1, cfg.ctxDim]) };
     return { state: st, ...(await filmFeeds(ctx)) };
   }
 
@@ -40,6 +46,7 @@ function createPolicyRuntime(ort, cfg) {
   // The graph that measured fastest on each backend: gather on WebGPU (but it exists only at a
   // 96 crop), slice on WASM, whose Gathers are slow on CPU. ?model= forces one for both.
   function graphFor(ep) {
+    if (!cfg.coreUrl) return 'orig';
     const m = cfg.modelParam || (ep === 'webgpu' ? 'gather' : 'slice');
     return m === 'gather' && S !== 96 ? 'slice' : m;
   }
@@ -86,14 +93,24 @@ function createPolicyRuntime(ort, cfg) {
     return { ep, model, ms: best.ms, candidates: cands.map(({ session: _, ...rest }) => rest) };
   }
 
-  async function infer(state, ctx) {
+  // `thr`: the action threshold. An add/remove only goes ahead if its Q beats the best no-op by at
+  // least this much; otherwise the step becomes a no-op at the same cell. 0 is the plain argmax.
+  // Damps reactions to a soliton's natural wobble (see the steering_small report in rlca).
+  async function infer(state, ctx, thr = 0) {
     const feeds = await feedsFor(model, state, ctx);
     const t = now();
     const q = (await session.run(feeds)).q.data;
     const runMs = now() - t;
     let best = 0, bv = q[0];
     for (let i = 1; i < q.length; i++) if (q[i] > bv) { bv = q[i]; best = i; }
-    return { best, runMs };
+    const SS = S * S, noop = NOOP_CHANNEL;
+    let suppressed = false;
+    if (thr > 0 && Math.floor(best / SS) !== noop) {
+      let bn = -Infinity;
+      for (let i = noop * SS; i < (noop + 1) * SS; i++) if (q[i] > bn) bn = q[i];
+      if (bv - bn < thr) { best = noop * SS + (best % SS); suppressed = true; }
+    }
+    return { best, runMs, suppressed };
   }
 
   async function release() {

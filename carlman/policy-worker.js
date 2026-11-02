@@ -5,7 +5,7 @@
 //
 // Protocol (main -> worker -> main):
 //   {type:'init', cfg, threads, wasmPaths, state, ctx}  ->  {type:'ready', choice} | {type:'error', message}
-//   {type:'infer', id, state, ctx}                       ->  {type:'result', id, best, runMs} | {type:'error', id, message}
+//   {type:'infer', id, state, ctx, thr}                  ->  {type:'result', id, best, runMs, suppressed} | {type:'error', id, message}
 // `state` is a transferred frame-major Float32Array; `best` the flat argmax index into the Q map.
 importScripts('ort.webgpu.min.js', 'policy.js');
 
@@ -28,8 +28,8 @@ self.onmessage = async ({ data: m }) => {
     }
   } else if (m.type === 'infer') {
     try {
-      const { best, runMs } = await policy.infer(m.state, m.ctx);
-      self.postMessage({ type: 'result', id: m.id, best, runMs });
+      const { best, runMs, suppressed } = await policy.infer(m.state, m.ctx, m.thr);
+      self.postMessage({ type: 'result', id: m.id, best, runMs, suppressed });
     } catch (e) {
       self.postMessage({ type: 'error', id: m.id, message: String(e?.message || e) });
     }

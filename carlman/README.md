@@ -8,6 +8,8 @@ work.
 
 ## URL parameters
 
+- `?agent=<id>` — which trained policy steers Carlman (default `r12-med-band600`); see *Model lab* below.
+- `?cost=X` / `?thr=X` — starting action cost and action threshold (default: the agent's own; `cost=5`, `thr=0.15` for `r12-med-band600`, 2.5 and 0 for the rest).
 - `?sound=0` — mute (default on).
 - `?dots=0` — turn off the dots/pellets channel (default on).
 - `?ghost=0` — turn off the ghosts channel; nothing but Carlman's own dynamics can kill him (default on).
@@ -26,6 +28,47 @@ work.
 - `?kernel=tex` — read convolution weights from a texture (the original path) instead of the default uniform buffer, to A/B the two on a new device (see Fidelity, below).
 - `?debug=1` — performance instrumentation panel (`debug.js`): live per-step timings, a policy benchmark per execution provider and crop size, a thread-count sweep, and a copyable JSON report. See PERF.md, "Measuring on a device".
 - `?threads=N` — override the onnxruntime-web WASM thread pool size (default: 1 until cross-origin isolation kicks in, then up to 4); needs a fresh page load to take effect.
+
+## Model lab
+
+A picker under **Setup** (or `?agent=`) swaps the policy that steers Carlman, so candidates can be
+compared in the actual game before one ships. The candidates are the finalists of the
+`steering_small` report (`rlca/experiments/steering_small/REPORT.md`), alongside the paper model:
+
+| `?agent=` | Model | Report eval (progress · survival · actions/step) |
+|---|---|---|
+| `r12-med-band600` | 375k, R=12, mass band, time input, @600k (**the report's pick**, cosine 0.967) | 0.59 · 100% · 0.10 |
+| `paper` | the current site's model, 790k params, R=18 | 0.59 · 92.5% · 0.49 |
+| `r15-med-l900` | 475k, R=15, mass band, time input, @900k (cosine 0.970; ~1.6× the sim cost of R=12) | 0.53 · 100% · 0.14 |
+| `r16-med-l950` | 475k, R=16, mass band, time input, @950k (cosine 0.970; not in the report's shortlist) | 0.55 · 100% · 0.14 |
+| `r18-med-orig950` | 375k, R=18, original reward (no mass band), time input, @950k (cosine 0.963; sparsest in the sweep; not in the report's shortlist) | 0.52 · 100% · 0.08 |
+
+**The game runs at the agent's kernel radius.** An agent's `meta.json` gives its training radius,
+and `loadAgent()` in `app.js` scales the whole R=18 world to match, as the agent was trained: an
+R12 agent gets a 367×167 board, thinner walls, every bank soliton (Carlman, ghosts, dots)
+resampled by 12/18, and mass thresholds scaled by (12/18)². The dots are the exception: their
+rule dies below R=8, so they run at R=8 rather than 6 (6 and 7 dissolve every dot at once, which
+the game reads as a cleared board). The maze layout, rules and
+gameplay are otherwise identical. The policy crops its own training window (56² for the R12
+agents), and its context is 3 or 4 values depending on whether it was trained with a time input.
+Any radius works, but per the report R=13-14 makes rule57 explode on its own and R=9 breaks two of
+the easy solitons; 12, 15, 16 and 18 are fine.
+
+**What to compare.** The goal is an agent that acts sparsely, never explodes Carlman, and follows
+direction changes well. The lab readout under the picker keeps totals for the whole visit:
+`act/query` (sparsity), `held back` (share of actions the threshold turned into no-ops),
+`exploded` (mass runaway), and `died` (anything else, ghosts included). Play with `?ghost=0` to
+judge CARL alone. The **action threshold** slider makes CARL act only when its best add/remove beats
+doing nothing by that margin. The report found 0.3-0.6 halves the actions without hurting
+steering, and 1 or more breaks it. The address bar keeps `?agent&cost&thr` current, so a setting that
+plays well can be shared as a link.
+
+**Adding a candidate.** Export it with `scripts/export_demo_model_small.py` in rlca, copy the
+`.onnx` and its `meta_*.json` to `models/agents/<id>/agent.onnx` and `meta.json`, and add one entry
+to `AGENTS` in `app.js`.
+
+**Shipping the winner.** Make it the default (`DEFAULT_AGENT` in `app.js`), with its tuned `cost`
+and `thr`, then decide whether the picker and lab readout stay visible on the public page.
 
 ## What's Carlman about it
 
@@ -232,11 +275,11 @@ work.
   eaten ghost and an eaten fruit flash a floating score-number popup slightly below where they died
   or were picked up (`ghostEatPopup`/`fruitEatPopup`), live for exactly as long as the board holds
   for the jingle — set alongside `ghostEatPause`/`fruitEatPause` and cleared the same moment.
-- **Two actor modes**, switched by the one button: **CARL acts sometimes** (default) only queries
+- **Two actor modes**, switched by the one button: **CARL acts sometimes** only queries
   the policy for a configurable window of steps after the episode starts or after you last steer,
   then goes idle and lets Carlman move freely, which matters because policy inference, not the GPU
   work, is what a step actually costs (see Differences on purpose, below). **CARL acts always**
-  queries it every step, as `CARL-WebGL` always did. The blue target-direction arrow is drawn only
+  (default) queries it every step, as `CARL-WebGL` always did. The blue target-direction arrow is drawn only
   while CARL is steering. (`CARL-WebGL`'s third mode, where you add and remove mass yourself with
   the mouse, was dropped: in a game, clicks and taps are for steering.)
 - **No board-size picker.** `CARL-WebGL`'s 100–250 size choices are gone — the maze layout fixes
@@ -348,7 +391,7 @@ board, then step, then locate, then judge — because the policy is sensitive to
   idle, plus a policy inference while it steers. Sixteen of the latter ran for most of a second before the one
   repaint at the end of the batch, which read as the board freezing. The `rate` readout shows the
   rate actually achieved, which is where the real ceiling shows up.
-- A second actor mode, "CARL acts sometimes" (the default), only pays for inference for a
+- A second actor mode, "CARL acts sometimes", only pays for inference for a
   configurable window of steps after the episode starts or after you last steer, then goes idle,
   costing pure GPU work the rest of the time. This is the mode that benefits most
   from the wall-clock budget above, since its per-step cost keeps switching between the two

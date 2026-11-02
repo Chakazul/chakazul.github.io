@@ -169,7 +169,7 @@
     benching = true;
     const out = { when: new Date().toISOString(), threads: ort.env.wasm.numThreads, crossOriginIsolated: window.crossOriginIsolated, results: [] };
     const eps = navigator.gpu ? ['webgpu', 'wasm'] : ['wasm'];
-    const models = CFG.netSize === 96 ? ['orig', 'slice', 'gather'] : ['orig', 'slice'];
+    const models = !CFG.coreUrl ? ['orig'] : CFG.netSize === 96 ? ['orig', 'slice', 'gather'] : ['orig', 'slice'];
     try {
       for (const ep of eps)
         for (const model of models) {

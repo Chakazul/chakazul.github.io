@@ -1,0 +1,36 @@
+{
+ "task": "direction",
+ "run": "immediate-hypothesis (canonical direction run)",
+ "checkpoint": "model_step_800000.pth",
+ "board_size": [
+  115,
+  115
+ ],
+ "kernel_R": 18,
+ "dt": 0.1,
+ "frame_stack": 4,
+ "input_channels": 4,
+ "output_channels": 3,
+ "conditioning_dim": 4,
+ "action_value": [
+  0.3,
+  -0.3,
+  0.0
+ ],
+ "action_radius": 7,
+ "window_size": 4,
+ "mass_penalty_weight": 0.2,
+ "action_cost_range": [
+  0.0,
+  5.0
+ ],
+ "default_action_cost": 0.5,
+ "pinned_time_context": 0.005,
+ "context_layout": [
+  "time (pinned near 0 -- the agent was trained on 200-step episodes with a climbing time signal, but the maze demo is open-ended, so we pin the same step/max_steps value the reference desktop demo uses: 50/10000)",
+  "direction_y (dy component of the unit target-direction vector, image coords: +y = down)",
+  "direction_x (dx component of the unit target-direction vector, +x = right)",
+  "action_cost normalized to action_cost_range"
+ ],
+ "sanity_rollout_cosine_similarity": 0.9999898076057434
+}
