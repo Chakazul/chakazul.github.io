@@ -79,21 +79,18 @@
     .title-right .theme-toggle{width:26px;height:26px}
   }
 
-  /* Fullscreen (html.fs, set by the fullscreen button; landscape on phones): only the title row,
-     the board and the transport buttons, with the board sized to fit the screen's height.
+  /* Fullscreen (html.fs, set by the fullscreen button; landscape on phones): only the title row
+     and the board, with the board sized to fit the screen's height.
      --fs-chrome is the height taken by everything that isn't the board. */
-  :root.fs{--fs-chrome:112px;scrollbar-gutter:auto}
+  :root.fs{--fs-chrome:64px;scrollbar-gutter:auto}
   :root.fs body{overflow:hidden}
   :root.fs .wrap{max-width:none;height:100vh;height:100dvh;
     padding:6px max(12px,env(safe-area-inset-right)) 6px max(12px,env(safe-area-inset-left))}
-  :root.fs .title-row,:root.fs .canvas-box,:root.fs .transport{
+  :root.fs .title-row,:root.fs .canvas-box{
     width:min(100%,calc((100vh - var(--fs-chrome)) * 11 / 5));
     width:min(100%,calc((100dvh - var(--fs-chrome)) * 11 / 5));margin-left:auto;margin-right:auto}
   :root.fs .screen-wrap{padding:0;margin-top:6px;border:none;background:none;box-shadow:none}
-  :root.fs .deck{display:block;padding:0;margin-top:0;border:none;background:none;box-shadow:none}
-  :root.fs .deck-setup,:root.fs .deck .readout,:root.fs .board-legend,:root.fs .tip,:root.fs .playback,
-  :root.fs #theme-toggle{display:none}
-  :root.fs .transport{margin-top:8px}
+  :root.fs .deck,:root.fs #theme-toggle{display:none}
 
   /* Board is 11:5 (5x11 maze cells), so it runs the full width as a banner above the deck. */
   .screen-wrap{background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:12px;

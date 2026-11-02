@@ -1879,7 +1879,7 @@ $('spd').addEventListener('input', e => { sps = +e.target.value; $('v-spd').text
 // ====================================================================================
 //  Fullscreen
 // ====================================================================================
-// html.fs is the layout (index.html: title row, board and transport buttons only). Where the
+// html.fs is the layout (index.html: title row and board only). Where the
 // Fullscreen API exists it also goes truly fullscreen and, on phones, locks to landscape (Android
 // Chrome allows the lock only while fullscreen). iPhone Safari has no Fullscreen API for pages, so
 // there it is the layout alone and the player turns the phone themselves.
