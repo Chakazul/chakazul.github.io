@@ -1876,18 +1876,51 @@ function renderLab() {
 }
 $('spd').addEventListener('input', e => { sps = +e.target.value; $('v-spd').textContent = sps + '/s'; });
 
-// Chrome toggle: the deck and CARL's overlay go together. The button itself stays put, since it
-// is the only way back to the controls.
-function setChrome(on) {
-  showOverlay = on;
-  $('deck').hidden = !on;
-  const b = $('ui-toggle');
-  b.textContent = on ? '👁' : '🙈';
-  b.title = on ? 'Hide the controls and the agent overlay' : 'Show the controls and the agent overlay';
-  b.setAttribute('aria-pressed', String(!on));
+// ====================================================================================
+//  Fullscreen
+// ====================================================================================
+// html.fs is the layout (index.html: title row, board and transport buttons only). Where the
+// Fullscreen API exists it also goes truly fullscreen and, on phones, locks to landscape (Android
+// Chrome allows the lock only while fullscreen). iPhone Safari has no Fullscreen API for pages, so
+// there it is the layout alone and the player turns the phone themselves.
+const FS_ICON_ENTER = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4"/></svg>';
+const FS_ICON_EXIT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5.5 1.5v4h-4M14.5 5.5h-4v-4M10.5 14.5v-4h4M1.5 10.5h4v4"/></svg>';
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+function setFsLayout(on) {
+  document.documentElement.classList.toggle('fs', on);
+  const b = $('fs-toggle');
+  b.innerHTML = on ? FS_ICON_EXIT : FS_ICON_ENTER;
+  b.title = on ? 'Exit fullscreen' : 'Fullscreen';
+  b.setAttribute('aria-pressed', String(on));
   render();
 }
-$('ui-toggle').addEventListener('click', () => setChrome(!showOverlay));
+async function enterFullscreen() {
+  setFsLayout(true);
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) return;
+  try {
+    await req.call(el, { navigationUI: 'hide' });
+    await screen.orientation?.lock?.('landscape');
+  } catch (e) { /* refused, or no orientation lock (desktop, iPad): keep the layout anyway */ }
+}
+function exitFullscreen() {
+  try { screen.orientation?.unlock?.(); } catch (e) {}
+  if (fsElement()) (document.exitFullscreen || document.webkitExitFullscreen).call(document).catch?.(() => {});
+  setFsLayout(false);
+}
+// Leaving fullscreen some other way (Esc, the phone's back gesture) drops the layout too.
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(ev, () => {
+    if (!fsElement() && document.documentElement.classList.contains('fs')) exitFullscreen();
+  });
+}
+$('fs-toggle').innerHTML = FS_ICON_ENTER;
+$('fs-toggle').addEventListener('click', () => {
+  if (document.documentElement.classList.contains('fs')) exitFullscreen(); else enterFullscreen();
+});
+// The board's size changes with the layout and on rotation; redraw the overlay to match.
+window.addEventListener('resize', () => render());
 
 // ====================================================================================
 //  Theme
