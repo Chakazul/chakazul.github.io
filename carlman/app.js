@@ -1322,7 +1322,8 @@ async function choosePolicy() {
         try {
           const m = await mainThreadPolicy(stateData(), ctx, ['webgpu']);
           m.choice.workerChoice = w.choice;
-          if (m.choice.ms < w.choice.ms) { w.release(); return m; }
+          // Same margin as pick() in policy.js: WebGPU has to be clearly faster to win.
+          if (m.choice.ms < w.choice.ms * 0.8) { w.release(); return m; }
           m.release();
           w.choice.mainThreadWebgpu = m.choice;
         } catch (e) { /* keep the worker */ }
@@ -1370,9 +1371,13 @@ async function agentAct() {
   // runs -- and lastCoM moves on -- while the inference is still out.
   const state = stateData(), ctx = buildContext(), step = steps;
   const [oy, ox] = agentWindowOrigin(lastCoM[0], lastCoM[1]);
-  const { best, runMs, suppressed } = await policy.infer(state, ctx, actThreshold);
+  const p = policy;
+  const { best, runMs, suppressed, ep, model, switched } = await p.infer(state, ctx, actThreshold);
   lastMs = performance.now() - t0;
   lastRunMs = runMs;
+  // The runtime re-checks its backend during play and may switch it live (policy.js, infer()).
+  if (ep && ep !== p.ep) { p.ep = ep; p.model = model; }
+  if (switched && policyChoice && !policyChoice.switched) policyChoice.switched = switched;
   const at = Math.floor(best / SS), pos = best % SS, lr = Math.floor(pos / S), lc = pos % S;
   const r = ((oy + lr) % H + H) % H, c = ((ox + lc) % W + W) % W;
   const sign = Math.sign(CFG.actionValue[at]);
@@ -2017,7 +2022,27 @@ async function loadModel() {
   render();
 }
 
+// Threaded WASM needs cross-origin isolation, which coi-serviceworker.js only gets by reloading
+// the page once its service worker controls it. On a first visit (every fresh incognito session)
+// that reload is meant to come by itself, but if it doesn't, this load runs WASM on one thread
+// for the whole visit and the backend pick times it 4-6x slower than it is (PERF.md). So before
+// doing any work: if isolation is still pending, wait for the worker to activate and reload into
+// it, at most once per session. Resolves true when a reload is under way.
+async function awaitIsolation() {
+  const sw = navigator.serviceWorker;
+  if (window.crossOriginIsolated || !window.isSecureContext || !sw) return false;
+  const KEY = 'carl-coi-reload';
+  // Flagged before waiting, so a worker that never activates costs one wait, not one per load.
+  try { if (sessionStorage.getItem(KEY)) return false; sessionStorage.setItem(KEY, '1'); }
+  catch (e) { return false; }
+  const reg = await Promise.race([sw.ready, new Promise(r => setTimeout(r, 4000, null))]);
+  if (!reg || window.crossOriginIsolated) return false;
+  location.reload();
+  return true;
+}
+
 (async function init() {
+  if (await awaitIsolation()) return;
   initTheme();
   try { await loadAgent(); }
   catch (e) { console.error(e); fail('<b>Agent failed to load:</b> ' + e.message); return; }
