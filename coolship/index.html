@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>try{if(localStorage.getItem('coolship-theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Coolship</title>
+<meta name="description" content="Steer a Lenia creature by hiding parts of it from itself.">
+<style>
+  :root{
+    --bg:#07060b;--raised:#110f18;--line:#262233;--ink:#ece8f3;--muted:#a49cb3;--faint:#6d6680;
+    --accent:#ffd400;--good:#53b979;--bad:#ff5a5a;--link:#9cc2ff;--track:#2e2a3b;
+    color-scheme:dark;   /* native controls (slider tracks, dropdown lists) follow the theme */
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f2f7;--raised:#ffffff;--line:#e0dbe7;--ink:#1f1a27;--muted:#62596f;--faint:#8d849a;
+    --accent:#b88a00;--good:#1f8f52;--bad:#c62828;--link:#4a7fe8;--track:#e4dfeb;
+    color-scheme:light;
+  }
+  *{box-sizing:border-box}
+  a,a:visited{color:var(--link)}
+  .sep{width:1px;align-self:stretch;margin:2px 4px;background:var(--line)}
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+       -webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left))}
+  .title-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  h1{font-size:clamp(20px,3vw,28px);margin:0;letter-spacing:-.01em;font-weight:650}
+  h1 small{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.04em;margin-left:8px}
+  .icons{display:flex;gap:6px}
+  button{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
+    border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap}
+  button:hover{border-color:var(--muted)}
+  button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+  .flash{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 30%,var(--raised))!important;outline:2px solid var(--accent);border-radius:8px;transition:none}
+  button,select,input{transition:background .25s,border-color .25s}
+  .icon{width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center}
+  .icon svg{width:15px;height:15px}
+
+  .screen{margin-top:12px;background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:10px}
+  .canvas-box{position:relative;width:100%;aspect-ratio:9/4;background:#000;border-radius:8px;overflow:hidden}
+  .canvas-box canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #gl{image-rendering:pixelated}
+  #ui{touch-action:none;cursor:crosshair}
+  .error{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
+    color:#fff;font-size:14px;text-align:center}
+  .error[hidden]{display:none}
+
+  .controls{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin-top:10px}
+  .controls label{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
+  .controls input[type=range]{width:140px;height:28px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
+  /* Slider bar drawn by hand so it follows the theme: accent up to the value (--pct, set by app.js), --track after. */
+  .controls input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
+    background:linear-gradient(to right,var(--accent) var(--pct,50%),var(--track) var(--pct,50%))}
+  .controls input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
+  .controls input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+  .controls input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;
+    border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
+  .controls input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
+  .controls button,.row2 button{font-size:16px;padding:9px 16px;border-radius:10px}
+  .row2{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin-top:10px}
+  .row2 .pat{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
+  .row2 .icon{width:42px;height:42px;padding:0;font-size:15px;line-height:1}
+  .row2 #pat-next{margin-left:-6px}
+  .row2 select{font:inherit;font-size:16px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
+    border-radius:10px;padding:9px 10px}
+  .controls output{font-variant-numeric:tabular-nums;color:var(--ink);min-width:2.2em}
+  .readout{display:flex;flex-wrap:wrap;gap:2px 14px;margin-top:8px;font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .readout b{color:var(--ink);font-weight:500}
+  .readout .ok{color:var(--good)} .readout .bad{color:var(--bad)}
+  .help{margin-top:12px;font-size:13px;color:var(--muted);max-width:820px}
+  .help kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink)}
+
+  /* Fullscreen: the canvas as large as fits above the two control rows (--rows, set by app.js). */
+  :root.fs body{overflow:hidden}
+  :root.fs .wrap{max-width:none;height:100vh;height:100dvh;display:flex;align-items:center;justify-content:center;padding:0}
+  :root.fs .title-row,:root.fs .readout,:root.fs .help{display:none}
+  :root.fs .screen{margin:0;padding:0 8px 8px;border:none;background:none;
+    width:min(100vw,calc((100dvh - var(--rows,120px)) * 9 / 4))}
+  :root.fs .canvas-box{border-radius:0}
+  .fs-exit{display:none;position:fixed;top:8px;right:8px;z-index:5;opacity:.6}
+  :root.fs .fs-exit{display:flex}
+
+  @media (max-width:560px){
+    .controls input[type=range]{width:100px}
+    .controls button,.row2 button{padding:9px 12px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title-row">
+    <h1>Coolship <small>steer by cognitive masking</small></h1>
+    <div class="icons">
+      <button id="theme" class="icon" title="Light / dark page" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button id="fullscreen" class="icon" title="Fullscreen" aria-label="Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="canvas-box">
+      <canvas id="gl" width="1152" height="512"></canvas>
+      <canvas id="ui" width="1152" height="512"></canvas>
+      <div id="error" class="error" hidden></div>
+    </div>
+    <div class="controls">
+      <button id="play" title="Pause / play (Enter)">Pause</button>
+      <button id="step" title="Advance one step (Space)">Step</button>
+      <label title="Simulation speed (Q faster, W slower; 1 = one step every 4 frames, 8 = two steps per frame)">Speed <input id="speed" type="range" min="1" max="7" step="1"><output id="speed-v"></output></label>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="headup" aria-pressed="false" title="Heading up: rotate the ship view so the creature's heading points up (E toggles)">Heading up</button>
+      <label title="Zoom of the ship view, in screen px per cell">Zoom <input id="zoom" type="range" min="1" max="7" step="1"><output id="zoom-v"></output></label>
+      <label>Mask radius <input id="radius" type="range" min="1" max="8" step="0.5"><output id="radius-v"></output></label>
+    </div>
+    <div class="row2">
+      <label class="pat">Species <select id="species" title="Species (selecting one resets)"></select></label>
+      <button id="reset" title="Clear the board and put the morph in the centre (Z)">Reset</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="add" title="Add the morph at a random empty spot and angle (X)">Add</button>
+      <label class="pat">Morph <select id="morph" title="Morph: picking one adds it (like Add)"></select></label>
+      <button id="pat-prev" class="icon" title="Previous morph (C)" aria-label="Previous morph">&#9650;</button>
+      <button id="pat-next" class="icon" title="Next morph (V)" aria-label="Next morph">&#9660;</button>
+    </div>
+    <div class="readout" id="readout"></div>
+  </div>
+
+  <p class="help">
+    A spaceship-steering toy played inside
+    <a href="https://en.wikipedia.org/wiki/Lenia" target="_blank" rel="noopener"><b>Lenia</b></a>, a continuous cellular automaton.
+    The ship is steered by <b><a href="https://jessescool.github.io/lenia-umwelt/" target="_blank" rel="noopener">cognitive masking</a></b>:
+    a masked area is hidden from the creature's own senses, dropping out of every kernel that reads that color channel.
+    Masking, erasing or inserting a part of the ship have various effects: changes direction or speed, changes into another morph, or dies.
+    <br/>
+    In the ship view (right), <b>press and hold on the zoomed-in creature</b> to mask or erase that area, and observe the effects.
+    The top patches choose the channel (<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>); the bottom ones choose the action:
+    <b>mask</b>, <b>erase</b> or <b>insert</b> mass (<kbd>4</kbd> <kbd>5</kbd> <kbd>6</kbd>).
+    <br/>
+    In the world view (left) <b>click one ship</b> to follow it in the ship view.
+    <br/>
+    <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off ·
+    <kbd>Z</kbd> reset · <kbd>X</kbd> add the morph at a random spot and angle · <kbd>C</kbd> <kbd>V</kbd> previous / next morph (the world is kept; a new species resets it).
+  </p>
+</div>
+<button id="fs-exit" class="fs-exit icon" title="Exit fullscreen" aria-label="Exit fullscreen">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+</button>
+
+<script src="rule.js"></script>
+<script src="aquarium233.js"></script>
+<script src="species.js"></script>
+<script src="creatures.js"></script>
+<script src="glsim.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
