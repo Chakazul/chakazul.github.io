@@ -92,6 +92,13 @@
   :root.fs .canvas-box{border-radius:0;margin:0 auto;
     width:min(100%,max(160px,calc((100dvh - var(--rows,120px)) * 9 / 4)))}
   :root.fs .controls,:root.fs .row2{justify-content:center}
+  /* Fullscreen on a phone: keep the first row on one line; the sliders shrink to fit. */
+  :root.fs .controls{flex-wrap:nowrap;gap:6px}
+  :root.fs .controls label{flex:1 1 0;min-width:0;max-width:200px;white-space:nowrap;gap:4px}
+  :root.fs .controls input[type=range]{width:auto;flex:1 1 auto;min-width:36px}
+  :root.fs .controls output{min-width:1.8em}
+  :root.fs .controls button{padding:6px 8px;flex:none}
+  :root.fs .fs-hide{display:none}
   .fs-exit{display:none;position:fixed;top:8px;right:8px;z-index:5;opacity:.6}
   :root.fs .fs-exit{display:flex}
 
@@ -128,7 +135,7 @@
       <span class="sep" aria-hidden="true"></span>
       <button id="headup" aria-pressed="false" title="Heading up: rotate the ship view so the creature's heading points up (E toggles)">Heading up</button>
       <label title="Zoom of the ship view, in screen px per cell">Zoom <input id="zoom" type="range" min="1" max="7" step="1"><output id="zoom-v"></output></label>
-      <label>Mask radius <input id="radius" type="range" min="1" max="8" step="1"><output id="radius-v"></output></label>
+      <label><span>Mask<span class="fs-hide"> radius</span></span> <input id="radius" type="range" min="1" max="8" step="1"><output id="radius-v"></output></label>
     </div>
     <div class="row2">
       <label class="pat">Species <select id="species" title="Species (selecting one resets)"></select></label>
