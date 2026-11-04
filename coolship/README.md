@@ -241,8 +241,8 @@ Not yet checked on a device: GPU speed on phones (use `?debug=1`) and mobile sha
 Background music, royalty free, looped as a playlist with 10 s of silence between tracks, at half
 volume: *Long Way* by Rexlambo (`assets/music/long-way-rexlambo.mp3`) and *A Few Jumps Away* by
 Arthur Vyncke (`assets/music/a-few-jumps-away-arthur-vyncke.mp3`). The **Stars** button at the end
-of the second row turns the star field and the music on or off together (remembered in the
-browser); browsers only start audio after the first click, tap or key.
+of the second row turns the star field and the music on or off together (off by default;
+remembered in the browser); browsers only start audio after the first click, tap or key.
 
 The **star field**: three layers of small tinted stars, in board coordinates (so both
 views show the same ones), drift to the left, swaying slowly up and down, behind the creatures, the near layers brighter

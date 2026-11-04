@@ -625,7 +625,7 @@
   });
 
   // Background music, royalty free: a playlist looped with 10 s of silence between tracks. The
-  // Stars button turns the music and the star field on or off together. On by default; browsers
+  // Stars button turns the music and the star field on or off together. Off by default; browsers
   // only let audio start after a user gesture, so it begins on the first click, tap or key.
   const TRACKS = ['assets/music/long-way-rexlambo.mp3',              // "Long Way" by Rexlambo
                   'assets/music/a-few-jumps-away-arthur-vyncke.mp3']; // "A Few Jumps Away" by Arthur Vyncke
@@ -639,8 +639,8 @@
     music.src = TRACKS[track];
     gapTimer = setTimeout(() => { gapTimer = null; if (soundOn) music.play().catch(() => {}); }, TRACK_GAP_MS);
   });
-  let soundOn = true;
-  try { soundOn = localStorage.getItem('coolship-sound') !== 'off'; } catch (e) {}
+  let soundOn = false;   // off by default; the browser remembers the choice
+  try { soundOn = localStorage.getItem('coolship-sound') === 'on'; } catch (e) {}
   function syncSound() {
     $('sound').textContent = soundOn ? 'Stars: ON' : 'Stars: OFF';
     $('sound').setAttribute('aria-pressed', soundOn);
