@@ -69,7 +69,7 @@
   // speed 1 is one step every 4 frames (under LeniaF's rule the glider moves ~0.65 cells a step).
   const SPEEDS = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8], STEPS_PER_SPEED = 1 / 4;
   let running = true, speedIdx = nearestIdx(SPEEDS, num('speed', 1, 1 / 8, 8)), stepAcc = 0;
-  let maskR = num('radius', Math.round(2.5 * R / 12 * 2) / 2, 1, 8), channel = 1, action = 0;   // selected tool: G mask (best for steering and shape-shifting)
+  let maskR = Math.round(num('radius', 2.5 * R / 12, 1, 8)), channel = 1, action = 0;   // selected tool: G mask (best for steering and shape-shifting)
   // Zoom-view rotation modes:
   //   board: no rotation; vel: heading = the arrow's smoothed velocity (arrow points straight up);
   //   axis: heading = the B->G body axis (stable at any speed, but not the travel direction:

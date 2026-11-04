@@ -13,8 +13,8 @@ After that, the next step can be either **Phase 2** (design the game on the worl
 research agenda in its own right. Phases 2 and 3 don't depend on each other, and each can feed the
 other later.
 
-Status: Phase 1 is done (its §4.4 exit criteria pass in the browser). Phase 1b (pattern picker,
-several creatures, click to focus) is built and awaits a check in the browser.
+Status: Phases 1 and 1b are done and checked in the browser, on desktop and phone (2026-11-04).
+Next: choose Phase 2 or Phase 3.
 
 ---
 
@@ -471,9 +471,9 @@ browser.
 - [x] Speed slider (7 slots 1/8–8, ¼ step per frame per unit), mask radius slider, pause/step/respawn, death
   detection, readout, theme and fullscreen.
 - [x] Shaders compile and run in a desktop browser (seen in use).
-- [ ] Performance on a phone (`?debug=1`). If it is slow, move kernel weights from a texture to
-  uniform buffers.
-- [ ] Mobile shader precision checked on a device.
+- [x] Performance on a phone (`?debug=1`): about 0.2 ms/step with 1,004 taps at R = 18
+  (2026-11-04), so the kernel weights stay in a texture.
+- [x] Mobile shader precision checked on a device: the Aquarium behaves as on desktop (2026-11-04).
 - [x] Phase 1 exit criteria (§4.4) pass (checked by hand in the browser).
 
 **Phase 1b: pattern choice and several creatures** (§4.5)
@@ -516,8 +516,8 @@ browser.
 - [x] `tools/from_screenshot.py`: rebuilds a pattern from a screenshot (brightness correction,
   scale search, shape check). Z18A9R lithos and tardus added with it, trio redone with it; VT049W gyrotachus dropped (a
   different species).
-- [ ] Checked in the browser by hand (including GPU cost at R = 18: about 950 taps per cell,
-  2.3× R = 12).
+- [x] Checked in the browser by hand, desktop and phone, including fullscreen (2026-11-04). GPU cost
+  at R = 18: about 1,000 taps per cell, 0.2 ms/step on the phone.
 
 **Then choose one: Phase 2 or Phase 3**
 - [ ] Decision made.

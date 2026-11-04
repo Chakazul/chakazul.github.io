@@ -56,9 +56,9 @@
     color:#fff;font-size:14px;text-align:center}
   .error[hidden]{display:none}
 
-  .controls{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin-top:10px}
-  .controls label{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
-  .controls input[type=range]{width:140px;height:28px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
+  .controls{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-top:10px}
+  .controls label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .controls input[type=range]{width:110px;height:22px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
   /* Slider bar drawn by hand so it follows the theme: accent up to the value (--pct, set by app.js), --track after. */
   .controls input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
     background:linear-gradient(to right,var(--accent) var(--pct,50%),var(--track) var(--pct,50%))}
@@ -67,13 +67,12 @@
   .controls input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;
     border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
   .controls input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
-  .controls button,.row2 button{font-size:16px;padding:9px 16px;border-radius:10px}
-  .row2{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin-top:10px}
-  .row2 .pat{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--muted)}
-  .row2 .icon{width:42px;height:42px;padding:0;font-size:15px;line-height:1}
+  .row2{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:8px}
+  .row2 .pat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .row2 .icon{font-size:12px;line-height:1}
   .row2 #pat-next{margin-left:-6px}
-  .row2 select{font:inherit;font-size:16px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
-    border-radius:10px;padding:9px 10px}
+  .row2 select{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
+    border-radius:8px;padding:5px 8px}
   .controls output{font-variant-numeric:tabular-nums;color:var(--ink);min-width:2.2em}
   .readout{display:flex;flex-wrap:wrap;gap:2px 14px;margin-top:8px;font-family:ui-monospace,Menlo,Consolas,monospace;
     font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -97,8 +96,8 @@
   :root.fs .fs-exit{display:flex}
 
   @media (max-width:560px){
-    .controls input[type=range]{width:100px}
-    .controls button,.row2 button{padding:9px 12px}
+    .controls input[type=range]{width:80px}
+    button{padding:6px 9px}
   }
 </style>
 </head>
@@ -129,7 +128,7 @@
       <span class="sep" aria-hidden="true"></span>
       <button id="headup" aria-pressed="false" title="Heading up: rotate the ship view so the creature's heading points up (E toggles)">Heading up</button>
       <label title="Zoom of the ship view, in screen px per cell">Zoom <input id="zoom" type="range" min="1" max="7" step="1"><output id="zoom-v"></output></label>
-      <label>Mask radius <input id="radius" type="range" min="1" max="8" step="0.5"><output id="radius-v"></output></label>
+      <label>Mask radius <input id="radius" type="range" min="1" max="8" step="1"><output id="radius-v"></output></label>
     </div>
     <div class="row2">
       <label class="pat">Species <select id="species" title="Species (selecting one resets)"></select></label>
