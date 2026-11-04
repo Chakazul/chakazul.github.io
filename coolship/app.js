@@ -159,11 +159,10 @@
     }
     SimGL.add(f, Math.floor(best[1] - f.h / 2), Math.floor(best[0] - f.w / 2));
     if (status !== 'alive') { status = 'alive'; running = true; }
-    const hadFocus = !!focus;
     analyze(0);
-    if (!hadFocus) {
-      setFocus(Creatures.pick(found, best[0], best[1], 2 * R, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH));
-    }
+    // follow the new creature
+    const i = Creatures.pick(found, best[0], best[1], 2 * R, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH);
+    if (i >= 0) setFocus(i);
     syncButtons();
   }
 
