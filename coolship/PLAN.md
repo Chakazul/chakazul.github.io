@@ -482,10 +482,13 @@ browser.
 - [x] Find and check (numpy) a self-replicating Aquarium, and add it to `species.js`. It is the
   same seed under Lenia/WebGL's unnormalised "Fission cells" update at dt = 0.5. It fills the
   board within ~1,000 steps, and no slower setting exists (README, "Checks for Phase 1b").
-- [ ] Tame the replication rate (e.g. a σ/μ tweak, as `lenia5.glsl` did for Z18A9R), if the
-  fast fill is too much to play with. Tried at dt = 0.2 (README, "Checks for Phase 1b"): the only
+- [x] Tame the replication rate (e.g. a σ/μ tweak, as `lenia5.glsl` did for Z18A9R), if the
+  fast fill is too much to play with. Done by the switch to LeniaF (below): *VT049W gyrans
+  (replicating)* holds at 3–4 creatures at R = 18, so no tweak is needed. Earlier, at dt = 0.2 (README, "Checks for Phase 1b"): the only
   replicators found (kernel 5 μ × 0.90–0.955) swell before dividing. μ × 0.955 is in the picker
   as a test pattern for comparison.
+- [x] Mobile check (2026-11-04): speed is fine; `?debug=1` shows about 0.2 ms/step with 1,004
+  taps at R = 18.
 - [x] Coarse mass-map reduction pass and readback (`blocks.glsl`).
 - [x] Connected components on the CPU, with torus wrap, giving per-creature mass and CoM (`creatures.js`).
 - [x] Click a creature in the world view to focus it; zoom, arrow and tools follow the focus.
