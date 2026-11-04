@@ -13,7 +13,7 @@
 // plain path, where the denominator is exactly 1 (kernels are normalised).
 //
 // The same circle can instead erase: uMaskOn = 2 sets the chosen channel to 0 inside it after
-// the update (removing mass, like Carlman's interventions), with no occlusion; or insert:
+// the update (removing mass, like Carlman's interventions), with no occlusion; or draw:
 // uMaskOn = 3 sets it to 1 there.
 precision highp float;
 precision highp sampler2D;
@@ -35,7 +35,7 @@ uniform vec3  uGain;        // per destination channel: 1 for LeniaF (h already 
 uniform float uDt;
 uniform int   uGrowth;      // growth function (LeniaF numbering): 1 = polynomial quad4, 2 = Gaussian
 
-uniform int   uMaskOn;      // 0 off, 1 cognitive mask, 2 erase mass, 3 insert mass
+uniform int   uMaskOn;      // 0 off, 1 cognitive mask, 2 erase mass, 3 draw mass
 uniform vec2  uMaskC;       // mask centre, board cells (col, row)
 uniform float uMaskR;       // mask radius, cells
 uniform vec3  uMaskCh;      // one-hot: which channel the mask hides

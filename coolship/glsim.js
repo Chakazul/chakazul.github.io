@@ -205,7 +205,7 @@ const SimGL = (function () {
   function draw4() { gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
 
   // tool: null, or { col, row, r, ch, action }: absolute circle centre in board cells;
-  // action 0 = occlude (mask), 1 = erase (set to 0), 2 = insert (set to 1) inside the circle.
+  // action 0 = occlude (mask), 1 = erase (set to 0), 2 = draw (set to 1) inside the circle.
   function step(tool) {
     const p = prog.sim;
     gl.useProgram(p);
@@ -278,7 +278,8 @@ const SimGL = (function () {
   }
 
   // view: { canvasW, canvasH, worldScale, zoom: [x0, y0, edge, pxPerCell], rot: mat2 (column-
-  // major, view (right, down) -> board (col, row)), focus: [col, row, on] }
+  // major, view (right, down) -> board (col, row)), focus: [col, row, on],
+  //   stars: star field on, time: seconds (star drift) }
   function render(view) {
     const p = prog.draw;
     gl.useProgram(p);
@@ -291,6 +292,8 @@ const SimGL = (function () {
     gl.uniform4fv(loc(p, 'uZoom'), view.zoom);
     gl.uniformMatrix2fv(loc(p, 'uView'), false, view.rot);
     gl.uniform3fv(loc(p, 'uFocus'), view.focus);
+    gl.uniform1f(loc(p, 'uStars'), view.stars ? 1 : 0);
+    gl.uniform1f(loc(p, 'uTime'), view.time || 0);
     draw4();
   }
 

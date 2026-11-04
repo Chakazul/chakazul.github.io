@@ -34,7 +34,7 @@
   const BW = 384, BH = 256, WS = 2;               // board cells; world view px per cell
   const PX = BW * WS;                              // panel starts here (left 2/3 is the world)
   const PW = CW - PX;                              // panel width
-  // Two rows of tool patches: top = channel (R G B), bottom = action (Mask Erase Insert); zoom view between.
+  // Two rows of tool patches: top = channel (R G B), bottom = action (Mask Erase Draw); zoom view between.
   const PATCH = { top: 6, bottom: 452, h: 54, w: 104, gap: 16 };
   const ZOOM = { x: PX, y: 64, edge: PW };          // zoom view square
   // Zoom slider: px per cell in the zoom view (7 slots); the default shows about 4 R across.
@@ -52,16 +52,19 @@
 
   // Creatures (creatures.js): basins of the potential K * A above 0.05, merged across saddles
   // >= 0.8 x the lower peak, at least a disk of radius R/4 (the values of ~/github/complexity).
-  const DETECT = { threshold: 0.05, saddle: 0.8, minArea: Math.PI * (R / 4) ** 2 };
+  const MIN_AREA_UNIT = Math.PI * (R / 4) ** 2;
+  const DETECT = { threshold: num('thr', 0.15, 0.01, 1), saddle: num('saddle', 0.9, 0.1, 2),
+                   minArea: num('area', 1, 0, 10) * MIN_AREA_UNIT };   // mutable: tune-mode sliders (?tune=1)
+  const TUNE = q.get('tune') === '1';
   const TRACK_GATE = R;          // the focus may move at most this far between frames (cells)
   const CLICK_GATE = 2 * R;      // a click this close to a creature selects it
 
   const CH_COLORS = ['#ff3b3b', '#3bff5a', '#3b7bff'];
   const CH_FILLS = ['rgba(255,59,59,.5)', 'rgba(59,255,90,.5)', 'rgba(59,123,255,.5)'];
   const CH_NAMES = ['R', 'G', 'B'];
-  // Actions: 0 mask (hide from the senses), 1 erase (set to 0), 2 insert (set to 1). Circle line:
+  // Actions: 0 mask (hide from the senses), 1 erase (set to 0), 2 draw (set to 1). Circle line:
   // dashed, solid, dotted.
-  const ACTIONS = ['Mask', 'Erase', 'Insert'];
+  const ACTIONS = ['Mask', 'Erase', 'Draw'];
   const ACTION_DASH = [[6, 4], [], [2, 4]];
 
   // ---- state ----------------------------------------------------------------------------
@@ -129,6 +132,10 @@
     dt = DT_OVERRIDE ?? rule.dt;
     SimGL.setRule(rule.kernels, R, rule.kn);
     SimGL.setUpdate(rule.norm, dt, rule.gn);
+    // merge saddle per species (aquarium233.js rules[code].detect), unless ?saddle= is given
+    if (!q.has('saddle')) DETECT.saddle = AQUARIUM233.rules[pattern.rule]?.detect?.saddle ?? 0.9;
+    const ts = $('t-saddle');
+    ts.value = DETECT.saddle; $('t-saddle-v').textContent = DETECT.saddle.toFixed(2); fillRange(ts);
     syncPicker();
   }
 
@@ -260,6 +267,7 @@
       zoom: [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX],
       rot: [c, s, -s, c],
       focus: focus ? [focus.col, focus.row, 1] : [0, 0, 0],
+      stars: soundOn, time: (performance.now() / 1000) % 3600,   // star field follows the Sound button
     });
     drawOverlay();
     drawReadout();
@@ -303,6 +311,16 @@
 
     const [cx, cy] = zoomCenter();
 
+    // Tune mode (?tune=1): outline every detected object in the world view; focus in yellow
+    if (TUNE && $('t-show').checked) {
+      ctx.setLineDash([]); ctx.lineWidth = 1;
+      for (const c of found.comps) {
+        const isF = focus && Math.hypot(wrapD(c.col - focus.col, BW), wrapD(c.row - focus.row, BH)) < 0.5;
+        ctx.strokeStyle = isF ? 'rgba(255,212,0,.9)' : 'rgba(255,255,255,.45)';
+        ctx.beginPath(); ctx.arc((c.col + 0.5) * WS, (c.row + 0.5) * WS, Math.max(3, 2 * c.radius * WS), 0, 2 * Math.PI); ctx.stroke();
+      }
+    }
+
     // zoom frame around the focus in the world view (rotated with the view)
     if (focus) {
       const h = ZOOM_CELLS / 2, corners = [[-h, -h], [h, -h], [h, h], [-h, h]].map(v => {
@@ -317,7 +335,7 @@
       ctx.restore();
     }
 
-    // tool outline, in both views (dashed = mask, solid = erase, dotted = insert)
+    // tool outline, in both views (dashed = mask, solid = erase, dotted = draw)
     const off = toolOffset();
     if (off) {
       ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2; ctx.setLineDash(ACTION_DASH[action].map(x => x * 2 / 3));
@@ -354,12 +372,12 @@
       ctx.closePath(); ctx.fill();
     }
 
-    // grey round-corner border around the ship view
+    // grey round-corner border around the ship panel: the zoom view and both rows of tool patches
     ctx.setLineDash([]);
     ctx.strokeStyle = 'rgba(160,156,172,.6)'; ctx.lineWidth = 2;
     ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(ZOOM.x + 3, ZOOM.y + 1, ZOOM.edge - 4, ZOOM.edge - 2, 10);
-    else ctx.rect(ZOOM.x + 3, ZOOM.y + 1, ZOOM.edge - 4, ZOOM.edge - 2);
+    if (ctx.roundRect) ctx.roundRect(PX + 3, 1, PW - 4, CH - 2, 10);
+    else ctx.rect(PX + 3, 1, PW - 4, CH - 2);
     ctx.stroke();
 
     // small labels in the zoom view's top corners
@@ -395,16 +413,18 @@
   function drawReadout() {
     const n = found.comps.length;
     const st = status === 'alive' ? `<b class="ok">alive</b>` : `<b class="bad">${status}</b>`;
-    let html = `<span>step <b>${steps}</b></span><span>t <b>${(steps * dt).toFixed(1)}</b></span>` +
+    // fixed-width numbers (the readout is monospace): pad with no-break spaces
+    const pad = (v, n) => String(v).padStart(n, '\u00a0');
+    let html = `<span>step <b>${pad(steps, 4)}</b></span><span>t <b>${pad((steps * dt).toFixed(1), 6)}</b></span>` +
       `<span>R <b>${R}</b></span><span>dt <b>${dt}</b></span>` +
-      `<span>creatures <b>${n}</b></span><span>${st}</span>`;
+      `<span>creatures <b>${pad(n, 3)}</b></span><span>${st}</span>`;
     if (focus) {
       const pct = spawnMass ? Math.round(100 * focus.mass / spawnMass) : 100;
-      const head = kin.speed >= SPEED_MIN ? deg(-kin.velAng).toFixed(0) + '°' : '–';
-      html += `<span>focus [mass <b>${focus.mass.toFixed(0)}</b> (${pct}%) · ` +
+      const head = pad(kin.speed >= SPEED_MIN ? (Math.round(deg(-kin.velAng)) % 360 + 360) % 360 : '–', 3) + '°';
+      html += `<span>focus [mass <b>${pad(focus.mass.toFixed(0), 4)}</b> (${pad(pct, 3)}%) · ` +
         `speed <b>${kin.speed.toFixed(2)}</b> cells/t · heading <b>${head}</b>]</span>`;
     } else html += `<span>focus [<b>none</b>]</span>`;
-    html += `<span>${ACTIONS[action].toLowerCase()} [${CH_NAMES[channel]} <b>${masking ? 'on' : 'off'}</b> r=${maskR}]</span>`;
+    html += `<span>${ACTIONS[action].toLowerCase()} [${CH_NAMES[channel]} <b>${masking ? 'on\u00a0' : 'off'}</b> r=${maskR}]</span>`;
     if (DEBUG) html += `<span>${msPerStep.toFixed(2)} ms/step · ${SimGL.tapCount} taps</span>`;
     readout.innerHTML = html;
   }
@@ -453,7 +473,7 @@
         return bottom ? [
           `Mask (4): pressing on the ship view hides the ${CH_WORDS[channel]} channel there from the creature's senses`,
           `Erase (5): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 0`,
-          `Insert (6): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 1`][i]
+          `Draw (6): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 1`][i]
           : `${CH_NAMES[i]} (${i + 1}): act on the ${CH_WORDS[i]} channel`;
     }
     return '';
@@ -577,6 +597,17 @@
   $('radius').value = maskR;
   $('radius').oninput = e => { maskR = +e.target.value; syncButtons(); };
 
+  // Tune mode (?tune=1): detection sliders (also ?saddle= ?thr= ?area=).
+  $('tune').hidden = !TUNE;
+  const tune = [['t-saddle', v => DETECT.saddle = v, DETECT.saddle],
+                ['t-thr', v => DETECT.threshold = v, DETECT.threshold],
+                ['t-area', v => DETECT.minArea = v * MIN_AREA_UNIT, DETECT.minArea / MIN_AREA_UNIT]];
+  for (const [id, set, v0] of tune) {
+    const el = $(id), out = $(id + '-v');
+    el.value = v0; out.textContent = (+el.value).toFixed(2); fillRange(el);
+    el.oninput = () => { set(+el.value); out.textContent = (+el.value).toFixed(2); analyze(0); };
+  }
+
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'SELECT' || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -592,6 +623,37 @@
     else if (e.key >= '1' && e.key <= '3') channel = +e.key - 1;
     else if (e.key >= '4' && e.key <= '6') action = +e.key - 4;
   });
+
+  // Background music, royalty free: a playlist looped with 10 s of silence between tracks. The
+  // Stars button turns the music and the star field on or off together. On by default; browsers
+  // only let audio start after a user gesture, so it begins on the first click, tap or key.
+  const TRACKS = ['assets/music/long-way-rexlambo.mp3',              // "Long Way" by Rexlambo
+                  'assets/music/a-few-jumps-away-arthur-vyncke.mp3']; // "A Few Jumps Away" by Arthur Vyncke
+  const TRACK_GAP_MS = 10000;
+  const music = new Audio();
+  music.volume = 0.5;
+  let track = 0, gapTimer = null;
+  music.src = TRACKS[track];
+  music.addEventListener('ended', () => {
+    track = (track + 1) % TRACKS.length;
+    music.src = TRACKS[track];
+    gapTimer = setTimeout(() => { gapTimer = null; if (soundOn) music.play().catch(() => {}); }, TRACK_GAP_MS);
+  });
+  let soundOn = true;
+  try { soundOn = localStorage.getItem('coolship-sound') !== 'off'; } catch (e) {}
+  function syncSound() {
+    $('sound').textContent = soundOn ? 'Stars: ON' : 'Stars: OFF';
+    $('sound').setAttribute('aria-pressed', soundOn);
+    if (!soundOn) music.pause();
+    else if (!gapTimer) music.play().catch(() => {});   // in a gap between tracks, the timer starts the next
+  }
+  $('sound').onclick = () => {
+    flash('sound'); soundOn = !soundOn; syncSound();
+    try { localStorage.setItem('coolship-sound', soundOn ? 'on' : 'off'); } catch (e) {}
+  };
+  const startMusic = () => { if (soundOn && music.paused && !gapTimer) music.play().catch(() => {}); };
+  for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, startMusic, { capture: true });   // retried until it plays
+  syncSound();
 
   // theme and fullscreen
   $('theme').onclick = () => {

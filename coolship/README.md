@@ -5,7 +5,7 @@ Steer a Lenia creature by hiding parts of it from itself. The ship is an Aquariu
 Aquarium), run with LeniaF.py's rule. The main control is **cognitive
 masking** (Cool et al. 2026): while you hold the pointer on the magnified creature, that spot of
 one colour channel drops out of every kernel that reads the channel,
-U = K∗(A·(1−B)) / K∗(1−B). The same circle can instead erase or insert mass, for comparison. See
+U = K∗(A·(1−B)) / K∗(1−B). The same circle can instead erase or draw mass, for comparison. See
 [PLAN.md](PLAN.md) for the design and the later phases.
 
 **Run:** serve this folder over http and open `index.html`. The page fetches its shaders, so
@@ -28,7 +28,7 @@ cd Coolship && python3 -m http.server 8000     # then open http://localhost:8000
     kernels, but no mass is touched.
   - **Erase**: drawn as a solid outline. The channel inside the circle is set to 0 every step
     while held, like Carlman's interventions. It gives a direct comparison with masking.
-  - **Insert**: drawn as a dotted outline. The channel inside the circle is set to 1 every step
+  - **Draw**: drawn as a dotted outline. The channel inside the circle is set to 1 every step
     while held.
 - **Yellow arrow:** the velocity. Its length is the speed, and it is hidden below 0.02 R per unit
   time (the glider does about 0.072 R, i.e. 1.3 cells at R = 18).
@@ -235,3 +235,30 @@ These use a numpy port of LeniaF's update for old-format entries: model from `pa
   A find takes 0.4 ms on desktop node.
 
 Not yet checked on a device: GPU speed on phones (use `?debug=1`) and mobile shader precision.
+
+## Music and stars
+
+Background music, royalty free, looped as a playlist with 10 s of silence between tracks, at half
+volume: *Long Way* by Rexlambo (`assets/music/long-way-rexlambo.mp3`) and *A Few Jumps Away* by
+Arthur Vyncke (`assets/music/a-few-jumps-away-arthur-vyncke.mp3`). The **Stars** button at the end
+of the second row turns the star field and the music on or off together (remembered in the
+browser); browsers only start audio after the first click, tap or key.
+
+The **star field**: three layers of small tinted stars, in board coordinates (so both
+views show the same ones), drift to the left, swaying slowly up and down, behind the creatures, the near layers brighter
+and faster. It is drawn procedurally in `draw.glsl`, so it costs no texture and no CPU, and turns
+off with the music.
+
+## Tune mode
+
+`?tune=1` shows an extra row of detection sliders and outlines every detected object in the world
+view (the focus in yellow): **Merge saddle** (basins merge when the saddle is at least this
+fraction of the lower peak; higher = fewer merges), **Threshold** (potential below it is
+background; higher cuts thin bridges between creatures) and **Min area** (in units of a disc of
+radius R/4). Defaults, chosen by hand to stop the ship view jumping between merging and splitting
+objects in a crowded board: threshold 0.15, min area 1 (were 0.05, 1), and a merge saddle per species, set in
+`tools/gen_aquarium.py` (`DETECT`) and written into `aquarium233.js` as `rules[code].detect`: 0.95 for
+Aquarium (5N7KKM) and Aquarium replicating (VT049W), 0.9 for Cilium (G6G6CR) and Aquarium spinning
+(Z18A9R), 1.0 for Aquarium dancing (KH97WU) and drifting (GDNQYX); it was 0.8 for all. Above 1.0 nothing changes (a saddle never exceeds the lower peak, so no distinct peaks
+merge from 1.0 up). Also
+settable as `?saddle=`, `?thr=`, `?area=`.
