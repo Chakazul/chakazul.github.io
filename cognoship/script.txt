@@ -1,0 +1,33 @@
+# script file of the game
+
+[chapter:1:Metamorphosis]
+
+[species:5N7KKM]
+[allow_morph:limus][discover_morph:limus]
+[morph_book:on][morph_book_action:clear_put][retry_action:clear_put]
+[clear_world][put_player:limus]
+Welcome to the Cognoship game.
+Here, you do *not* control the ship using conventional ways.
+In the ship view (right), click on the ship to change its shape and direction.[first_touch]
+Nice! But remember, don't push too hard. The ship is fragile.
+
+[allow_morph:limus,gyrans,tardus,lithos][discover_morph:limus]
+[morph_book:on][morph_book_action:clear_put][retry_action:clear_put]
+[clear_world][put_player:limus]
+The ship is now called _limus_. Try to change it into another morph.[discover_morph]
+Congrats, you discovered a new ship morph!
+If your ship dissolves, you can click "Morphs" and start from another one.
+
+[allow_morph:limus,gyrans,tardus,lithos]
+[clear_world][put_player:tardus]
+This morph is _tardus_. Try find the remaining morph. (optional)
+
+[start_here]
+[chapter:2:You are not alone]
+
+[species:5N7KKM][allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus][discover_morph:limus,tardus]
+[morph_book:on][morph_book_action:put][retry_action:put]
+[clear_world][put_player:limus][put_morph:paragyrans:far][put_morph:paratardus:far][put_morph:gyrans:far]
+You are not alone...
+
+(End)

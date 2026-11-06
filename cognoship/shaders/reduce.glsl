@@ -2,7 +2,7 @@
 // Stage 1 of the CoM reduction (after Carlman's reduce.glsl), per channel. Each output texel
 // sums one board block into toroidal-mean accumulators: mass, and mass-weighted sin/cos of the
 // row and column angles, for each of the three channels (15 numbers, packed in 4 targets).
-// Per-channel CoMs give the body axis (G leads B along the heading), see app.js. Only cells within
+// Per-channel CoMs give the body axis (G leads B along the heading), see core.js. Only cells within
 // uRadius of uCenter (torus distance) count, so the CoMs are the focused creature's, not the
 // whole board's (uRadius <= 0 counts everything).
 precision highp float;

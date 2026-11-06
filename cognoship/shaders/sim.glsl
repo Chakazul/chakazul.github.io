@@ -5,7 +5,7 @@
 // three channels, and each vec4 group of kernels picks its source channels with a 3x4 selection
 // matrix, so 15 kernels cost one state fetch plus four weight fetches per tap.
 //
-// Masking hides channel c inside a circle that follows the focused creature (app.js passes the
+// Masking hides channel c inside a circle that follows the focused creature (core.js passes the
 // circle's absolute centre each step, extrapolating the creature's CoM). Every
 // kernel reading channel c then sees U = K*(A(1-B)) / K*(1-B): the occluded cells drop out of
 // the numerator, and the denominator renormalises by the visible kernel mass. The mask hides

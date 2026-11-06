@@ -11,7 +11,7 @@ unnamed second entry to "virgatus" and its "gyrans tachus" to "gyrans", HGMLH8's
 within a code ("auctus", "auctus 2"), and writes one pattern per entry: id "CODE-name", display
 name "CODE name". The self-replicating forms ("R" in the file, and XEH4YR auctus) get " 💥" after
 their display name; their id keeps "-replicating" (e.g. VT049W-gyrans-replicating), so URLs and
-the aliases in app.js stay valid.
+the aliases in core.js stay valid.
 Kernels are stored once per rule code; an entry whose kernels differ from its code's first
 entry would carry its own (none does now).
 

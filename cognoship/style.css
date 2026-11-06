@@ -1,0 +1,213 @@
+:root{
+  --bg:#07060b;--raised:#110f18;--line:#262233;--ink:#ece8f3;--muted:#a49cb3;--faint:#6d6680;
+  --accent:#ffd400;--good:#53b979;--bad:#ff5a5a;--link:#9cc2ff;--track:#2e2a3b;
+  color-scheme:dark;   /* native controls (slider tracks, dropdown lists) follow the theme */
+}
+:root[data-theme="light"]{
+  --bg:#f4f2f7;--raised:#ffffff;--line:#e0dbe7;--ink:#1f1a27;--muted:#62596f;--faint:#8d849a;
+  --accent:#b88a00;--good:#1f8f52;--bad:#c62828;--link:#4a7fe8;--track:#e4dfeb;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+a,a:visited{color:var(--link)}
+.sep{width:1px;align-self:stretch;margin:2px 4px;background:var(--line)}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+     -webkit-font-smoothing:antialiased;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right)) 16px max(16px,env(safe-area-inset-left))}
+.title-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+h1{font-size:clamp(20px,3vw,28px);margin:0;letter-spacing:-.01em;font-weight:650}
+h1 small{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.04em;margin-left:8px}
+.icons{display:flex;gap:6px}
+button{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
+  border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap}
+button:hover{border-color:var(--muted)}
+button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.flash{border-color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 30%,var(--raised))!important;outline:2px solid var(--accent);border-radius:8px;transition:none}
+button,select,input{transition:background .25s,border-color .25s}
+.icon{width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center}
+.icon svg{width:15px;height:15px}
+
+.screen{margin-top:12px;background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:10px}
+.canvas-box{position:relative;width:100%;aspect-ratio:9/4;background:#000;border-radius:8px;overflow:hidden}
+.canvas-box canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#gl{image-rendering:pixelated}
+#ui{touch-action:none;cursor:crosshair}
+.canvas-box #c-canvas{left:66.6667%;width:33.3333%;background:#000}
+.canvas-box #c-canvas[hidden]{display:none}
+.canvas-box #c-canvas.beside{left:33.3333%}   /* action+stats: over the right half of the world view */
+.canvas-box #c-canvas.beside.far{left:0}       /* ... or moved to its left half (c-move) */
+#c-move{position:absolute;top:6px;left:calc(66.6667% - 34px);z-index:3;width:26px;height:26px;font-size:11px;opacity:.75}
+#c-move.far{left:calc(33.3333% - 34px)}
+#c-move[hidden]{display:none}
+/* Game: controls inside the ship view, in the strip along its bottom edge (canvas y 452-506 of 512,
+   where the lab has the action patches). On black whatever the page theme. */
+.ship-ctl{position:absolute;left:66.6667%;width:33.3333%;top:88.28%;height:10.55%;z-index:3;
+  display:flex;align-items:center;justify-content:center;gap:14px;pointer-events:none}
+.ship-ctl>*{pointer-events:auto}
+.error{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
+  color:#fff;font-size:14px;text-align:center}
+.error[hidden]{display:none}
+
+.controls{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-top:10px}
+.controls label,.ship-ctl label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+:is(.controls,.ship-ctl) input[type=range]{width:110px;height:22px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
+/* Slider bar drawn by hand so it follows the theme: accent up to the value (--pct, set by page.js), --track after. */
+:is(.controls,.ship-ctl) input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
+  background:linear-gradient(to right,var(--accent) var(--pct,50%),var(--track) var(--pct,50%))}
+:is(.controls,.ship-ctl) input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
+:is(.controls,.ship-ctl) input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+:is(.controls,.ship-ctl) input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;
+  border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
+:is(.controls,.ship-ctl) input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
+.row2{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:8px}
+.row2 .pat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.row2 .icon{font-size:12px;line-height:1}
+.row2 #pat-next{margin-left:-6px}
+.row2 select{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
+  border-radius:8px;padding:5px 8px}
+.controls output,.ship-ctl output{font-variant-numeric:tabular-nums;color:var(--ink);min-width:2.2em}
+.readout{display:flex;flex-wrap:wrap;gap:2px 14px;margin-top:8px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.readout b{color:var(--ink);font-weight:500}
+.readout .ok{color:var(--good)} .readout .bad{color:var(--bad)}
+.help{margin-top:12px;font-size:13px;color:var(--muted)}
+.help kbd{font-family:ui-monospace,monospace;font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink)}
+
+/* Fullscreen: the canvas as large as fits above the two control rows (--rows, set by page.js).
+   The rows always span the full screen width, so their height never depends on the canvas size
+   (if they followed the canvas width, narrower rows would wrap taller and shrink the canvas
+   further, collapsing it). */
+:root.fs body{overflow:hidden}
+:root.fs .wrap{max-width:none;height:100vh;height:100dvh;display:flex;align-items:center;justify-content:center;padding:0}
+:root.fs .title-row,:root.fs .readout,:root.fs .help{display:none}
+:root.fs .screen{margin:0;padding:0 8px 8px;border:none;background:none;width:100vw}
+:root.fs .canvas-box{border-radius:0;margin:0 auto;
+  width:min(100%,max(160px,calc((100dvh - var(--rows,120px)) * 9 / 4)))}
+:root.fs .controls,:root.fs .row2{justify-content:center}
+/* Fullscreen on a phone: keep the first row on one line; the sliders shrink to fit. */
+:root.fs .controls{flex-wrap:nowrap;gap:6px}
+:root.fs .controls label{flex:1 1 0;min-width:0;max-width:200px;white-space:nowrap;gap:4px}
+:root.fs .controls input[type=range]{width:auto;flex:1 1 auto;min-width:36px}
+:root.fs .controls output{min-width:1.8em}
+:root.fs .controls button{padding:6px 8px;flex:none}
+:root.fs .fs-hide{display:none}
+:root.fs .tune,.tune[hidden],:root.fs .stats,.stats[hidden],.help[hidden]{display:none}
+.tune{margin-top:12px}
+.stats{margin-top:12px}
+.stats [hidden]{display:none}
+.stats .chart-controls{margin-top:0}
+.stats .group{font-size:12px;color:var(--muted)}   /* a label before a group of buttons */
+.stats .chart-controls2{margin-top:8px}
+.stats select{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
+  border-radius:8px;padding:5px 8px;max-width:190px}
+.chart-info{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--muted);margin-left:auto}
+
+.fs-exit{display:none;position:fixed;top:8px;right:8px;z-index:5;opacity:.6}
+:root.fs .fs-exit{display:flex}
+
+@media (max-width:560px){
+  .controls input[type=range]{width:80px}
+  button{padding:6px 9px}
+}
+
+/* Game (.wrap.game): one size for every button and slider on the page, present and future, set
+   by these variables (smaller in narrower windows, since the ship view shrinks with the window):
+   --ui-h button height, --ui-font text size, --ui-padx button side padding, --ui-slider slider
+   width. Icon buttons are --ui-h square. */
+.game{--ui-h:42px;--ui-font:16px;--ui-padx:18px;--ui-slider:150px}
+@media (max-width:1000px){ .game{--ui-h:34px;--ui-font:14px;--ui-padx:12px;--ui-slider:80px} }   /* ship view ~180-320 px */
+@media (max-width:560px){ .game{--ui-h:26px;--ui-font:12px;--ui-padx:8px;--ui-slider:56px} }     /* a phone: ~115 px */
+.game button{height:var(--ui-h);padding:0 var(--ui-padx);font-size:var(--ui-font);line-height:1;border-radius:10px;
+  display:inline-flex;align-items:center;justify-content:center}
+.game button[hidden]{display:none}
+.game button.icon{width:var(--ui-h);padding:0}
+.game .icon svg{width:calc(var(--ui-h) * .45);height:calc(var(--ui-h) * .45)}
+.game label{font-size:calc(var(--ui-font) - 1px);gap:8px}
+.game input[type=range]{width:var(--ui-slider);height:28px}
+.game input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:4px}
+.game input[type=range]::-moz-range-track{height:8px;border-radius:4px}
+.game input[type=range]::-moz-range-progress{height:8px;border-radius:4px}
+.game input[type=range]::-webkit-slider-thumb{width:22px;height:22px;margin-top:-7px}
+.game input[type=range]::-moz-range-thumb{width:18px;height:18px}
+/* fullscreen keeps the same sizes (the lab's fullscreen squeezes its controls) */
+:root.fs .game button{padding:0 var(--ui-padx);flex:none}
+:root.fs .game button.icon{padding:0}
+:root.fs .game label{flex:none;max-width:none}
+:root.fs .game input[type=range]{width:var(--ui-slider);flex:none}
+
+/* Game: the ship-view controls (.ship-ctl above), on black whatever the page theme */
+.ship-ctl{gap:16px}
+.ship-ctl label{color:#c8c0d6}
+@media (max-width:1000px){ .ship-ctl{gap:10px} }
+@media (max-width:560px){ .ship-ctl{gap:4px} }
+/* Game: when the ship is lost, Retry and Morphs (#reset, #morphs-dead), one above the other in the
+   ship view, centred in the gap between the "Dissolved" box (centred, ending ~40 canvas px below
+   the middle: y ~296 of 512) and the controls strip (from y 452): 58% to 88% down */
+.ship-dead{position:absolute;left:66.6667%;width:33.3333%;top:58%;height:30%;z-index:3;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--ui-h) * .3);pointer-events:none}
+.ship-dead>*{pointer-events:auto}
+
+/* Game: the Morphs button, right-aligned in the ship view, level with the name box (canvas
+   y 72-106 of 512, centre 89 = 17.4%) */
+.ship-morphs{position:absolute;right:12px;top:17.4%;transform:translateY(-50%);z-index:3}
+/* Game: the morph book, centred over the whole game window; the dimmed rest closes it on a click */
+.book{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
+.book[hidden]{display:none}
+.book-box{width:min(760px,84%);max-height:92%;overflow:auto;display:flex;flex-direction:column;align-items:center;
+  gap:calc(var(--ui-h) * .35);padding:calc(var(--ui-h) * .45) calc(var(--ui-h) * .6);
+  background:var(--raised);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.book-box h2{margin:0;font-size:calc(var(--ui-font) * 1.4);font-weight:650;letter-spacing:-.01em}
+.book-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:calc(var(--ui-h) * .25);width:100%}
+.book-slot{display:flex;align-items:center;justify-content:center;gap:.45em;min-height:calc(var(--ui-h) * 1.5);padding:4px 6px;
+  border:1px solid var(--line);border-radius:10px;font-size:calc(var(--ui-font) * 1.15);font-style:italic;overflow-wrap:anywhere}
+.book-slot.empty{color:var(--faint);font-style:normal}
+.book-slot.new{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.book-slot .dot{flex:none;width:.6em;height:.6em;border-radius:50%}
+.book-slot.pick{cursor:pointer}
+.book-slot.pick:hover{border-color:var(--muted);background:color-mix(in srgb,var(--accent) 10%,var(--raised))}
+
+/* Game: a chapter's title card ([chapter]), centred over the game window, faded in and out
+   (the duration is FADE_MS in game.js). Dark blue brushed metal with a rounded silver border;
+   the title in polished silver. */
+.chapter{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.5);opacity:0;transition:opacity 1.5s ease;pointer-events:none}
+.chapter.show{opacity:1}
+.chapter[hidden]{display:none}
+.chapter-box{position:relative;overflow:hidden;text-align:center;
+  padding:calc(var(--ui-h) * .7) calc(var(--ui-h) * 1.6);border-radius:18px;
+  border:2px solid rgba(190,210,255,.75);
+  box-shadow:0 0 0 1px rgba(10,20,50,.9),0 0 0 5px rgba(120,150,220,.18),0 12px 60px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.25);
+  background:
+    repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px),   /* brushed lines */
+    radial-gradient(120% 90% at 30% 0%,rgba(140,175,255,.35),transparent 60%),           /* top light */
+    linear-gradient(160deg,#0d2257 0%,#081639 45%,#0f2a6b 70%,#061031 100%)}             /* dark blue */
+.chapter-no{position:relative;font-size:calc(var(--ui-font) * 1.5);letter-spacing:.22em;text-transform:uppercase;color:#aebfe6}
+.chapter-title{position:relative;margin-top:.15em;font-size:calc(var(--ui-font) * 3.2);font-weight:750;letter-spacing:-.01em;line-height:1.15;
+  color:#e6ecf8;background:linear-gradient(180deg,#ffffff 0%,#dfe7f5 38%,#8f9db8 52%,#e9eef8 70%,#b7c3da 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
+
+/* Game: under the screen panel, outside it, one row (.below): the message area under the world
+   view (the canvas's left 2/3), the controls centred under the ship view (its right third). The
+   canvas sits 11 px inside the panel (padding + border). */
+.below{display:flex;align-items:flex-start;margin-top:10px;padding-left:11px}   /* top: the controls stay put however many lines the message has */
+.below .msg{flex:none;width:calc((100% - 11px) * 2 / 3);padding-right:12px;font-size:18px;line-height:1.35;color:var(--ink);
+  min-height:var(--ui-h);padding-top:calc((var(--ui-h) - 1.35em) / 2)}   /* the first line centred on the buttons, however many lines follow */
+.below .msg .hint{color:var(--faint)}
+/* a message waiting on a condition (Space does not move it on): cyan, darker on the light page */
+:root{--wait:#4fe3f0}
+:root[data-theme="light"]{--wait:#0b8494}
+.below .msg.wait{color:var(--wait)}
+.below .controls{flex:none;width:calc((100% - 11px) / 3);min-height:var(--ui-h);margin-top:0;justify-content:center;gap:8px 14px}
+/* fullscreen: --cw is the canvas width (as :root.fs .canvas-box), centred in the window */
+:root.fs .wrap.game{flex-direction:column;--cw:min(calc(100vw - 16px),max(160px,calc((100dvh - var(--rows,120px)) * 9 / 4)))}
+:root.fs .game .below{align-self:center;width:var(--cw);margin-top:0;padding:0 0 8px}
+:root.fs .game .below .msg{width:calc(var(--cw) * 2 / 3)}
+:root.fs .game .below .controls{width:calc(var(--cw) / 3)}
+@media (max-width:560px){   /* a phone: the message above the controls, both full width */
+  .below{flex-direction:column;align-items:stretch;padding-left:0}
+  .below .msg,.below .controls{width:auto}
+  .below .msg{font-size:15px}
+  .below .controls{margin-top:6px}
+}

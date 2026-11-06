@@ -246,7 +246,7 @@ const StatsChart = (function () {
   // hover: one of them (under the mouse in the world view), drawn with its line as well.
   function draw(canvas, short, long, view, others = [], hover = null) {
     drawChart(canvas, short, long, view, others, hover);
-    // the ship view's border (app.js drawOverlay), since the chart takes its place: the panel is
+    // the ship view's border (core.js drawOverlay), since the chart takes its place: the panel is
     // PANEL_W canvas px wide there, so its sizes are scaled to this canvas
     const w = canvas.clientWidth, h = canvas.clientHeight, k = w / PANEL_W;
     if (!w || !h) return;
@@ -258,7 +258,7 @@ const StatsChart = (function () {
     else ctx.rect(3 * k, k, w - 4 * k, h - 2 * k);
     ctx.stroke();
   }
-  const PANEL_W = 384;   // app.js PW
+  const PANEL_W = 384;   // core.js PW
 
   // Clickable axis labels of the last draw, in CSS px: { axis, x0, y0, x1, y1 } (see hitAxis).
   let hits = [];

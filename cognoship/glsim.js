@@ -3,10 +3,10 @@
 //  WebGL2 engine for Cognoship: 3-channel Lenia on a torus, with cognitive masking.
 //
 //  Per step: one sim pass (convolution + growth + mask/erase). The mask's absolute centre comes
-//  from the CPU each step (app.js extrapolates the focused creature's CoM within a frame).
+//  from the CPU each step (core.js extrapolates the focused creature's CoM within a frame).
 //
 //  Per rendered frame, two small readbacks:
-//    readBlocks()      coarse 4x4-block mass map, so app.js can find every creature
+//    readBlocks()      coarse 4x4-block mass map, so core.js can find every creature
 //                      (connected components) and follow the focused one;
 //    readChannelComs() per-channel CoMs inside a window around the focused creature (reduce ->
 //                      com), for the body-axis view mode.

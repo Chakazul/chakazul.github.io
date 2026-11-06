@@ -58,12 +58,12 @@ vec3 starLayer(vec2 b, float pxPerCell, float g, float speed, float bright, floa
     vec2 d = q - pos;
     d -= sz * round(d / sz);                       // torus
     float dpx = length(d) * pxPerCell;
-    float r = 0.55 + 0.6 * bright;                 // radius in screen px
+    float r = 0.8 + 0.85 * bright;                 // radius in screen px: ~1.05, 1.25, 1.6 by layer
     float a = clamp(r + 0.5 - dpx, 0.0, 1.0);
     if (a <= 0.0) return vec3(0.0);
-    // mostly white, with a faint blue, red or yellow tint
+    // mostly white, with a faint cyan, red or yellow tint
     float t = rnd(key + uvec3(0u, 0u, 303u));
-    vec3 tint = t < 0.25 ? vec3(0.75, 0.85, 1.0) : t < 0.4 ? vec3(1.0, 0.75, 0.7)
+    vec3 tint = t < 0.25 ? vec3(0.7, 1.0, 1.0) : t < 0.4 ? vec3(1.0, 0.75, 0.7)
               : t < 0.6 ? vec3(1.0, 0.95, 0.7) : vec3(1.0);
     float level = bright * (0.6 + 0.4 * rnd(key + uvec3(0u, 0u, 404u)));
     return tint * level * a;

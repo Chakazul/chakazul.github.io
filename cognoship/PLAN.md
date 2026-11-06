@@ -188,7 +188,7 @@ several steps per frame and should allow 1 to 2 steps per frame on mid-range pho
 if needed: compute the denominator only in a band of R + r around the mask circle and level-mask
 tiles.
 
-### 4.3 Overlay and UI (`app.js`, 2D canvas over the WebGL canvas)
+### 4.3 Overlay and UI (`core.js`, 2D canvas over the WebGL canvas)
 
 - **Velocity arrow.** Velocity is the CoM change per frame, torus-unwrapped, drawn from the panel
   centre and scaled by a fixed gain. It is hidden below `speedMin`; the threshold is tuned in step
@@ -291,8 +291,13 @@ tiles.
 ```
 Cognoship/
   PLAN.md         this file
-  index.html      page, layout, styles
-  app.js          UI, input, overlay, readout
+  index.html      the game page (game.js)
+  lab.html        the lab page (lab.js): every experiment control
+  style.css       styles, both pages
+  page.js         page chrome, both pages: theme, fullscreen, music, helpers
+  core.js         shared: canvas input, focus tracking, stats, detection, overlay
+  lab.js          the lab's UI, readout, stats chart, recording, tuning
+  game.js         the game's UI and HUD (game logic to come)
   forms.js        (Phase 3) phase-space features, clustering, form labels
   maskmap.js      (Phase 3) press records, map derivation, JSON import/export, map panel
   glsim.js        WebGL2 engine (passes, textures, readback)

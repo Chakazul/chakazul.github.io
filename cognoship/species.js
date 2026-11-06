@@ -23,7 +23,7 @@
 //  creatures. Below R = 16, gyrans R stops replicating and lithos moves.
 // ============================================================================================
 
-// Patterns offered by the picker (app.js), in file order; DEFAULT_PATTERN is selected first.
+// Patterns offered by the pickers (lab.js, game.js), in file order; DEFAULT_PATTERN is selected first.
 //   rule: a code in AQUARIUM233.rules; R: the entry's native radius; cells: RLE per channel.
 //   logic: 'leniaF' (the rule above), or 'legacy', the engine's first version: exponential bump
 //   kernel and Gaussian growth (kn = gn = 2), original h, optionally normalised per channel by

@@ -8,11 +8,17 @@ one colour channel drops out of every kernel that reads the channel,
 U = K∗(A·(1−B)) / K∗(1−B). The same circle can instead erase or draw mass, for comparison. See
 [PLAN.md](PLAN.md) for the design and the later phases.
 
-**Run:** serve this folder over http and open `index.html`. The page fetches its shaders, so
+Two pages share one engine:
+- **`index.html`, the game.** For now a trimmed lab: steer the ship with a smaller set of
+  controls. Game logic (goals, levels, story mode, more channels and objects) will be added here.
+- **`lab.html`, the lab.** The experiment version, with every control: stats, Record /
+  Download, morph detection, tuning. The controls below are the lab's.
+
+**Run:** serve this folder over http and open either page. They fetch their shaders, so
 `file://` won't work.
 
 ```
-cd Cognoship && python3 -m http.server 8000     # then open http://localhost:8000/
+cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/   lab: http://localhost:8000/lab.html
 ```
 
 ## Controls
@@ -171,7 +177,14 @@ cd Cognoship && python3 -m http.server 8000     # then open http://localhost:800
   after it divides, which connected components of the mass counted as one. Each creature's CoM is
   rebuilt exactly from per-block moments. The module also picks a creature for clicks and for
   frame-to-frame tracking.
-- `app.js`: layout, input, focus tracking, heading logic, the overlay and the readout.
+- `core.js`, shared by both pages: layout, canvas input, focus tracking, heading logic, the
+  stats histories, morph detection and the overlay. A page reads and sets its state through the
+  `Core` object, sets `Core.hooks` (change, record, pattern, species, statsLoaded, frame) and
+  `Core.opt` (what the overlay shows), then calls `Core.start()`.
+- `page.js`, shared: DOM helpers, theme, fullscreen, music (the Stars button), the error box.
+- `lab.js`: the lab's controls, readout, modes, stats chart, Record / Download, tuning, keys.
+- `game.js`: the game's controls, HUD and keys (and, later, the game logic).
+- `style.css`, shared by both pages.
 
 The rule follows **LeniaF.py**, the program that reads 233.json (`LeniaF.py -c 3 -k 3`):
 - polynomial kernel cores (4f(1−f))⁴ over the b rings, each kernel normalised to 1;
@@ -260,10 +273,14 @@ Not yet checked on a device: GPU speed on phones (use `?debug=1`) and mobile sha
 ## Music and stars
 
 Background music, royalty free, looped as a playlist with 10 s of silence between tracks, at half
-volume: *Long Way* by Rexlambo (`assets/music/long-way-rexlambo.mp3`) and *A Few Jumps Away* by
-Arthur Vyncke (`assets/music/a-few-jumps-away-arthur-vyncke.mp3`). The **Stars** button at the end
-of the second row turns the star field and the music on or off together (off by default;
-remembered in the browser); browsers only start audio after the first click, tap or key.
+volume, from `assets/music/`: *Long Way* by Rexlambo (`rexlambo-long-way.mp3`), *A Few Jumps Away*
+by Arthur Vyncke (`arthur-vyncke-a-few-jumps-away.mp3`), *Out of the Skies, Under the Earth* by
+Chris Zabriskie (`chris-zabriskie-out-of-the-skies-under-the-earth.mp3`) and *Billions and
+Billions* by Stellardrone (`stellardrone-billions-and-billions.mp3`). In the lab, the **Stars**
+button at the end of the second row turns the star field and the music on or off together; in
+the game the star field is always on and the **Music** button only plays or pauses the music
+(each page load starts with the lab's off and the game's on; the choice is not remembered). Browsers only start
+audio after the first click, tap or key.
 
 The **star field**: three layers of small tinted stars, in board coordinates (so both
 views show the same ones), drift to the left, swaying slowly up and down, behind the creatures, the near layers brighter

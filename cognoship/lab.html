@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>try{if(localStorage.getItem('cognoship-theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Cognoship Lab</title>
+<meta name="description" content="Steer a Lenia creature by hiding parts of it from itself.">
+<!-- Link previews (WhatsApp, iMessage, Slack, ...). og:image must be an absolute https URL. -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chakazul.github.io/cognoship/lab.html">
+<meta property="og:title" content="Cognoship Lab">
+<meta property="og:description" content="Steer a Lenia creature by hiding parts of it from itself.">
+<meta property="og:image" content="https://chakazul.github.io/cognoship/assets/screenshot-cool.png">
+<meta property="og:image:width" content="960">
+<meta property="og:image:height" content="1267">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="title-row">
+    <h1>Cognoship Lab <small>steer by cognitive masking</small></h1>
+    <div class="icons">
+      <button id="theme" class="icon" title="Light / dark page" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+      <button id="fullscreen" class="icon" title="Fullscreen" aria-label="Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="canvas-box">
+      <canvas id="gl" width="1152" height="512"></canvas>
+      <canvas id="ui" width="1152" height="512"></canvas>
+      <!-- Stats mode: the phase-space chart, over the ship view (right third) -->
+      <canvas id="c-canvas" hidden></canvas>
+      <!-- action+stats: moves the chart to the far left of the world view and back -->
+      <button id="c-move" class="icon" hidden title="Move the chart to the left edge" aria-label="Move the chart left">&#9664;</button>
+      <div id="error" class="error" hidden></div>
+    </div>
+    <div class="controls">
+      <button id="play" title="Pause / play (Enter)">Pause</button>
+      <button id="step" title="Advance one step (Space)">Step</button>
+      <label title="Simulation speed (Q faster, W slower; 1 = one step every 4 frames, 8 = two steps per frame)">Speed <input id="speed" type="range" min="1" max="7" step="1"><output id="speed-v"></output></label>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="headup" aria-pressed="false" title="Heading up: rotate the ship view so the creature's heading points up (E toggles)">Heading up</button>
+      <label title="Zoom of the ship view, in screen px per cell">Zoom <input id="zoom" type="range" min="1" max="7" step="1"><output id="zoom-v"></output></label>
+      <label><span>Mask<span class="fs-hide"> radius</span></span> <input id="radius" type="range" min="1" max="8" step="1"><output id="radius-v"></output></label>
+    </div>
+    <div class="row2">
+      <label class="pat">Species <select id="species" title="Species (selecting one resets; Shift+C / Shift+V previous / next)"></select></label>
+      <button id="reset" title="Clear the board and put the morph in the centre (Z)">Reset</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="add" title="Add the morph at a random empty spot and angle (X)">Add</button>
+      <label class="pat">Morph <select id="morph" title="Morph: picking one adds it (like Add)"></select></label>
+      <button id="pat-prev" class="icon" title="Previous morph (C)" aria-label="Previous morph">&#9650;</button>
+      <button id="pat-next" class="icon" title="Next morph (V)" aria-label="Next morph">&#9660;</button>
+      <button id="detect" aria-pressed="true" title="Morph detection, from the stats compared with the species' long history: None; Focused (the focused creature's morph, at the top of the ship view); Every (the default: also every creature's in the world view)">Detect: Every</button>
+      <span class="sep fs-hide" aria-hidden="true"></span>
+      <button id="sound" class="fs-hide" aria-pressed="false" title="Star field and background music on / off">Stars: OFF</button>
+      <button id="mode" class="fs-hide" title="Cycle the modes: Action, Stats (chart in place of the ship view), Action+Stats (chart beside it), Tuning (detection sliders) (A; Shift+A backwards)">Mode: Action</button>
+    </div>
+    <div class="readout" id="readout"></div>
+  </div>
+
+  <!-- Under the screen: the tuning or stats controls (by mode: A), then the help text -->
+  <!-- Tuning mode (A): detection sliders -->
+  <div class="controls tune" id="tune" hidden>
+    <label title="Basins merge when the saddle between them is at least this fraction of the lower peak. Higher = fewer merges, smaller objects; above 1 = never merge.">Merge saddle <input id="t-saddle" type="range" min="0.5" max="1.5" step="0.05"><output id="t-saddle-v"></output></label>
+    <label title="Blocks whose potential K*A is below this are background. Higher = thin bridges between creatures are cut, objects shrink.">Threshold <input id="t-thr" type="range" min="0.02" max="0.3" step="0.01"><output id="t-thr-v"></output></label>
+    <label title="Objects smaller than this fraction of R/4-radius disc area are dropped.">Min area <input id="t-area" type="range" min="0" max="4" step="0.25"><output id="t-area-v"></output></label>
+  </div>
+  <!-- Stats mode (A): controls of the phase-space chart (statschart.js), which
+       replaces the ship view -->
+  <div class="stats" id="stats" hidden>
+    <div class="controls chart-controls">
+      <span class="group">Chart</span>
+      <button id="c-dim" title="3D or 2D phase space">3D</button>
+      <button id="c-every" aria-pressed="true" title="Show the short history of every object, not only the focus (Record still records the focus only)">Every object: ON</button>
+      <span class="sep" aria-hidden="true"></span>
+      <span class="group">History</span>
+      <button id="c-rec" aria-pressed="false" title="Record 300 steps into the long history (the short history gathered so far, then new steps), asking the morph name (S; Shift+S or Shift+click: as a fuzzy morph); press again to stop early">Record</button>
+      <button id="c-clear" title="Delete the last piece of the long history">Delete</button>
+      <button id="c-save" title="Download the long history as <species>.json; put it in Cognoship/assets/stats/ to load it with the species">Download</button>
+      <span class="chart-info" id="c-info"></span>
+    </div>
+    <div class="controls chart-controls2">
+      <label>x <select id="c-x" title="Stat on the x axis"></select></label>
+      <label>y <select id="c-y" title="Stat on the y axis"></select></label>
+      <label id="c-z-l">z <select id="c-z" title="Stat on the z axis (up)"></select></label>
+      <label>c <select id="c-c" title="Colour axis: the stat that sets the line and dot hue (hue: its own; others: max red, min blue)"></select></label>
+      <button id="c-lock" aria-pressed="true" title="Lock every axis's min and max where they are now (a changed stat gets a new range, then stays)">Lock axes: ON</button>
+    </div>
+  </div>
+  <p class="help" id="help">
+    A spaceship-steering toy played inside
+    <a href="https://en.wikipedia.org/wiki/Lenia" target="_blank" rel="noopener"><b>Lenia</b></a>, a continuous cellular automaton.
+    The ship is steered by <b><a href="https://jessescool.github.io/lenia-umwelt/" target="_blank" rel="noopener">cognitive masking</a></b> (<a href="https://doi.org/10.1162/ISAL.a.1012" target="_blank" rel="noopener">Cool et al. 2026</a>):
+    a masked area is hidden from the creature's own senses, dropping out of every kernel that reads that color channel.
+    Interventions (masking, erasing, or drawing) to a part of the ship have various effects: the ship may change direction or speed, change into another morph, or die out.
+    <br/>
+    In the ship view (right), <b>press and hold on the zoomed-in creature</b> to intervene that area, and observe the effects.
+    The top patches choose the channel (<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>); the bottom ones choose the action:
+    <b>mask</b>, <b>erase</b> or <b>draw</b> mass (<kbd>4</kbd> <kbd>5</kbd> <kbd>6</kbd>).
+    In the world view (left) <b>click one ship</b> to follow it in the ship view.
+    <b>Detect</b> names the morph of the followed ship (Focused) or of every ship (Every, the default), by comparing its recent stats with the recorded ones of each morph; <b>???</b> when it is not sure.
+    <br/>
+    <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off · <kbd>A</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> next / previous mode (Action / Stats / Action+Stats / Tuning) · <kbd>S</kbd> record 300 steps of stats (<kbd>Shift</kbd>: as a fuzzy morph) · <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> next stat on the x / y / z / colour axis (<kbd>Shift</kbd>: previous) ·
+    <kbd>Z</kbd> reset world · <kbd>X</kbd> add morph · <kbd>C</kbd> <kbd>V</kbd> previous / next morph (<kbd>Shift</kbd>: species).
+    <br/>
+    Music: <i>Long Way</i> by Rexlambo, <i>A Few Jumps Away</i> by Arthur Vyncke, <i>Out of the Skies, Under the Earth</i> by Chris Zabriskie, <i>Billions and Billions</i> by Stellardrone.
+  </p>
+</div>
+<button id="fs-exit" class="fs-exit icon" title="Exit fullscreen" aria-label="Exit fullscreen">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+</button>
+
+<script src="rule.js"></script>
+<script src="aquarium233.js"></script>
+<script src="species.js"></script>
+<script src="creatures.js"></script>
+<script src="glsim.js"></script>
+<script src="statschart.js"></script>
+<script src="detect.js"></script>
+<script src="page.js"></script>
+<script src="core.js"></script>
+<script src="lab.js"></script>
+</body>
+</html>
