@@ -197,7 +197,7 @@ Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 Peace has been restored. Thank you for your service.
 
 
-[jump_here]
+#[jump_here]
 
 [gun:off]
 [chapter:final:Galactic Immune System]
