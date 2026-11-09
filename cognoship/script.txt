@@ -4,19 +4,21 @@
 [morph_book_action:clear_put][retry_action:clear_put]
 #[bullet:all:Orbium]
 
+Welcome to Cognoship.
+
 [music:1:1]
 [chapter:1:Metamorphosis]
 
 # masking
-[species:Aquarium:5N7KKM]
+[species:Aquarium originale:5N7KKM]
 #[merge:0.6]
 [clear_world][put_player:limus]
-Year is 2046.
-_Proxima Centauri b_ exoplanet system. 4 light years from the Earth.
-With recursive self-improving technologies, we created spaceships using a new type of agentic material called _Lenium_.
-We can't control the ships using buttons or levers, though...
-Thankfully, _Lenium_ is actively sensing and reacting with its surroundings. We can steer the ship by blocking parts of its sensory field.
-In the right panel, click on the ship to block its sensor. [need:first_touch]
+Year is 2047.
+_Proxima Centauri_ exoplanet system, 4 light years from Earth.
+With recursive self-improvment technologies, we created spaceships from a new type of agentic material called _Lenium_.
+We can't control the ships with buttons or levers, though...
+Thankfully, _Lenium_ actively senses and reacts to its surroundings. We can steer the ship by blocking parts of its sensory field.
+In the right panel, click on the ship to block its sensors.[need:first_touch]
 Nice! You can now steer the ship, or even change its shape.
 Remember, be gentle! The ship is fragile.
 
@@ -25,17 +27,18 @@ Remember, be gentle! The ship is fragile.
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:limus]
 [morph_book:on]
-The shape and behavior of your ship is called a *morph*.
-This morph is named _limus_. Try to change its shape into another morph. [need:discover_morph:gyrans,tardus,lithos]
+A specific shape and behavior of your ship is called a *morph*.
+This morph is named _limus_. Try to change it into another morph.\n(Hint: gently pat its side)[need:discover_morph:gyrans,tardus,lithos]
 Congrats! You discovered a new morph!
-Remember, when the ship is dissolved, the released _Lenium_ can be recycled into another morph.
+Remember, if the ship dissolves, you can choose to recycle the _Lenium_ into another morph.
 
 [new_scene]
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:tardus]
 This morph is _tardus_. Try to discover the hidden morph (optional).
-Also test out the other functions in the panel. Hold *Shift* to show keys.
-Now we embark to the _Epsilon Eridani_ star system. 10 light years from home.
+Hint: gently pat its tail.
+Also try out the other controls in the panel. Hold *Shift* to show their keys.
+Embark for the _Sirius A_ star system, 9 light years away.
 
 
 [chapter:2:You Are Not Alone]
@@ -54,28 +57,27 @@ Steer your ship to collect 50 energy.[need:energy:50]
 # bullets
 [gun:on][bullet:Orbium:Orbium]
 Enough energy for the *Lenium gun*!
-Press *A* to fire _Lenium_ bullets. They mess with other ship's sensory field.
-This _Orbium_ type bullet is weak. More types to found later.
-Reach 100 energy for new bullet type.[need:energy:100]
+Press *A* to fire _Lenium_ bullets. They mess with other ships' sensory fields.
+This _Orbium_ type bullet is weak. More types will be found later.
+Reach 100 energy for a new bullet type.[need:energy:100]
 [bullet:Scutium:Scutium]
-_Scutium_ type is added. Switch bullet type in the panel or press *S/D/F*.
+_Scutium_ type bullet is equipped. Switch bullet types in the panel or press *S/D/F*.
 [new_bullet:50]
-From now on, collect 50 more energy to research a new bullet type.
-We are now leaving the _Orion Arm_.
+From now on, every 50 energy you collect manufactures a new bullet type.
+Now we are leaving the _Orion Arm_.
 
 
 [music:2,1:2]
 [chapter:3:Brave New World]
 
 # species
-[species:Aquarium:GDNQYX]
+[species:Aquarium novus:GDNQYX]
 [allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,paratardus,sequetardus]
 [clear_world][put_player:rectus]
 [dot:3][min_morph:10:rectus,gyrans,tardus,lithos,paragyrans,antigyrans:far]
-Arrived at the _Perseus Arm_, 10,000 light years from home.
-To survive the intergalactic medium, our ships evolved from the original species, _5N7KKM_, into a new species, _GDNQYX_.
-Leniologists classified both species as genus _Aquarium_.
-New species, new morphs to discover...
+We have arrived at the _Perseus Arm_, 7,000 light years from home.
+To survive the intergalactic medium, our ships evolved from the original species, _Aquarium originale_, into a new species, _Aquarium novus_.
+New species, new morph possibilities.
 
 # clone
 [new_scene]
@@ -84,55 +86,56 @@ New species, new morphs to discover...
 To engineer new morphs, we developed advanced *cloning* technology.
 [clone:on]
 In the right panel, choose a morph to clone, then place it near your ship.[need:first_clone]
-Great! The placement and orientation are important.
-Use clone to engineer a twin morph.[need:discover_morph:paragyrans,antigyrans,paratardus,sequetardus]
+Great! The placement, orientation, and timing, all are imporant.
+Use cloning to engineer a twin morph.[need:discover_morph:paragyrans,antigyrans,paratardus,sequetardus]
 Bravo! You engineered a twin morph.
 
 # erase
-[new_scene]
-[clear_world][put_player:rectus]
-[dot:7][min_morph:2:paragyrans,antigyrans,paratardus:far]
-We found that this species is hard to destroy, that means hard to recycle.
-That is why we pioneered *direct recycle* technology.
-[erase:on]
-Click R G B button twice into recycle mode, then dissolve the ship.[need:recycle]
-A large amount of _Lenium_ has been recycled.
-You are free to continue experimenting and finding new morphs...
-Otherwise, we are heading to the Milky Way Galactic Center.
+#[new_scene]
+#[clear_world][put_player:rectus]
+#[dot:7][min_morph:2:paragyrans,antigyrans,paratardus:far]
+#However, this species is surprisingly resistent to cognitive masking, thus harder to dissolve.
+#That is why we pioneered *direct recycling* technology.
+#[erase:on]
+#Click R G B button twice to enter recycle mode, then dissolve the ship.[need:recycle]
+#A large quantity of _Lenium_ has been recycled.
+
+Feel free to continue experimenting and finding new morphs...
+Otherwise, we are heading to the Galactic Center.
 
 
 [chapter:4:Megastructure]
 
 # make swarm
-[species:Aquarium:Z18A9R]
+[species:Aquarium vorticosus:Z18A9R]
 [allow_morph:gyrans,tardus,lithos,paragyrans,antigyrans,trias]
 [clear_world:radiation][put_player:lithos]
 [dot:2]
-Near _Sagittarius A*_ at the Galactic Center, 27,000 light years from home.
-The supermassive black hole releases colossal gamma ray bursts.
+Near _Sagittarius A*_, the Galactic Center of the Milky Way, 27,000 light years from home.
+This supermassive black hole releases colossal bursts of radiation.
 We need to construct a megastructure shield to survive.
-The _Z18A9R_ species evolved here is uniquely suitable for this task. Cloning technology is also useful here.
+The _Aquarium vorticosus_ species evolved here is uniquely suited to this task. Cloning technology is also useful here.
 Construct a megastructure.[need:object:50:min]
 We survived.
 
 # survive swarm
 [new_scene]
-[species:Aquarium:PJ1EF7]
+[species:Aquarium multiplicans:PJ1EF7]
 [allow_morph:rectus,tachus,lithos]
 [clear_world:radiation][put_player:rectus]
 [dot:3][min_morph:10:vagus:far]
-However, the gamma ray bursts mutate our ships into species _PJ1EF7_.
+However, radiation bursts mutate our ships into species _Aquarium multiplicans_.
 They keep multiplying.
 Survive the swarm.[need:survive_time:30]
 You survived.
 
 # survive swarm
 [new_scene]
-[species:Aquarium:XEH4YR]
+[species:Aquarium explodens:XEH4YR]
 [allow_morph:rectus,tachus,cor]
 [clear_world:radiation][put_player:cor]
 [dot:3][min_morph:2:auctus:far]
-Mutations keep happening. You start as a dysfunctional morph inside this exploding species _XEH4YR_.
+Mutations keep happening. You start as a dysfunctional morph of the species _Aquarium explodens_.
 Discover all 3 morphs. Reset if necessary.[need:discover_morph:rectus,tachus,cor:all]
 You endured.
 
@@ -144,37 +147,41 @@ We will continue our interstellar journey.
 [music:3,1,2:3]
 [chapter:5:Interstellar Evolution]
 
-[species:Aquarium:XEH4YR]
+[species:Aquarium virgatus:KZ2BLD]
 [clear_world:empty]
 There is no objective while we are wandering through space.
-Just our ships keep evolving to survive the interstellar medium. And black holes, neutron stars, supernovae, and such.
-Here are a selection of species that Leniologists found mesmerizing.
+Just our _Lenium_ ships keep evolving to survive the interstellar medium...
+And survive black holes, supernovae, galaxy collisions, and the like.
+Here is a selection of Leniologists' favorite species.
 
 [new_scene]
-[species:Aquarium:KZ2BLD]
+[species:Aquarium virgatus:KZ2BLD]
 [allow_morph:rectus,virgatus,gyrans]
 [clear_world][put_player:rectus]
 [dot:5][min_morph:5:rectus,gyrans:far]
-The striped species _KZ2BLD_.
+At _Small Magellanic Cloud_, 200,000 light years from home.
+The striped species _Aquarium virgatus_.
 Find _virgatus_.[need:discover_morph:virgatus]
 Next species...
 
 [new_scene]
-[species:Aquarium:HAESRE]
+[species:Aquarium sinuosus:HAESRE]
 [allow_morph:zigzag,lithos,antigyrans,paragyrans]
 [clear_world][put_player:zigzag]
 [dot:5][min_morph:4:antigyrans,paragyrans:far]
-The zigzagging species _HAESRE_.
-Find _antigyrans_.[need:discover_morph:antigyrans]
+At _Andromeda Galaxy_, 2,500,000 light years from home.
+The zigzagging species _Aquarium sinuosus_.
+Find _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
 Next species...
 
 [new_scene]
-[species:Aquarium:HGMLH8]
+[species:Aquarium metamorpha:HGMLH8]
 [allow_morph:metamorpha,tardus,tachus]
 [clear_world][put_player:metamorpha]
 [dot:5][min_morph:3:metamorpha]
-The shapeshifting species _HGMLH8_.
-Find _tardus_ (a twin morph).[need:discover_morph:tardus]
+At _Virgo Cluster_, 53,800,000 light years from home.
+The shapeshifting species _Aquarium metamorpha_.
+Find _tachus_ or _tardus_ (both twin morphs).[need:discover_morph:tardus,tachus]
 Next species...
 
 
@@ -182,15 +189,16 @@ Next species...
 [chapter:6:The Rise of Self-Replicators]
 
 # erase swarm (very hard)
-[species:Aquarium:VT049W]
+[species:Aquarium replicans:VT049W]
 [allow_morph:gyrans,rectus,tachus,lithos,paralimus,paragyrans]
 [clear_world][put_player:gyrans][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
 [dot:3]
 We arrived at a distant, ancient galaxy.
-Our ships keep mutating, and finally, they lose control.
+Our ships have been overengineering themselves, and finally, they go out of control...
+A so-called Gray Goo incident.
 [bullet:Paraptera:Paraptera]
 [bullet_limit:10]
-To deal with these self-replicating machines, you are equipped with the powerful bullet _Paraptera_. Press *A* to fire.
+To deal with these self-replicating machines, you are equipped with the powerful bullet, _Paraptera_. Press *A* to fire.
 Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
 [clear_world:empty]
@@ -200,18 +208,18 @@ Peace has been restored. Thank you for your service.
 #[jump_here]
 
 [gun:off]
-[chapter:final:Galactic Immune System]
+[chapter:final:Cosmic Immune System]
 
 # immune system
-[species:Cilium:G6G6CR]
+[species:Cilium immunitatis:G6G6CR]
 [allow_morph:rectus,limus,tardus,lithos,munitus]
 [clear_world][put_player:rectus][put_morph:lithos:far][put_morph:munitus:far]
 [dot:3]
 To prevent future Gray Goo events, we accelerated our evolution.
-A whole new genus _Cilium_ was born.
-They could serve as a nascence immune system of a healthy universe.
-These morphs may release a red substance that can neutralize Gray Goo, as Leniologists suspect. But they don't know how.
-Produce an abundance of red substance.[need:mass:r:50]
+At the edge of the universe, a new genus _Cilium_ was born.
+They could serve as the nascent immune system of a healthy universe.
+These morphs can release a red substance that neutralizes Gray Goo, Leniologists suspect. But they don't know how.
+Produce an abundance of the red substance.[need:mass:r:50]
 The immune system works!
 Red Goo and Gray Goo are now balanced.
 
@@ -219,8 +227,9 @@ Red Goo and Gray Goo are now balanced.
 [clear_world:empty]
 The universe remains a peaceful place.
 
-_Lenium_ was discovered three decades ago, by scientist Chan.
-The *cognitive masking* capability of _Lenium_ was discovered two decades ago, by scientists Cool, Hartl, Levin and Petti.
+_Lenium_ was discovered by scientist Chan in 2015, multiple centuries ago.
+The *cognitive masking* capability of _Lenium_ was discovered by scientists Cool, Hartl, Levin and Petti in 2026.
 Music: _Long Way_ by Rexlambo\n_A Few Jumps Away_ by Arthur Vyncke
 _Out of the Skies, Under the Earth_ by Chris Zabriskie\n_Billions and Billions_ by Stellardrone
-Thank you for your existence.
+
+Thank you for your participation.

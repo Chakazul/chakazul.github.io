@@ -153,7 +153,8 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
 - `?headup=vel|axis`: start in heading-up or body-axis-up view (`1` = `vel`).
 - `?debug=1`: show GPU ms per step and the tap count in the readout.
 - `?god=1` (the game), test aids: `O` completes the waiting line's `[need]` conditions at once;
-  `P` scores as if the ship ate a dot (+10 energy).
+  `P` scores as if the ship ate a dot (+10 energy); `I` goes to the next `[chapter]`, running every
+  action on the lines in between (as `[jump_here]` does).
 - `?showall=1` (the game): a grey circle around every detected object in the world view, besides the
   ship's yellow one (the one under the pointer brighter).
 
@@ -192,9 +193,9 @@ Morph ids are a name of the current species (`limus`, `gyrans`, ...) or a full p
 
 | Token | What it does |
 |---|---|
-| `[species:<genus>:<code>]` | Load species `<code>` (e.g. `[species:Aquarium:5N7KKM]`): its rule and merge saddle. The world is kept. No morph is visible after it. The morph book shows the species with its genus, in italic ("Species: *Aquarium 5N7KKM*"), at its lower right (`[species:<code>]`: no genus shown). Each species has its own discovered morphs (a name is only a morph of its species: 5N7KKM *tardus* is not GDNQYX *tardus*), so the morph book shows this species' discoveries, kept for when it comes back. |
+| `[species:<name>:<code>]` | Load species `<code>` (e.g. `[species:Aquarium originale:5N7KKM]`): its rule and merge saddle. The world is kept. No morph is visible after it. The morph book shows the species' name (genus and species) in italic ("Species: *Aquarium originale*"), at its lower right (`[species:<code>]`: no name, the code is shown). Each species has its own discovered morphs (a name is only a morph of its species: 5N7KKM *tardus* is not GDNQYX *tardus*), so the morph book shows this species' discoveries, kept for when it comes back. |
 | `[allow_morph:<ids>]` | The visible morphs are exactly these, in this order. A morph that isn't visible is still detected but shows as "???". `all` means every morph of the species; no ids means none. |
-| `[discover_morph:<ids>]` | Add these morphs to the morph book's discovered list. Ones the player already found stay. |
+| `[discover_morph:<ids>]` | Add these morphs to the morph book's discovered list. Ones the player already found stay. Their pictures are black until the ship is one of them for 1 s. (A morph found in play gets its picture when found. A picture is then retaken only once after each Respawn or pick in the book, the first time the ship holds a known morph for 1 s, as the ship is then usually alone in a cleared world.) |
 | `[morph_book:on\|off]` | Show or hide the Morphs button (default `on`; `X` opens the book, as that button and Choose do, and closes it, as Escape) and the name box of the ship's morph at the top of the ship view. `off` also closes the book, and while it is off no morph is discovered (they are still detected). |
 | `[morph_book_action:<type>]` | What a click on a discovered morph in the book does (only while the ship is lost; otherwise the book is read-only). Keys pick slots too, the book's rows on the keyboard's: `Q` `W` `E` `R` the first row, `A` `S` `D` `F` the second (holding Shift or Alt shows a pickable slot's letter at its top right, as the other key badges). `clear_put` = `[clear_world][put_player:<id>]` (default), `put` = `[put_player:<id>:random]`, `none` = nothing. |
 | `[retry_action:<type>]` | What the Respawn button (and `Z`) does: `clear_put`, `put` or `none` as above, with the player's morph, or `book` to open the morph book. No type: back to the default, `clear_put`. |
@@ -255,14 +256,14 @@ When a waiting line's conditions are all met, a green **SUCCESS** box fades in i
 | `[need:recycle]` | The player has turned erase (recycle) on, in any channel, and erased some mass on the ship view since the line was reached, and the ship has then dissolved. |
 | `[need:object:<n>[:exact\|min\|max]]` | The world holds exactly `n` objects (`exact`, the default), at least `n` (`min`) or at most `n` (`max`): all the creatures detected in it, the ship included. The count is smoothed, the median over the last second, so a creature flickering between one and two objects doesn't make it jump. The ⧗ mark is followed by the progress in grey, "⧗ 20/60". |
 | `[need:mass:<r\|g\|b\|rgb>:<x>[:min\|max]]` | The creatures detected in the world, the ship included, hold at least `x` g of mass (`min`, the default) or at most `x` (`max`) in that channel, or in all three (`rgb`); g as the stats charts count it (the sum of cell values / R²). Smoothed as `[need:object]` (the median over the last second), with its progress after ⧗ to one decimal, "⧗ 12.3/20". |
-| `[need:survive_time:<s>]` | The ship has stayed alive for `s` seconds of play from when the line is reached (paused time, an open book and a chapter card don't count); dissolving stops the count (it stays shown), and it starts again from 0 once the ship is back (Respawn). Progress after ⧗ (as `[need:object]`) in whole seconds, "⧗ 12/30". |
+| `[need:survive_time:<s>]` | The ship has stayed alive for `s` seconds of play from when the line is reached (paused time, an open book and a chapter card don't count); dissolving stops the count (it stays shown), and it starts again from 0 once the ship is back (Respawn). Progress after ⧗ (as `[need:object]`) in whole seconds, "⧗ 12/30 sec". |
 | `[need:energy:<n>]` | The energy, the dots score, has reached at least `n`. |
 
 ### Example
 
 ```
 [chapter:1:Metamorphosis]
-[species:Aquarium:5N7KKM][allow_morph:limus][discover_morph:limus]
+[species:Aquarium originale:5N7KKM][allow_morph:limus][discover_morph:limus]
 [morph_book:on][clear_world][put_player:limus]
 Welcome to the Cognoship game.
 Click on the ship to change its shape.[need:first_touch]

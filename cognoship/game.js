@@ -161,7 +161,7 @@
   // per species: a morph name is only a morph of its species (5N7KKM tardus is not GDNQYX tardus),
   // so each species keeps its own list; [species] switches to its list (kept for when it comes back)
   const discoveredBy = new Map();
-  let genus = '';   // the species' genus, as [species:<genus>:<id>] names it (the morph book shows it)
+  let speciesName = '';   // the species' name (genus and species), as [species:<name>:<id>] gives it (the morph book shows it)
   let discovered = [];   // { name, hue }
   const book = { mode: 'morph', on: false, open: false, wasRunning: false, newName: null, fromDiscovery: false, action: 'clear_put',
                  found: [] };   // the morphs found in play, each added when the book its discovery opened closes ([need:discover_morph])
@@ -188,7 +188,7 @@
     $('book-species').hidden = book.mode !== 'morph' || !C.pattern;
     if (C.pattern) {
       const code = document.createElement('i');
-      code.textContent = (genus ? genus + ' ' : '') + C.speciesOf(C.pattern);
+      code.textContent = speciesName || C.speciesOf(C.pattern);   // no name: the id
       $('book-species').replaceChildren('Species: ', code);
     }
     if (book.mode === 'bullet') return renderBullets();
@@ -258,6 +258,7 @@
     // either way the new creature is followed
     if (book.action === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); }   // (not the script's [clear_world]: background and [min_morph] kept)
     else if (book.action === 'put') ACTIONS.put_player(name, 'random');
+    if (book.action !== 'none') { retake = true; cand = null; }   // its picture may be retaken
     C.setRunning(true);
   }
   // ---- clone mode ([clone:on]) ------------------------------------------------------------
@@ -492,11 +493,13 @@
   $('bullets').onclick = () => openBulletBook();
   $('book-close').onclick = closeBook;
   $('book').addEventListener('pointerdown', e => { if (e.target === $('book')) closeBook(); });   // outside the box
-  // Each frame: has the followed ship been a visible morph not discovered yet (a discovered one gets
-  // a new picture, after SNAPSHOT_MS), without a break, for DISCOVER_MS of play (paused time does not count, whatever the speed)? A passing
-  // detection is not a discovery.
+  // Each frame: has the followed ship been a visible morph not discovered yet, without a break, for
+  // DISCOVER_MS of play (paused time does not count, whatever the speed)? A passing detection is not
+  // a discovery. A discovered one gets a new picture (after SNAPSHOT_MS) only once after each
+  // Respawn or book pick (retake), when the ship is usually alone in a cleared world.
   const DISCOVER_MS = 1000, SNAPSHOT_MS = 1000;
   let cand = null, lastT = 0;   // cand: { name, ms } the morph the ship is in now, if it would be new
+  let retake = false;   // set by Respawn and a book pick: the next known morph held gets a new picture
   function checkDiscovery() {
     const now = performance.now(), dt = Math.min(100, now - lastT);   // capped: a hidden tab's gap
     lastT = now;
@@ -504,14 +507,16 @@
     const d = C.focus && C.stats.short.det;
     const known = d && d.name && discovered.find(x => x.name === d.name);
     if (known && !Number.isFinite(known.hue) && Number.isFinite(d.hue)) known.hue = d.hue;   // put in unseen: its colour now
-    // a new discovery; or a known morph, whose picture is (re)taken quietly after SNAPSHOT_MS
-    // (once the detection has settled), replacing the old one: once each time the ship turns into it
+    // a new discovery; or a known morph, whose picture is retaken quietly after SNAPSHOT_MS (once
+    // the detection has settled), replacing the old one: only once after a Respawn or a book pick
     if (!book.on || !d || !d.name || !isVisible(d.name)) { cand = null; return; }
+    if (known && known.img && !retake) return;   // (one with no picture yet, from [discover_morph], gets it any time)
     if (!cand || cand.name !== d.name) { cand = { name: d.name, ms: 0, taken: false }; return; }
     if (cand.taken) return;
     if (C.running) cand.ms += dt;
     if (cand.ms < (known ? SNAPSHOT_MS : DISCOVER_MS)) return;
     cand.taken = true;   // kept, so the same stretch as this morph takes no more pictures
+    retake = false;
     if (known) { known.img = snapshot(); if (book.open) renderBook(); return; }
     discover(d.name, d.hue, snapshot());
     openBook(d.name);
@@ -558,14 +563,15 @@
                                              C.morphName(p).replace(C.BOOM, '') === id) || PATTERNS.find(p => p.id === id);
   const PUT_HOW = ['center', 'random', 'far'];
   const ACTIONS = {
-    // species:<genus>:<id>: load species <id> (its rule; the world is kept), with no visible
-    // morphs; the morph book names it "<genus> <id>". ([species:<id>]: no genus.)
-    species: (g, id) => {
-      if (id === undefined) [g, id] = ['', g];
+    // species:<name>:<id>: load species <id> (its rule; the world is kept), with no visible
+    // morphs; the morph book names it "Species: <name>" (genus and species, e.g. Aquarium
+    // originale). ([species:<id>]: no name, the book shows the id.)
+    species: (name, id) => {
+      if (id === undefined) [name, id] = ['', name];
       const p = PATTERNS.find(p => C.speciesOf(p) === id);
-      if (!p) return console.warn(`script.txt: unknown species [species:${g}:${id}]`);
+      if (!p) return console.warn(`script.txt: unknown species [species:${name}:${id}]`);
       C.setPattern(p.id);
-      genus = g;
+      speciesName = name;
       vis.all = false; vis.allow.clear();
       if (!discoveredBy.has(id)) discoveredBy.set(id, []);
       discovered = discoveredBy.get(id); cand = null;
@@ -786,7 +792,7 @@
         else if (C.running && !book.open && !chapterShowing()) ms += dt;
         return ms >= v * 1000;
       };
-      t.progress = () => `${Math.min(v, Math.floor(ms / 1000))}/${v}`;
+      t.progress = () => `${Math.min(v, Math.floor(ms / 1000))}/${v} sec`;
       return t;
     },
     // energy:<n>: the energy (the score from eating dots, [dot]) has reached at least n
@@ -919,9 +925,23 @@
   // Space / a click on the message bar moves on: a message with no condition
   const byContinue = () => deferred < 0 && line >= 0 && SCRIPT[line].msg && !tests.length;
   // ?god=1: O completes the waiting line's [need] conditions at once (a line waiting only on an
-  // action, a chapter card, is left alone); P scores as if the ship ate a dot (+10 energy)
+  // action, a chapter card, is left alone); P scores as if the ship ate a dot (+10 energy); I goes
+  // to the next chapter
   const GOD = new URLSearchParams(location.search).get('god') === '1';
   function godSkip() { if (GOD && deferred < 0 && line >= 0 && tests.length && SCRIPT[line].conds.length) { showSuccess(); next(); } }
+  // I: on to the next [chapter] line. Every action on the lines in between runs first, in order
+  // (as [jump_here] does), with their messages, conditions and chapter cards skipped.
+  function godChapter() {
+    if (!GOD || line < 0 || resetting) return;
+    const cur = deferred >= 0 ? deferred : line + 1;   // a deferred line has not run its actions yet
+    const to = SCRIPT.findIndex((L, i) => i > line && L.actions.some(a => a.name === 'chapter'));
+    if (to < 0) return;
+    if (clone.held) endClone();
+    if (chapterOpen) closeChapter();
+    for (let i = cur; i < to; i++)
+      for (const a of SCRIPT[i].actions) if (a.name !== 'chapter') ACTIONS[a.name](...a.args);
+    run(to);
+  }
   // "SUCCESS" over the game window when a waiting line's [need] conditions are met: fades in, holds,
   // then slowly fades out (the .success animation, SUCCESS_MS); the game goes on meanwhile
   const SUCCESS_MS = 3000;
@@ -1146,6 +1166,7 @@
     if (type === 'book') openBook();
     else if (type === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); C.setRunning(true); }
     else if (type === 'put') { ACTIONS.put_player(name, 'random'); C.setRunning(true); }
+    if (type === 'clear_put' || type === 'put') { retake = true; cand = null; }   // its picture may be retaken
   }
   const doView = () => { flash('headup'); C.toggleHeadUp(); };
   const doSpeed = d => { flash('speed'); C.changeSpeed(d); };
@@ -1178,6 +1199,7 @@
     if (e.code === 'Space') { e.preventDefault(); if (byContinue()) next(); }
     else if (k === 'o') godSkip();
     else if (k === 'p') { if (GOD) Dots.eat(); }
+    else if (k === 'i') godChapter();
     else if (k === 'Enter') { e.preventDefault(); doPlay(); }
     else if (k === 'z') { if (lostShown()) doReset(); }   // only while Respawn shows
     else if (k === 'a') doFire();
