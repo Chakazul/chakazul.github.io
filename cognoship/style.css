@@ -19,6 +19,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple
 h1{font-size:clamp(20px,3vw,28px);margin:0;letter-spacing:-.01em;font-weight:650}
 h1 small{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.04em;margin-left:8px}
 .icons{display:flex;gap:6px}
+/* the game: h1 | score | icons, the score in the middle of the row */
+.game .title-row{display:grid;grid-template-columns:1fr auto 1fr}
+.game .title-row .icons{justify-self:end}
+.score{font-size:clamp(18px,2.4vw,24px);font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.score[hidden]{display:block;visibility:hidden}   /* keeps its grid column, so the icons stay at the end */
 button{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
   border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap}
 button:hover{border-color:var(--muted)}
@@ -121,6 +126,11 @@ button,select,input{transition:background .25s,border-color .25s}
 .game button{height:var(--ui-h);padding:0 var(--ui-padx);font-size:var(--ui-font);line-height:1;border-radius:10px;
   display:inline-flex;align-items:center;justify-content:center}
 .game button[hidden]{display:none}
+/* game buttons not highlighted: a lighter border than the page's lines, so they read on the dark page */
+:root{--btn-line:#4f4862}
+:root[data-theme="light"]{--btn-line:#cfc8da}
+.game button:not([aria-pressed="true"]):not(.major){border-color:var(--btn-line)}
+.game button:not([aria-pressed="true"]):not(.major):hover{border-color:var(--muted)}
 .game button.icon{width:var(--ui-h);padding:0}
 .game .icon svg{width:calc(var(--ui-h) * .45);height:calc(var(--ui-h) * .45)}
 .game label{font-size:calc(var(--ui-font) - 1px);gap:8px}
@@ -141,31 +151,110 @@ button,select,input{transition:background .25s,border-color .25s}
 .ship-ctl label{color:#c8c0d6}
 @media (max-width:1000px){ .ship-ctl{gap:10px} }
 @media (max-width:560px){ .ship-ctl{gap:4px} }
-/* Game: when the ship is lost, Retry and Morphs (#reset, #morphs-dead), one above the other in the
+/* Game: when the ship is lost, Respawn and Morphs (#reset, #morphs-dead), one above the other in the
    ship view, centred in the gap between the "Dissolved" box (centred, ending ~40 canvas px below
    the middle: y ~296 of 512) and the controls strip (from y 452): 58% to 88% down */
 .ship-dead{position:absolute;left:66.6667%;width:33.3333%;top:58%;height:30%;z-index:3;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--ui-h) * .3);pointer-events:none}
 .ship-dead>*{pointer-events:auto}
+/* larger, in the Fire button's "Fire" font */
+.game .ship-dead button{height:calc(var(--ui-h) * 1.4);padding:0 calc(var(--ui-padx) * 1.6);font-size:calc(var(--ui-font) * 1.3);font-weight:700;letter-spacing:.04em;border-radius:999px}
 
+/* Game: the Fire button ([bullet]), a big circle in the lower left corner of the world view;
+   translucent black until pressed, then red; the text always solid white, the ring in the bullets' colour, dimmed while it
+   can't fire */
+.fire{position:absolute;left:14px;bottom:14px;z-index:3;width:calc(var(--ui-h) * 2.6);
+  height:calc(var(--ui-h) * 2.6) !important;font-size:calc(var(--ui-font) * 1.3) !important;padding:0 !important;border-radius:50% !important;
+  font-weight:700;letter-spacing:.04em;color:#fff !important;background:rgba(0,0,0,.45) !important;
+  border:3px solid var(--fire,#fff) !important;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.fire:not(.ready){border-color:color-mix(in srgb,var(--fire,#fff) 40%,transparent) !important}
+.fire{transition:background .06s,border-color .06s}   /* the press colour comes and goes quickly */
+.fire.flash{background:#e0262b !important;border-color:var(--fire,#fff) !important;outline:none}   /* a bullet fired (by the button or C); a press that fires nothing shows nothing */
+.fire[hidden]{display:none}
+/* < > above Fire (game.js), as wide as it together */
+.bullet-nav{position:absolute;left:14px;bottom:calc(14px + var(--ui-h) * 2.6 + 8px);z-index:3;width:calc(var(--ui-h) * 2.6);
+  display:flex;gap:6px}
+.bullet-nav[hidden]{display:none}
+.game .bullet-nav button{flex:1;padding:0;font-weight:700;background:rgba(0,0,0,.45);color:#fff;border:none;
+  border-radius:999px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.game .bullet-nav button.flash{background:color-mix(in srgb,var(--fire,#fff) 70%,transparent)!important;border:none!important;outline:none}   /* switched: in the bullets' colour */
+.fire{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
+.fire-id{position:absolute;top:56%;left:0;right:0;text-align:center;font-style:italic;font-size:.7em;font-weight:600;letter-spacing:0;opacity:.9;
+  white-space:pre-line;line-height:1.05}   /* the pattern's name, below "Fire"; a two-word name on two rows */
+.fire>span:first-child{position:absolute;left:50%;top:50%;transform:translate(-50%,-110%);line-height:1;white-space:nowrap}   /* "Fire", on its own, well above the centre */
+.fire-id[hidden]{display:none}
 /* Game: the Morphs button, right-aligned in the ship view, level with the name box (canvas
-   y 72-106 of 512, centre 89 = 17.4%) */
-.ship-morphs{position:absolute;right:12px;top:17.4%;transform:translateY(-50%);z-index:3}
+   y 80-114 of 512; its text centred at y 97 = 18.95%, core.js drawOverlay): the button's text
+   centred on the same line (2 px higher, by eye) */
+.clone-tools{position:absolute;right:12px;top:calc(18.95% + var(--ui-h) * .5 + 6px);z-index:3;
+  display:grid;grid-template-columns:repeat(2,var(--ui-h));gap:6px}   /* below Morphs: ↻ ↔ / ✓ 🗙, two to a row */
+#clone-ok[hidden]{display:block;visibility:hidden}   /* keeps its place, so 🗙 stays put */
+.clone-tools[hidden]{display:none}
+#morphs.clone-on{border:2px solid var(--clone)}   /* clone mode allowed ([clone:on]) */
+#bullets.new{border:2px solid var(--new);color:var(--new)}   /* a bullet pattern added ([new_bullet]), the book not opened since: "New!" */
+#clone-tools button{width:var(--ui-h);padding:0;border-radius:50%;font-size:calc(var(--ui-font) * 1.3);line-height:1;
+  border:2px solid var(--clone)}
+.ship-morphs{position:absolute;right:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
+/* Game: the Bullets button, mirroring Morphs at the left */
+.ship-bullets{position:absolute;left:calc(66.6667% + 12px);top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
 /* Game: the morph book, centred over the whole game window; the dimmed rest closes it on a click */
 .book{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
 .book[hidden]{display:none}
-.book-box{width:min(760px,84%);max-height:92%;overflow:auto;display:flex;flex-direction:column;align-items:center;
+.book.zapping{background:none}   /* zapping in or out: the window is not dimmed yet / any more */
+/* the zap in / out frames (game.js zap): centred over the window, as the box's border */
+.zap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border:2px solid var(--major);border-radius:14px;
+  box-shadow:0 0 12px color-mix(in srgb,var(--major) 55%,transparent);pointer-events:none}
+.book-box{width:min(760px,84%);max-height:98%;overflow:hidden;display:flex;flex-direction:column;align-items:center;
   gap:calc(var(--ui-h) * .35);padding:calc(var(--ui-h) * .45) calc(var(--ui-h) * .6);
-  background:var(--raised);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  background:var(--raised);color:var(--ink);border:2px solid var(--major);border-radius:14px;
+  box-shadow:0 0 12px color-mix(in srgb,var(--major) 55%,transparent),0 10px 40px rgba(0,0,0,.5)}   /* as the zap frames */
+.book-box>*{flex:none}   /* nothing in the book shrinks (fitBook shrinks the pictures instead) */
+.book-box{position:relative}
+.book-species{position:absolute;right:calc(var(--ui-h) * .6);bottom:calc(var(--ui-h) * .45);font-size:calc(var(--ui-font) * 1.15);color:var(--ink);letter-spacing:.04em}
+.book-species[hidden]{display:none}
+.book-box.wide{width:min(1040px,94%)}   /* the bullet book: names with pictures need the room */
 .book-box h2{margin:0;font-size:calc(var(--ui-font) * 1.4);font-weight:650;letter-spacing:-.01em}
 .book-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:calc(var(--ui-h) * .25);width:100%}
 .book-slot{display:flex;align-items:center;justify-content:center;gap:.45em;min-height:calc(var(--ui-h) * 1.5);padding:4px 6px;
   border:1px solid var(--line);border-radius:10px;font-size:calc(var(--ui-font) * 1.15);font-style:italic;overflow-wrap:anywhere}
 .book-slot.empty{color:var(--faint);font-style:normal}
-.book-slot.new{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
+.book-slot.empty{position:relative}
+/* an undiscovered morph: a big ?, centred in the whole slot */
+.book-slot.empty::after{content:'?';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:calc(var(--ui-font) * 3);font-weight:650}
+.book-slot.new{border-color:var(--new);box-shadow:inset 0 0 0 2px var(--new)}   /* the morph just discovered: green */
+:root{--new:#3ddc6a}
+:root[data-theme="light"]{--new:#1e9e46}
 .book-slot .dot{flex:none;width:.6em;height:.6em;border-radius:50%}
-.book-slot.pick{cursor:pointer}
+.book-slot{flex-direction:column;padding:6px}
+.book-slot .label{display:flex;align-items:center;justify-content:center;gap:.45em}
+.book-slot .bpic{flex:none;image-rendering:auto}   /* a bullet pattern's picture, before its name */
+.book-slot .pic{max-width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:6px;overflow:hidden}
+.book-slot .pic img{display:block;max-width:100%;max-height:100%}
+.book-slot .pic.blank{background:#000}
+.book-slot.pick{cursor:pointer;position:relative}
+/* Game: key badges while Shift or Alt is held (game.js showKeys) */
+.kbd,:root.keys [data-key]::after{position:absolute;z-index:4;font:700 10px/1 system-ui,sans-serif;font-style:normal;letter-spacing:0;
+  color:#fff;background:rgba(0,0,0,.78);border:none;border-radius:4px;padding:2px 4px;pointer-events:none}
+:root.keys [data-key]::after{content:attr(data-key);top:2px;right:2px}
+.msg .mark{position:relative}
+:root.keys .kt[data-key]::after{top:-.7em;right:auto;left:100%;margin-left:1px}   /* a button's badge at the top right of its text (Fire, Respawn, Choose) */
+.kt{position:relative}
+:root.keys .msg .mark[data-key]::after{top:-.75em;right:auto;left:85%}   /* spc, at the top right of ≫ */
+.kbd-slider{transform:translate(-50%,-100%)}   /* centred on the slider's end, just above its track */
 .book-slot.pick:hover{border-color:var(--muted);background:color-mix(in srgb,var(--accent) 10%,var(--raised))}
+/* Game: major actions (Respawn, Choose, a pickable morph in the book): a thick light cyan border */
+:root{--major:#a8f4ff}
+:root[data-theme="light"]{--major:#3cc6d8}
+.game .major,.game .major:hover,.book-slot.pick,.book-slot.pick:hover{border:3px solid var(--major)}
+.game .major:hover,.book-slot.pick:hover{background:color-mix(in srgb,var(--major) 14%,var(--raised))}
+.book-slot.pick.clone,.book-slot.pick.clone:hover{border:3px solid var(--clone)}   /* a morph to clone ([clone:on]): pink */
+.book-slot.pick.current,.book-slot.pick.current:hover{border:3px solid var(--current)}   /* the bullet in use: yellow */
+#book-grid.bullets .book-slot.pick.new:not(.current),#book-grid.bullets .book-slot.pick.new:not(.current):hover{border:3px solid var(--new)}   /* a pattern [new_bullet] added: green, until the book is closed */
+:root{--current:#ffd23f}
+:root[data-theme="light"]{--current:#c99a00}
+:root{--clone:#ff7ad9}
+:root[data-theme="light"]{--clone:#d63fa8}
 
 /* Game: a chapter's title card ([chapter]), centred over the game window, faded in and out
    (the duration is FADE_MS in game.js). Dark blue brushed metal with a rounded silver border;
@@ -174,8 +263,16 @@ button,select,input{transition:background .25s,border-color .25s}
   background:rgba(0,0,0,.5);opacity:0;transition:opacity 1.5s ease;pointer-events:none}
 .chapter.show{opacity:1}
 .chapter[hidden]{display:none}
+/* "SUCCESS" (a line's [need] conditions met): fades in, holds, then slowly fades out (SUCCESS_MS in game.js) */
+.success{position:absolute;inset:0;z-index:7;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.success[hidden]{display:none}
+.success-box{padding:calc(var(--ui-h) * .5) calc(var(--ui-h) * 1.4);border-radius:16px;border:3px solid #3ddc6a;
+  background:rgba(6,24,14,.82);color:#3ddc6a;font-size:calc(var(--ui-font) * 2.6);font-weight:800;letter-spacing:.18em;
+  box-shadow:0 0 28px rgba(61,220,106,.45),0 10px 40px rgba(0,0,0,.6);text-shadow:0 0 12px rgba(61,220,106,.6)}
+.success.show .success-box{animation:success 3s ease forwards}
+@keyframes success{0%{opacity:0}10%{opacity:1}35%{opacity:1}100%{opacity:0}}
 .chapter-box{position:relative;overflow:hidden;text-align:center;
-  padding:calc(var(--ui-h) * .7) calc(var(--ui-h) * 1.6);border-radius:18px;
+  padding:calc(var(--ui-h) * .85) calc(var(--ui-h) * 1.6);border-radius:18px;
   border:2px solid rgba(190,210,255,.75);
   box-shadow:0 0 0 1px rgba(10,20,50,.9),0 0 0 5px rgba(120,150,220,.18),0 12px 60px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.25);
   background:
@@ -183,22 +280,26 @@ button,select,input{transition:background .25s,border-color .25s}
     radial-gradient(120% 90% at 30% 0%,rgba(140,175,255,.35),transparent 60%),           /* top light */
     linear-gradient(160deg,#0d2257 0%,#081639 45%,#0f2a6b 70%,#061031 100%)}             /* dark blue */
 .chapter-no{position:relative;font-size:calc(var(--ui-font) * 1.5);letter-spacing:.22em;text-transform:uppercase;color:#aebfe6}
-.chapter-title{position:relative;margin-top:.15em;font-size:calc(var(--ui-font) * 3.2);font-weight:750;letter-spacing:-.01em;line-height:1.15;
+.chapter-title{position:relative;margin-top:.15em;font-size:calc(var(--ui-font) * 3.2);font-weight:750;letter-spacing:-.01em;line-height:1.2;padding-bottom:.18em;   /* the gradient (background-clip: text) covers only the box: room for the tails of g, y, p */
   color:#e6ecf8;background:linear-gradient(180deg,#ffffff 0%,#dfe7f5 38%,#8f9db8 52%,#e9eef8 70%,#b7c3da 100%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
   filter:drop-shadow(0 2px 2px rgba(0,0,0,.6))}
 
 /* Game: under the screen panel, outside it, one row (.below): the message area under the world
-   view (the canvas's left 2/3), the controls centred under the ship view (its right third). The
-   canvas sits 11 px inside the panel (padding + border). */
+   view, as wide as it (the canvas's left 2/3), the controls centred under the ship view (its right
+   third). The canvas sits 11 px inside the panel (padding + border). */
 .below{display:flex;align-items:flex-start;margin-top:10px;padding-left:11px}   /* top: the controls stay put however many lines the message has */
-.below .msg{flex:none;width:calc((100% - 11px) * 2 / 3);padding-right:12px;font-size:18px;line-height:1.35;color:var(--ink);
+.below .msg{flex:none;width:calc((100% - 11px) * 2 / 3);padding-right:12px;font-size:22px;line-height:1.35;color:var(--ink);
   min-height:var(--ui-h);padding-top:calc((var(--ui-h) - 1.35em) / 2)}   /* the first line centred on the buttons, however many lines follow */
 .below .msg .hint{color:var(--faint)}
 /* a message waiting on a condition (Space does not move it on): cyan, darker on the light page */
 :root{--wait:#4fe3f0}
 :root[data-theme="light"]{--wait:#0b8494}
 .below .msg.wait{color:var(--wait)}
+/* a message change fades out, then in (game.js say, MSG_FADE_MS) */
+.below .msg{transition:opacity .3s ease}
+.below .msg.fade{opacity:0}
+.below .msg.next{cursor:pointer;user-select:none;-webkit-user-select:none}   /* a click moves on */
 .below .controls{flex:none;width:calc((100% - 11px) / 3);min-height:var(--ui-h);margin-top:0;justify-content:center;gap:8px 14px}
 /* fullscreen: --cw is the canvas width (as :root.fs .canvas-box), centred in the window */
 :root.fs .wrap.game{flex-direction:column;--cw:min(calc(100vw - 16px),max(160px,calc((100dvh - var(--rows,120px)) * 9 / 4)))}
@@ -208,6 +309,6 @@ button,select,input{transition:background .25s,border-color .25s}
 @media (max-width:560px){   /* a phone: the message above the controls, both full width */
   .below{flex-direction:column;align-items:stretch;padding-left:0}
   .below .msg,.below .controls{width:auto}
-  .below .msg{font-size:15px}
+  .below .msg{font-size:18px}
   .below .controls{margin-top:6px}
 }

@@ -3,10 +3,10 @@
 tools/extra_patterns.json (then rerun tools/gen_aquarium.py).
 
 Needs numpy, scipy and Pillow, e.g. the complexity venv:
-  ~/github/complexity/.venv/bin/python tools/from_screenshot.py "../assets/screenshots/Z18A9R trio.png" \\
-      --code Z18A9R --name trio [--add]
+  ~/github/complexity/.venv/bin/python tools/from_screenshot.py "../assets/screenshots/Z18A9R trias.png" \\
+      --code Z18A9R --name trias [--add]
 
-Steps (the ones used for Z18A9R trio):
+Steps (the ones used for Z18A9R trias):
   1. read the cell grid off the screenshot: the pixel period (screen px per cell) from the
      spectrum of the image's edges, its phase from where the edges fall, then one median value
      per cell, RGB = the three channels; dim grey cells (the zoom frame, drawn on top) and
@@ -270,7 +270,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('png')
     ap.add_argument('--code', required=True, help='rule code in 233.json, e.g. Z18A9R')
-    ap.add_argument('--name', required=True, help='form name, e.g. trio')
+    ap.add_argument('--name', required=True, help='form name, e.g. trias')
     ap.add_argument('--R', type=int, default=18, help='the R the screenshot was taken at (default 18)')
     ap.add_argument('--px', type=float, help='screen px per cell (default: detected)')
     ap.add_argument('--gammas', default='1,1.4,1.8,2.2',

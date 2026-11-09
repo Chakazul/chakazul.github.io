@@ -6,7 +6,7 @@
     "keys"   : ["t", "mass", "mR", "mG", "mB", "speed", "omega"],
     "segs"   : [
         {
-            "morph": "gyrus",
+            "morph": "gyrans",
             "gap"  : true,
             "data" : [
                 [  0  , 2.678, 0.9413, 0.7357, 1.001 , 0.1331, 0.2751],

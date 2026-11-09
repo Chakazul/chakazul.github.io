@@ -21,49 +21,79 @@ const Page = (function () {
   function fillRange(el) { el.style.setProperty('--pct', 100 * (el.value - el.min) / (el.max - el.min) + '%'); }
   document.addEventListener('input', e => { if (e.target.type === 'range') fillRange(e.target); });
 
-  // Background music, royalty free: a playlist looped with 10 s of silence between tracks. The
+  // Background music, royalty free: a playlist of TRACKS (setPlaylist; the first alone at first),
+  // played in turn and looped, with 10 s of silence between plays. The
   // sound button (the lab's Stars, the game's Music) turns the music on or off; in the lab the
-  // star field follows it too. Off by default; browsers
+  // star field follows it too. Off by default (then as last chosen); browsers
   // only let audio start after a user gesture, so it begins on the first click, tap or key.
+  // Each track is fetched only when it starts to play (no src, preload none, until then).
   const TRACKS = ['assets/music/rexlambo-long-way.mp3',                                 // "Long Way" by Rexlambo
                   'assets/music/arthur-vyncke-a-few-jumps-away.mp3',                     // "A Few Jumps Away" by Arthur Vyncke
                   'assets/music/chris-zabriskie-out-of-the-skies-under-the-earth.mp3',  // "Out of the Skies, Under the Earth" by Chris Zabriskie
                   'assets/music/stellardrone-billions-and-billions.mp3'];                // "Billions and Billions" by Stellardrone
   const TRACK_GAP_MS = 10000;
   const music = new Audio();
-  music.volume = 0.5;
-  let track = 0, gapTimer = null;
-  music.src = TRACKS[track];
-  music.addEventListener('ended', () => {
-    track = (track + 1) % TRACKS.length;
-    music.src = TRACKS[track];
-    gapTimer = setTimeout(() => { gapTimer = null; if (soundOn) music.play().catch(() => {}); }, TRACK_GAP_MS);
+  const VOLUME = 0.5, MUSIC_FADE_MS = 1500;   // a switch to another track fades the old one out first
+  music.volume = VOLUME;
+  music.preload = 'none';
+  let track = 0, gapTimer = null, loaded = -1;   // loaded: the track in music.src
+  let playlist = [0], pos = 0;   // the tracks played in turn, looped (setPlaylist); pos: track's place in it
+  // Play the current track, giving it its file first if it has not got it yet.
+  let fadeTimer = null;
+  function play() {
+    clearInterval(fadeTimer); fadeTimer = null; music.volume = VOLUME;
+    if (loaded !== track) { music.src = TRACKS[track]; loaded = track; }
+    music.play().catch(() => {});
+  }
+  music.addEventListener('ended', () => {   // the playlist's next track (or the same one), after the gap
+    pos = (pos + 1) % playlist.length; track = playlist[pos];   // its file is fetched when it starts (pos -1: the first)
+    gapTimer = setTimeout(() => { gapTimer = null; if (soundOn) play(); }, TRACK_GAP_MS);
   });
-  // On or off at each page load: the button's data-default ("on" in the game), else off (the lab).
-  // The choice is not remembered.
+  // On or off as last chosen in this browser (localStorage, one key per page: the game's Music,
+  // the lab's Stars); never chosen: the button's data-default ("on"), else off (both pages now).
+  const SOUND_KEY = `cognoship-sound-${$('sound')?.dataset.label ? 'game' : 'lab'}`;
   let soundOn = $('sound')?.dataset.default === 'on';
-  // The button's label: data-label (the game: Music), else Stars.
+  try { const v = localStorage.getItem(SOUND_KEY); if (v) soundOn = v === 'on'; } catch (e) {}
+  // The button: the game's Music (data-label, a note icon in the title row), else the lab's Stars.
   function syncSound() {
     if ($('sound')) {
-      // data-label (the game: Music): the label alone, highlighted when on; else "Stars: ON / OFF"
-      const label = $('sound').dataset.label;
-      $('sound').textContent = label || `Stars: ${soundOn ? 'ON' : 'OFF'}`;
+      // data-label (the game: Music, an icon button): unchanged, highlighted when on; else "Stars: ON / OFF"
+      if (!$('sound').dataset.label) $('sound').textContent = `Stars: ${soundOn ? 'ON' : 'OFF'}`;
       $('sound').setAttribute('aria-pressed', soundOn);
     }
     if (!soundOn) music.pause();
-    else if (!gapTimer) music.play().catch(() => {});   // in a gap between tracks, the timer starts the next
+    else if (!gapTimer) play();   // in a gap between tracks, the timer starts the next
   }
-  function toggleSound() { if ($('sound')) flash('sound'); soundOn = !soundOn; syncSound(); }
+  function toggleSound() {
+    if ($('sound')) flash('sound');
+    soundOn = !soundOn; syncSound();
+    try { localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off'); } catch (e) {}
+  }
   if ($('sound')) $('sound').onclick = toggleSound;
   // Skip to the next track now (also from a gap between tracks); while off, it plays when turned on.
-  function nextTrack() {
+  function nextTrack() { switchTo((track + 1) % TRACKS.length); }
+  // Switch to track i now: the one playing fades out (MUSIC_FADE_MS), then i starts; while off, i is
+  // the one that plays when turned on.
+  function switchTo(i) {
     clearTimeout(gapTimer); gapTimer = null;
-    track = (track + 1) % TRACKS.length;
-    music.src = TRACKS[track];
-    if (soundOn) music.play().catch(() => {});
+    track = i;
+    if (!soundOn) { music.pause(); return; }
+    if (music.paused) { play(); return; }
+    if (fadeTimer) return;   // already fading out: the new track starts when it ends
+    const v0 = music.volume, t0 = performance.now();
+    fadeTimer = setInterval(() => {
+      const k = (performance.now() - t0) / MUSIC_FADE_MS;
+      if (k < 1) { music.volume = v0 * (1 - k); return; }
+      clearInterval(fadeTimer); fadeTimer = null;
+      music.pause();
+      if (soundOn) play();
+    }, 40);
   }
-  const startMusic = () => { if (soundOn && music.paused && !gapTimer) music.play().catch(() => {}); };
-  for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, startMusic, { capture: true });   // retried until it plays
+  const startMusic = () => { if (soundOn && music.paused && !gapTimer) play(); };
+  // retried on every press until it plays; on window, capturing, and added before the pages' own
+  // handlers, so it sees every press first, even one a handler swallows (the game's chapter card,
+  // closed by Space or a click, stops the event there)
+  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, startMusic, { capture: true });
   syncSound();
 
   // theme and fullscreen
@@ -106,5 +136,19 @@ const Page = (function () {
     console.error(err);
   }
 
-  return { $, flash, fillRange, showError, toggleSound, nextTrack, get soundOn() { return soundOn; } };
+  // The playlist becomes `list` (0-based track numbers; the game's [music:<list>:<play>] gives
+  // n - 1), played in turn and looped. start: switch to that track now (from its beginning, unless
+  // it is the one playing; while the music is off, it is the one that plays when turned on). No
+  // start: the track playing now carries on, and the list follows it (from the track after it if
+  // it is in the list, else from the list's first).
+  function setPlaylist(list, start) {
+    list = list.filter(i => i >= 0 && i < TRACKS.length);
+    if (!list.length) return false;
+    playlist = list;
+    if (start !== undefined && start >= 0 && start < TRACKS.length && start !== track) switchTo(start);
+    pos = list.indexOf(track);   // -1 (not in it): the next is the list's first
+    return true;
+  }
+  const setTrack = i => setPlaylist([i], i);
+  return { $, flash, fillRange, showError, toggleSound, nextTrack, setTrack, setPlaylist, TRACKS, get soundOn() { return soundOn; } };
 })();

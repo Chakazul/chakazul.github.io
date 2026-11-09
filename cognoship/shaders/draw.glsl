@@ -13,6 +13,13 @@ precision highp sampler2D;
 precision highp int;
 
 uniform sampler2D uState;
+uniform sampler2D uDots;    // dots channel (R), shown in uDotRGB over the creatures where uDotsOn
+uniform float uDotsOn;
+uniform vec3  uDotRGB;
+uniform sampler2D uBullets; // bullets channel (R), shown in uBulletRGB over everything where uBulletsOn
+uniform float uBulletsOn;
+uniform vec3  uBulletRGB;
+uniform float uDotOff;      // the dots' drift to the left, cells: board x shows dot x + uDotOff
 uniform vec3  uFocus;       // (col, row, on): the focused creature's CoM; off = blank zoom view
 uniform ivec2 uSize;        // board (W, H)
 uniform vec2  uCanvas;      // canvas (w, h), px
@@ -21,6 +28,7 @@ uniform vec4  uZoom;        // (x0, y0, edge, px per cell), top-left origin
 uniform mat2  uView;        // view vector (right, down) -> board vector (col, row)
 uniform float uStars;       // 1 = star field on
 uniform float uTime;        // seconds, for the star drift
+uniform vec3  uBg;          // the background behind the board (glsim.js setBackground), black by default
 
 out vec4 fragColor;
 
@@ -30,7 +38,16 @@ out vec4 fragColor;
 // first keeps the % operands non-negative (negative % is undefined in GLSL ES 3.00).
 vec3 cellColor(vec2 cell) {
     ivec2 q = (ivec2(floor(cell)) + uSize * 8) % uSize;
-    return texelFetch(uState, q, 0).rgb;
+    vec3 c = texelFetch(uState, q, 0).rgb;
+    if (uDotsOn > 0.5) {
+        // linear across x, so the drift is smooth rather than whole cells at a time
+        float x = cell.x + uDotOff - 0.5, f = fract(x);
+        int x0 = (int(floor(x)) + uSize.x * 8) % uSize.x, x1 = (x0 + 1) % uSize.x;
+        float v = mix(texelFetch(uDots, ivec2(x0, q.y), 0).r, texelFetch(uDots, ivec2(x1, q.y), 0).r, f);
+        c = mix(c, uDotRGB, v);
+    }
+    if (uBulletsOn > 0.5) c = mix(c, uBulletRGB, texelFetch(uBullets, q, 0).r);
+    return c;
 }
 
 uint hash(uvec3 v) {
@@ -76,10 +93,11 @@ vec3 stars(vec2 b, float pxPerCell) {
 }
 
 // Stars only show through where the board is (nearly) empty.
+// Stars and the background colour (uBg, black by default) only show where the board is (nearly) empty.
 vec3 withStars(vec3 col, vec2 b, float pxPerCell) {
-    if (uStars < 0.5) return col;
     float cover = clamp(max(col.r, max(col.g, col.b)) * 4.0, 0.0, 1.0);
-    return col + stars(b, pxPerCell) * (1.0 - cover);
+    vec3 under = uBg + (uStars < 0.5 ? vec3(0.0) : stars(b, pxPerCell));
+    return col + under * (1.0 - cover);
 }
 
 void main() {

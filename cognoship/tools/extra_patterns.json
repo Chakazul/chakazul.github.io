@@ -1,7 +1,7 @@
 [
  {
   "code": "Z18A9R",
-  "name": "trio",
+  "name": "trias",
   "R": 18,
   "source": "Reverse-engineered from Z18A9R trio.png (a Cognoship screenshot at R = 18) by tools/from_screenshot.py: 4.89 px per cell, values ** 1.8, scaled by 1.0, settled for 300 steps under the LeniaF rule; 1 creature(s), mass within 0.27% for 500 more steps, shape similarity 0.96.",
   "cells": [
@@ -30,6 +30,17 @@
    "11.uJqNyG.FyOrIpHrPpVK11.$11.vBwMqU2.yO.2yO2.SpC9.$8.pQLyOwMyOpT2.yOqGyO3.yOxQtVpV7.$7.qPtCsD3yOP2.2yOqE2.xK3yOsBrEF5.$6.pHsPwVpMIrHH8.rU2yOtV.GtD5.$6.rQvSM8.pPqRpA2.HP3.wVtDK3.$5.WL8.qSwW4yOrF4.tUyOxTpN3.$5.qAP.pQuK13yOvDMpCuB2yHqIpG2.$4.CwOyOyJvL15yOyIvRvPwAtMqKsD2.$4.QvDyOxBsUwL4yOtJN.TsKvSyL5yOxApP.qCvH2.$4.StQuK3.rNyB2yOqX5.OvJ4yOxRrKHpNyL2.$4.ERD4.wC2yOrT5.QuWyC4yOsNRWxXqL.$4.NqKpL3.uByN2yOrR5.pTvRxS4yOqKWtRsIsHC$4.tIvHsM3.xE3yOrM6.sVwAyK3yOxQwWxPqC.B$10.xS3yOrJ6.qTvJyJ2yOwAwPwRxQqX2.$4.uCwBsK3.xF3yOrN6.sPwT3yOxHrAxExGqV.L$4.WqGpB3.uK3yOrS5.MwA5yOsBErGsLtD.$4.GH5.wJ2yOrV6.vGyM4yOsFS.vIqM.$4.rOvRqS3.rVxW2yOrD5.SvW5yOpWA.wOO.$4.rCyCyO2tQwU4yOtFM2.sHwC6yOxHE.uKuOD.$4.sP2yOvXwJ16yOrE.vDxJxNrV2.$4.DP.qFtBwCyN12yOvMS2.wAyOuFpG2.$5.J9.qEwH4yOrA4.pHyLwXpU3.$5.qWvCtL9.pEqJR3.qFrFqHuLyCsIB3.$6.qSwTxT12.OxSyOyNvOuMtAL4.$7.qEyOrX3yON2.tSyOqF2.tD2yOxB2.R5.$8.sI.3yOqC2.yOxQyO3.yOxQ9.$11.yOtVsF2.yOsAyOyH.qNwArE9.$11.xDrJyO2.yOuCvAsXqDpC11.!",
    "33.$33.$33.$33.$33.$33.$33.$33.$25.pIK6.$9.vJyJ2yOsRB3.qGxP6yOvGpN5.$9.tXyE4yOwXvPxB9yOuBI4.$9.wK17yOyHqH4.$8.uR19yOsQ4.$8.wFyOsR.LuJyI4yOxRvCxT6yOuA4.$8.wIxQpQ2.sSxW4yOtMrOvEyE5yOuJC3.$8.wDyOsF2.uGyJ4yOwRuExL6yOuDB3.$8.uO19yOsP4.$8.DwM17yOyIqG4.$9.uEyD4yOxAvSwX9yOuAI4.$9.vFyI2yOsR4.pIwW6yOvBpK5.$11.B13.QJ6.$33.$33.$33.$33.$33.$33.$33.$33.!",
    "33.$33.$8.PuVwGxHyL5yOyCyOxErPM10.$7.rXwHyI12yOvXsWqQJ7.$5.qIvAxW17yOvApN6.$4.rSwIyJ19yOvHpP5.$3.rKwMyK21yOtRqUO3.$2.pGvDyF22yOyEuXrAC2.$2.sTxH25yOsTP2.$.pHvJyJ8yOyBsNsAtRwHyE11yOuGpD2.$.sBxD7yOvIQ6.pHvOyN8yOwApTD.$.uAyD6yOqG9.UwO8yOyJrAM.$KvHyK5yOqQ11.tI9yOuKqBA$pKvXyN4yOwLQ11.pEyL9yOtGK$pSwF5yOuPD12.yJ9yOtVM$pLwByN4yOvFN11.qFyL8yOwQrBC$NvKyL5yOqP11.tS9yOtHpC.$.uFyF6yOrJA8.UwN9yOrML.$.sIxI7yOxKpV6.pEvQyM8yOyCqLE.$.pQvRyL9yOtMrXtMvPxLyK10yOuWpO2.$2.tDxO25yOsMT2.$2.pMvKyI23yOuJqJB2.$3.rNwQyM21yOtWqKJ3.$4.rXwNyL19yOuBpN5.$5.qRvJyC17yOuRpI6.$7.sEwIyL12yOxTvMtApG7.$9.vHxBxOyL5yOyKyOvCqGE10.$33.$33.!"
+  ]
+ },
+ {
+  "code": "PJ1EF7",
+  "name": "lithos",
+  "R": 18,
+  "source": "Reverse-engineered from PJ1EF7 lithos.png (a Cognoship screenshot at R = 18) by tools/from_screenshot.py: 4.89 px per cell, values ** 1.8, scaled by 0.95, settled for 300 steps under the LeniaF rule; 1 creature(s), mass within 0.78% for 500 more steps, shape similarity 0.95.",
+  "cells": [
+   "29.$29.$12.D2.uI2yOrA10.$10.yO6.yOrD.pJ8.$9.yO10.2yO7.$12.4yOrW4.2yO6.$11.6yO12.$10.7yOxNqGxTvF8.$8.14yO7.$7.16yO6.$7.16yO2.yO3.$6.17yO2.yO3.$6.5yO6.6yO6.$6.4yO8.5yO6.$5.4yO10.5yO5.$5.4yO10.5yO5.$4.yH4yO10.5yO5.$4.5yO10.4yO6.$4.5yO10.4yO6.$5.5yO8.4yOwD6.$5.6yO6.J4yO7.$2.yO2.17yO7.$2.yO2.17yO7.$5.yE15yO8.$6.14yO9.$3.yO3.yOyK2.yJ6yOwW10.$4.yO7.5yO12.$12.pS3yO13.$7.3yO8.yO10.$7.3yO7.yO11.$12.3yO14.$29.$29.!",
+   "29.$29.$29.$29.$29.$29.$12.6yO11.$9.11yO9.$8.13yO8.$10.pC10yOwE7.$10.12yO7.$9.14yO6.$8.6yOrHpA8yO5.$7.sW3yO5.L4yOyN2yO5.$7.3yO7.wR3yO8.$7.2yO9.3yO8.$7.2yOqI9.2yO8.$7.3yO9.2yO8.$7.4yO7.tE2yO8.$4.yO2.4yOsE5.tN3yO8.$4.vL7yOJD6yO9.$5.14yO10.$6.12yO11.$7.11yO11.$8.11yOsW9.$8.qV10yO10.$10.wA5yOwQ12.$29.$29.$29.$29.$29.$29.!",
+   "10.7yOR11.$8.12yO9.$7.15yOuE6.$6.18yO5.$5.20yOtO3.$5.21yOrO2.$4.10yO5.8yO2.$4.9yO7.8yO.$3.10yO7.8yO.$3.10yO7.uG7yO.$2.xN10yO7.8yOuE$2.10yO7.9yOxS$2.9yOG7.9yOtI$.10yO8.9yO.$.9yO9.9yO.$.9yO9.9yO.$10yO8.10yO.$9yOqS8.9yOB.$9yO9.9yO2.$9yO8.10yO2.$9yO8.9yO3.$9yO7.10yO3.$8yO7.11yO3.$7yO7.E10yO4.$8yO7.10yO4.$yN7yO7.9yOuE4.$.8yO5.uP9yO5.$.vL21yOrC5.$2.xL20yO6.$3.vC18yO7.$5.16yO8.$7.xS12yO9.$10.uE7yO11.!"
   ]
  }
 ]

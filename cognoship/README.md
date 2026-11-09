@@ -14,6 +14,8 @@ Two pages share one engine:
 - **`lab.html`, the lab.** The experiment version, with every control: stats, Record /
   Download, morph detection, tuning. The controls below are the lab's.
 
+In the game, clicking the selected **R G B** patch again (or pressing its key again) switches the tool from masking to erasing ("recycle": the channel's mass under the circle set to 0, as the lab's Erase); the patch turns striped and reads −R / −G / −B. Clicking it again, or another channel, goes back to masking. The cursor is a hand over the patches. Holding **Shift** or **Alt** shows each control's key in a small badge at its corner (sliders: one at each end; the R G B patches: 1–3).
+
 **Run:** serve this folder over http and open either page. They fetch their shaders, so
 `file://` won't work.
 
@@ -62,7 +64,7 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
   the physics, only how many steps you see per second. The time step dt = 1/T is a separate, fixed
   property of the rule (T = 2, see below): it sets how far the simulation advances per step, and
   changing it changes the dynamics.
-- **Zoom**: screen px per cell in the ship view (2× to 16×; the default is the slot nearest
+- **Zoom**: screen px per cell in the ship view (2× to 16×, the game 3× to 12×; the default is the slot nearest
   4 R across, 6× = 64 cells at R = 18).
 - **Species** and **Morph** pickers. A species is a rule code, named in the picker as Aquarium
   original (5N7KKM), Aquarium replicating (VT049W), Aquarium spinning (Z18A9R), Aquarium dancing (KH97WU),
@@ -71,7 +73,7 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
   world with its first morph. A morph (limus, …) only changes what Reset and Add (`X`) put in, and
   keeps the world. Picking a morph in the list (even the current one) also adds it, like Add;
   ▲ ▼ or `C` `V` only step through the morphs; `Shift`+`C` / `Shift`+`V` step to the
-  previous / next species (and reset, as picking it). 62 entries of the aquarium collection from 5N7KKM to
+  previous / next species (and reset, as picking it). 63 entries of the aquarium collection from 5N7KKM to
   HAESRE, in file order (the last five codes added 2026-11-05, not yet checked in the browser or
   numpy; KZ2BLD's unnamed second morph is named *virgatus* here, its *gyrans tachus* is *gyrans*,
   and a repeated name gets a number: XEH4YR *auctus 2*, HAESRE *zigzag 2*). 5N7KKM is the original Aquarium, found by globally
@@ -84,19 +86,23 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
   - **VT049W gyrans 💥** is the original self-replicating Aquarium. The other VT049W
     forms were stabilised from it. At R = 18 it divides into 3–4 creatures of about its own mass
     within ~400 steps, and the population then holds at 3–4 (checked to 4,000 steps).
-  - **Z18A9R trio, lithos and tardus** were found in Cognoship itself (at R = 18). They come after
+  - **Z18A9R trias, lithos and tardus** were found in Cognoship itself (at R = 18). They come after
     the Z18A9R forms and were rebuilt with `tools/from_screenshot.py` from the screenshots in
-    `assets/screenshots/`. All three use a brightness correction of 1.8; the size is 1.0 for trio
+    `assets/screenshots/`. All three use a brightness correction of 1.8; the size is 1.0 for trias
     and lithos and 1.05 for tardus, with shape similarity 0.96, 0.93 and 0.92.
-    - **trio:** three lobes, drifting slowly.
+    - **trias** (was *trio*): three lobes, drifting slowly.
     - **lithos:** a round, still disc. Without the correction it died or became a spinning
       crescent.
     - **tardus:** a round form with a green and red core.
+  - **PJ1EF7 lithos** was found in Cognoship too (at R = 18) and rebuilt the same way: correction
+    1.8, size 0.95, shape similarity 0.95. A round disc with a yellow and green core. In the numpy
+    check it keeps its mass for 500 steps, then at about 600-700 steps turns into the crescent
+    the other PJ1EF7 morphs have. Every other correction and size became the crescent outright.
     Extra patterns live in `tools/extra_patterns.json`.
   - **To add another pattern from a screenshot** of the world view (default zoom is fine), run
     `tools/from_screenshot.py`. It needs numpy, scipy and Pillow, e.g. the complexity venv:
     ```
-    ~/github/complexity/.venv/bin/python tools/from_screenshot.py shot.png --code Z18A9R --name trio --add
+    ~/github/complexity/.venv/bin/python tools/from_screenshot.py shot.png --code Z18A9R --name trias --add
     python3 tools/gen_aquarium.py
     ```
     It reads the cell grid off the image. Screenshots look brighter than the cell values (about
@@ -109,9 +115,9 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
       radial profiles, which ignores rotation.
     It writes `seed.png`, `scales.png` and `verify.png` to look at; see the script's docstring for
     the options. A run takes about 2.5 minutes.
-  - Left out: *G6G6CR metamorpha beaked*, *KH97WU dot*, and *VT049W gyrotachus*, which is a
+  - Left out: *G6G6CR metamorpha beaked* and *VT049W gyrotachus*, which is a
     different species (its kernel 0 has μ = 0.302, not VT049W's 0.272). The three unnamed Z18A9R entries are
-    *gyrus*, *paragyrans* and *antigyrans*; VT049W's two *para* entries are shown as *paralimus* and
+    *gyrans*, *paragyrans* and *antigyrans*; VT049W's two *para* entries are shown as *paralimus* and
     *paragyrans*. Also renamed: G6G6CR *fortified* → *munitus*, KH97WU *antipara* → *antigyrans* and
     *dual* → *impetus+gyrans*, HAESRE *anti* → *antigyrans* and *para* → *paragyrans*.
   - Every pattern runs at the game's R (18 by default), its cells resampled from the entry's own
@@ -146,6 +152,123 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
 - `?radius=4`: mask radius at start, in cells (default 2.5 · R / 12, rounded to 0.5).
 - `?headup=vel|axis`: start in heading-up or body-axis-up view (`1` = `vel`).
 - `?debug=1`: show GPU ms per step and the tap count in the readout.
+- `?god=1` (the game), test aids: `O` completes the waiting line's `[need]` conditions at once;
+  `P` scores as if the ship ate a dot (+10 energy).
+- `?showall=1` (the game): a grey circle around every detected object in the world view, besides the
+  ship's yellow one (the one under the pointer brighter).
+
+## The game's script (`script.txt`)
+
+The game (`index.html`) is driven by `script.txt`, read when the page loads and run line by line
+(`game.js`, `ACTIONS` and `CONDITIONS`). The world starts empty with no species, so the script
+sets everything up.
+
+### Syntax
+
+- **A line** is an optional message followed by any number of tokens: `Message text [token][token]`.
+  Tokens are only read **at the end of the line**. A `[...]` in the middle of the text stays as text.
+- **A token** is `[name]` or `[name:arg:arg...]`. It is either an action, `[name...]`, which runs
+  when the line is reached, in order, or a condition, `[need:name...]`, which is checked every frame.
+  The line waits until all of its conditions hold.
+- **A line with text** shows it in the message bar under the world view. If it has no conditions,
+  Space or a click on the message bar moves on. If it has conditions, they move it on; Space and
+  clicks do nothing then. If its conditions already hold when the line is reached (e.g. the energy
+  is there already), it is shown in the waiting colour but moves on by Space or a click, ending with ≫.
+- **A line of tokens only** shows nothing new, so the last message stays. It runs its actions and
+  moves on at once, or when its conditions hold.
+- **Text styles:** `_italic_`, `*bold*`, `*_italic bold_*`. `\n` (a backslash and n) starts a new line in the message box.
+- **Marks:** each message ends with a grey mark. ⧗ means it is waiting on a condition. The first
+  message that moves on by Space or a click gets "Press space or click message to continue ≫" on the row under it, later ones ≫, and the last line none (`[next_msg]` changes them).
+- **Skipped:** blank lines, and comment lines starting with `#`.
+- **Errors:** an unknown name or a bad value is reported in the browser console and ignored.
+- **The end:** the last line stays on screen.
+- **Reset:** the game's Reset button (left of Play) rebuilds the scene, e.g. a world grown too crowded: behind a quick fade it empties the bullets channel, puts the dots in afresh (the energy kept), and redoes every action from the last checkpoint, a `[chapter]` or `[new_scene]` line, up to the current line, then the current line itself (its message and conditions start afresh). The checkpoints themselves (no card, no extra fade), `[jump_here]`, `[next_msg]` and `[music]` aren't redone.
+
+Morph ids are a name of the current species (`limus`, `gyrans`, ...) or a full pattern id
+(`5N7KKM-limus`). Where a token takes several ids they may be separated by commas or colons:
+`[allow_morph:limus,gyrans]` = `[allow_morph:limus:gyrans]`.
+
+### Actions
+
+| Token | What it does |
+|---|---|
+| `[species:<genus>:<code>]` | Load species `<code>` (e.g. `[species:Aquarium:5N7KKM]`): its rule and merge saddle. The world is kept. No morph is visible after it. The morph book shows the species with its genus, in italic ("Species: *Aquarium 5N7KKM*"), at its lower right (`[species:<code>]`: no genus shown). Each species has its own discovered morphs (a name is only a morph of its species: 5N7KKM *tardus* is not GDNQYX *tardus*), so the morph book shows this species' discoveries, kept for when it comes back. |
+| `[allow_morph:<ids>]` | The visible morphs are exactly these, in this order. A morph that isn't visible is still detected but shows as "???". `all` means every morph of the species; no ids means none. |
+| `[discover_morph:<ids>]` | Add these morphs to the morph book's discovered list. Ones the player already found stay. |
+| `[morph_book:on\|off]` | Show or hide the Morphs button (default `on`; `X` opens the book, as that button and Choose do, and closes it, as Escape) and the name box of the ship's morph at the top of the ship view. `off` also closes the book, and while it is off no morph is discovered (they are still detected). |
+| `[morph_book_action:<type>]` | What a click on a discovered morph in the book does (only while the ship is lost; otherwise the book is read-only). Keys pick slots too, the book's rows on the keyboard's: `Q` `W` `E` `R` the first row, `A` `S` `D` `F` the second (holding Shift or Alt shows a pickable slot's letter at its top right, as the other key badges). `clear_put` = `[clear_world][put_player:<id>]` (default), `put` = `[put_player:<id>:random]`, `none` = nothing. |
+| `[retry_action:<type>]` | What the Respawn button (and `Z`) does: `clear_put`, `put` or `none` as above, with the player's morph, or `book` to open the morph book. No type: back to the default, `clear_put`. |
+| `[clear_world[:<bg>][:empty]]` | Empty the world, and turn `[min_morph]` off (set it again after). The dots go too, and none are put back until a `[dot:<n>]` (the energy, the score, is kept); so do the bullets in flight (the gun and its list are kept). `<bg>`: the background behind the board, `black` (the default) or `radiation` (dark orange, slowly darkening and brightening again, every 8 s). `empty`: a scene of empty space, no player: while there is no ship, the ship view shows the centre of the world instead of "Dissolved" (no Respawn or Choose either), until the next `[clear_world]`. Either option alone or both, e.g. `[clear_world:radiation:empty]`. |
+| `[put_player:<id>[:<how>]]` | Put morph `<id>` in as the player's ship, which is then followed. `<id>` becomes the player's morph, which Respawn puts back. |
+| `[put_morph:<id>[:<how>]]` | Put morph `<id>` in. It is never followed: the ship stays followed, or if the ship is lost, it stays lost (only `[put_player]` and the morph book's pick make a ship). |
+| `[min_morph:<n>[:<ids>[:<how>]]]` | Keep at least `n` creatures besides the ship on the board. Whenever there are fewer, put in one more, picked at random from `<ids>` (default: the visible list), at most one every 0.5 s. `<how>` defaults to `random`. The creatures it puts in are never followed, as `[put_morph]`. `[min_morph:0]` or `[min_morph:off]` stops it. It keeps running across later lines (and Respawn) until then, or until a `[clear_world]`, which turns it off too. |
+| `[dot:<n>\|off]` | The dots channel (`dots.js`): keep `n` dots ("energy") on the board, which drift slowly to the left. Any creature eats them; the ship eating one scores 10. The score shows in the middle of the title row and starts from 0 when the dots are turned on. `off`: no dots, no score. |
+| `[gun[:<options>]]` | The player's gun and its bullets channel (`bullets.js`): the player fires the bullet pattern in use (see `[bullet]`) with `A` or the round Fire button (lower left of the world view, shown while the bullets are on, dimmed while it can't fire), put just in front of the ship (every pattern the same distance: its back edge 8 cells from the ship's edge, its centre of mass on the line ahead) and flying the way the ship moves; a ship standing still (no arrow) fires the way it last headed. Always from the front, except *Asterium* and *Tetralapillium*, which barely move (the ship would drive through them at once): they are dropped behind the ship like bombs, the same distance away. *Helicium*, which stays put too, is still fired ahead, to run into: it changes the ship's shape (a way to find new morphs). Where a bullet overlaps a creature it hides those cells from the creature's own kernels (or, with `erase`, takes their mass out), and the creature's mass wears the bullet down, both gradually, so a bullet sinks some way into a body. A ship faster than its bullets runs into them and is hurt (part of the game: a fast morph is a poor gunship). At most one shot every 0.7 s (`?bcool=`); if the field holds more than 8 bullets' worth of mass, it is emptied. Options, in any order: `on` (the default) or `off` (no gun); `mask` (hide the creature's cells from its own kernels, softly, as the mask tool; the default) or `erase` (take mass out instead); `color_now` (the channel picked with the R G B patches at the top of the ship view, in its colour; changing the pick switches every bullet already flying too; the default), `rgb` (all channels; white bullets), or `r`, `g` or `b` (that channel only, in its colour). `wear_color` (only the creature channels the bullet acts on wear it down, the default) or `wear_all` (all three channels wear it down, whatever its colour). Changing the pattern empties the bullets channel (the bullets in flight would run under the new rule). Tuning in the URL: `?bhit=0.2` (mass taken per step), `?bwear=0.03` (bullet worn per bullet step), `?bsub=5` (bullet steps per sim step), `?bcool=0.7` (the least time between shots, in seconds). |
+| `[bullet:<names>[:<name>]]` | The bullet patterns the gun can fire, a list that starts empty (no list, no shots). `<names>`, in order, separated by `,`: a pattern name from the list below adds it (case and spaces don't matter, e.g. `[bullet:scutium fluens]`); `random` adds one not listed yet, at random; `all` adds every pattern; `clear` empties the list. The gun switches to `<name>` if given (added to the list if not in it, e.g. `[bullet:paraptera:paraptera]` adds and equips *paraptera*), else to the last pattern added; if none was (e.g. only `clear`), the one in use stays if it is still listed, else it is the list's first. Its name shows under "Fire". With two or more, ◀ ▶ buttons above Fire (`D` / `F`) switch to the previous / next one, which empties the bullets channel. While the gun is on (and the ship is not lost), a **Bullets** button in the ship view (left of the name box, mirroring Morphs) or `S` opens the bullet book (`S` or Escape closes it), "Choose a bullet": every pattern by name (with a small white picture of its stored pattern), 4 to a row (left to right, then top to bottom), those in the list clickable to switch to them (the one in use with a yellow border), the others "?". Keys pick slots too, the book's rows on the keyboard's: `1`–`4` the first row, `Q`–`R` the second, `A`–`F` the third, `Z` `X` the fourth. |
+| `[bullet_limit[:<x>]]` | The bullets channel is emptied at once when it holds more than `x` bullets' worth of mass (one bullet: a fresh shot of the pattern in use); bullets that run into each other merge and grow. Default 8 (also with no `<x>`). |
+| `[new_bullet:<n>\|off]` | From now on, every `n` energy collected (dots eaten, `[dot]`) adds a bullet pattern not in the list yet, at random, quietly: nothing pops up and the one in use stays (if none is, the new one). The **Bullets** button then reads **New!**, in green (border and text, the green of a new morph), until the bullet book is opened; in the book the new patterns have a green border, until it is closed. `off`: no more. |
+| `[merge:<x>]` | Set the detection's merge saddle to `x`, the lab's Merge saddle slider. Higher means fewer merges and smaller objects; above 1, nothing merges. No `x`: back to the species's own value. `[species]` also resets it. |
+| `[chapter:<no>:<title>]` | A title card over the game window: "Chapter `<no>`" above `<title>` (the title may contain colons); `[chapter:final:<title>]` shows "FINAL CHAPTER" instead. It clears the message bar. The world view and the ship view's picture fade out first, then the card fades in; Space or a click anywhere closes it, and that press does nothing else; the card fades out as the views fade back in. The game plays on meanwhile, and the line waits until the card is closed. |
+| `[speed:<x>]` | Set the game speed, as the Speed slider: `x` is `n` or `1/n` (`1/8`, `1/4`, `1/2`, `1`, `2`, `4`, `8`; others snap to the nearest). |
+| `[music:<list>[:<play>]]` | Replace the background playlist with `<list>`: track numbers separated by commas (1 = the first in `page.js` TRACKS: 1 *Long Way*, 2 *A Few Jumps Away*, 3 *Out of the Skies, Under the Earth*, 4 *Billions and Billions*), played in turn and looped, 10 s of silence between plays. `<play>`: switch to that track now, the one playing fading out first (1.5 s) (if the music is on; else it is the one that plays when the player turns it on); it isn't restarted if it is already playing. No `<play>`: the track playing now carries on, and the list follows it (from the track after it if it is in the list, else from the list's first). E.g. `[music:2,1:2]`. Track 1 alone until a `[music]` says otherwise. |
+| `[clone:on\|off]` | Allow clone mode (`on`, the default; the Morphs button gets a pink border and reads "Clone") or not (`off`: the morph book stays read-only while the ship is alive). While it is allowed and the ship is alive, the morph book is titled "Choose a morph to clone" and its discovered morphs can be picked (pink borders). The picked morph then follows the pointer over the ship view, in place of the tool circle; ↻ and ↔ buttons below Morphs turn it 45° clockwise and flip it left to right (as seen), and a click on the ship view pastes it there. With touch (no pointer to follow), a tap places the copy instead (or a drag, the copy following the finger), shown where it would go; it can still be turned, flipped or moved by another tap, and a ✓ button (shown once it is placed) pastes it. The buttons below Morphs, two to a row: ↻ ↔ / ✓ 🗙. The game pauses from the pick until the paste (or cancel), then plays on if it was playing; the copy keeps following the pointer over ↻ ↔. Pasting, or cancelling with the 🗙 button right of ↔, ends that clone (Morphs meanwhile opens the book to pick another morph to clone instead); clone mode stays allowed (clone again from the book) until `[clone:off]`. While the ship is lost, the book is "Choose a morph to respawn" as usual. |
+| `[erase:on\|off]` | Allow erase ("recycle": the selected R G B patch clicked again, see the top of this README) or not; `off` also goes back to masking. Allowed by default. |
+| `[blank]` | The line is an empty message: the message bar shows only its mark (≫, or ⧗ with a condition) and waits for Space or a click, like any message. |
+| `[next_msg[:<tip>[:<next>[:<act>]]]]` | Set the grey tip shown once on the next message that moves on by Space or a click (default "Press space or click message to continue"), the mark ending such messages (default ≫), and the mark ending a message that waits on a condition (default ⧗). A part left out or empty goes back to its default. The tip can't contain `:` or `]`. |
+| `[new_scene]` | Fade the world view and the ship view's picture to black over 0.5 s (everything drawn in them, "Dissolved" included; not the controls), and wait for it. The actions after it set the scene unseen, and the next message fades the views back in as it shows. The game plays on meanwhile. |
+| `[jump_here]` | For writing the script: start at the first line that has it. Every action on the lines before it runs first, in order, so the set-up is as if the game had been played up to there; their messages and conditions are skipped, and so are the chapter cards. |
+
+`<how>` is where a creature goes: `center` (the board centre, unrotated; the default for
+`put_player` and `put_morph`), `random` (a random empty spot and angle, as the lab's Add) or `far`
+(the empty spot farthest from the ship, at a random angle).
+
+### Bullet patterns
+
+The patterns `[bullet:<name>]` adds to the gun (`bullet_patterns.js`), all single-channel classic Lenia from `~/github/Lenia/Python/animals.json` (the entry with that code; #2, #3 = its second, third entry), T = 10. R is the pattern's native radius; every bullet runs at R 13 (with the default creature R 18; scaled with `?R=`), resampled by 13 / R. Speed: cells per sim step at R 13 and the default `?bsub=5`, measured on a CPU copy (numpy); launched at 0, 90, 200 and 315 degrees, the gliders held their mass and heading except where noted. The ids and names used before (`scutium2`–`scutium5`, `orbium1`, `paraptera1`, `Scutium Mk II`–`IV`) still work.
+
+| Name | Species | Code | Native R | b | Speed |
+|---|---|---|---|---|---|
+| `Orbium` | Orbium unicaudatus | O2u | 13 | 1 | 3.1; dies at some launch angles |
+| `Synorbium` | Synorbium solidus | O4s | 13 | 1 | 3.2 |
+| `Scutium` | Scutium valvatus | S1v | 13 | 1 | 2.1 |
+| `Scutium fluens` | Scutium serratus fluens | 2S1f | 15 | 1/2,1 | 2.2 |
+| `Scutium vagus` | Scutium serratus vagus | 2S1v | 10 | 1/2,1 | 1.9 |
+| `Scutium serratus` | Scutium serratus fluens | 2S1f #2 | 18 | 1/6,1/2,1 | 3.0 |
+| `Triscutium` | Triscutium valvatus laterale | S3vl | 15 | 1 | 2.2 |
+| `Paraptera` | Paraptera arcus pedes | P4ap | 13 | 1 | 2.4 |
+| `Heptapteryx` | Heptapteryx arcus labens | P7al | 13 | 1 | 2.3 |
+| `Helicium` | Helicium cavus pedes | H3cp | 13 | 1 | spins in place |
+| `Geminium` | Hydrogeminium natans | 3GH2n | 18 | 1/2,1,2/3 | 1.5 |
+| `Kronium` | Kronium vagus | 3K4v #2 | 27 | 2/3,1/3,1 | 1.1; wanders |
+| `Asterium` | Asterium vagus | 3R5v #3 | 27 | 1,1/2,1 | 0.4; wanders, heading unpredictable; dropped behind |
+| `Tetralapillium` | Tetralapillium metamorpha | 2L4m | 18 | 1,1/2 | changes shape, creeps; dropped behind |
+
+### Conditions
+
+When a waiting line's conditions are all met, a green **SUCCESS** box fades in in the middle of the game window and slowly fades out (3 s; the game goes on meanwhile), and the script moves on. Also for a line whose conditions already hold when it is reached (it then shows ≫ and moves on by Space / a click).
+
+| Token | Holds when |
+|---|---|
+| `[need:first_touch]` | The player has pressed on the ship, and its detected morph is now not *limus*. The press is required, since a fresh ship can read as unknown at first. |
+| `[need:discover_morph[:<ids>[:any\|all]]]` | One of `<ids>` (`any`, the default), or every one of them (`all`), is in the morph book: discovered earlier (also put in by `[discover_morph:<ids>]`), or discovered now and the book that opened for it closed. With no ids: the player discovers a new morph, any, after the line is reached, and closes the book that opened for it. |
+| `[need:first_clone]` | The player has placed a clone since the line was reached: picked a morph in the morph book while clone mode is allowed (`[clone:on]`) and pasted it on the ship view (a click, or ✓ after a touch). Cancelling doesn't count. |
+| `[need:recycle]` | The player has turned erase (recycle) on, in any channel, and erased some mass on the ship view since the line was reached, and the ship has then dissolved. |
+| `[need:object:<n>[:exact\|min\|max]]` | The world holds exactly `n` objects (`exact`, the default), at least `n` (`min`) or at most `n` (`max`): all the creatures detected in it, the ship included. The count is smoothed, the median over the last second, so a creature flickering between one and two objects doesn't make it jump. The ⧗ mark is followed by the progress in grey, "⧗ 20/60". |
+| `[need:mass:<r\|g\|b\|rgb>:<x>[:min\|max]]` | The creatures detected in the world, the ship included, hold at least `x` g of mass (`min`, the default) or at most `x` (`max`) in that channel, or in all three (`rgb`); g as the stats charts count it (the sum of cell values / R²). Smoothed as `[need:object]` (the median over the last second), with its progress after ⧗ to one decimal, "⧗ 12.3/20". |
+| `[need:survive_time:<s>]` | The ship has stayed alive for `s` seconds of play from when the line is reached (paused time, an open book and a chapter card don't count); dissolving stops the count (it stays shown), and it starts again from 0 once the ship is back (Respawn). Progress after ⧗ (as `[need:object]`) in whole seconds, "⧗ 12/30". |
+| `[need:energy:<n>]` | The energy, the dots score, has reached at least `n`. |
+
+### Example
+
+```
+[chapter:1:Metamorphosis]
+[species:Aquarium:5N7KKM][allow_morph:limus][discover_morph:limus]
+[morph_book:on][clear_world][put_player:limus]
+Welcome to the Cognoship game.
+Click on the ship to change its shape.[need:first_touch]
+[dot:3][min_morph:2:gyrans,tardus:far]
+Gain 50 energy. [need:energy:50]
+```
 
 ## How it works
 
@@ -272,14 +395,14 @@ Not yet checked on a device: GPU speed on phones (use `?debug=1`) and mobile sha
 
 ## Music and stars
 
-Background music, royalty free, looped as a playlist with 10 s of silence between tracks, at half
-volume, from `assets/music/`: *Long Way* by Rexlambo (`rexlambo-long-way.mp3`), *A Few Jumps Away*
+Background music, royalty free: a playlist played in turn and looped, with 10 s of silence between plays
+(the first, until the game's `[music:<list>:<play>]` sets a playlist), at half volume, from `assets/music/`: *Long Way* by Rexlambo (`rexlambo-long-way.mp3`), *A Few Jumps Away*
 by Arthur Vyncke (`arthur-vyncke-a-few-jumps-away.mp3`), *Out of the Skies, Under the Earth* by
 Chris Zabriskie (`chris-zabriskie-out-of-the-skies-under-the-earth.mp3`) and *Billions and
 Billions* by Stellardrone (`stellardrone-billions-and-billions.mp3`). In the lab, the **Stars**
 button at the end of the second row turns the star field and the music on or off together; in
-the game the star field is always on and the **Music** button only plays or pauses the music
-(each page load starts with the lab's off and the game's on; the choice is not remembered). Browsers only start
+the game the star field is always on and the **Music** button (a music note at the top right, left of the light / dark button, highlighted while on; `M`) only plays or pauses the music
+(off until first turned on, then as last chosen in this browser; each track is downloaded only when it starts to play). Browsers only start
 audio after the first click, tap or key.
 
 The **star field**: three layers of small tinted stars, in board coordinates (so both

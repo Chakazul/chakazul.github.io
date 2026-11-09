@@ -4,7 +4,7 @@
 Usage: python3 tools/gen_aquarium.py [path/to/Lenia/Python/found/233.json]
 
 Takes the entries from 5N7KKM to HAESRE (file lines 2-76: 5N7KKM to GDNQYX, then HGMLH8, PJ1EF7,
-KZ2BLD, XEH4YR, HAESRE), skips "G6G6CR metamorpha beaked", "KH97WU dot" and "VT049W gyrotachus"
+KZ2BLD, XEH4YR, HAESRE), skips "G6G6CR metamorpha beaked" and "VT049W gyrotachus"
 (its own kernels: a different species), renames VT049W's first "para" to "paralimus", KZ2BLD's
 unnamed second entry to "virgatus" and its "gyrans tachus" to "gyrans", HGMLH8's "parapedes" to
 "tardus" and "para" to "tachus", numbers a repeated name
@@ -22,11 +22,11 @@ import json, re, sys, os
 
 SRC = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/github/Lenia/Python/found/233.json')
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aquarium233.js')
-# Left out: two forms, and VT049W gyrotachus, which is a different species: its kernel 0 has
+# Left out: one form, and VT049W gyrotachus, which is a different species: its kernel 0 has
 # m = 0.302 instead of VT049W's 0.272.
-SKIP = {('G6G6CR', 'metamorpha beaked'), ('KH97WU', 'dot'), ('VT049W', 'gyrotachus')}
+SKIP = {('G6G6CR', 'metamorpha beaked'), ('VT049W', 'gyrotachus')}
 SKIP_IDS = {'XEH4YR-auctus-2', 'HAESRE-zigzag-2'}   # repeated names, left out (after numbering)
-Z18A9R_NAMES = ['gyrus', 'paragyrans', 'antigyrans']   # unnamed in the file (lines 32-34)
+Z18A9R_NAMES = ['gyrans', 'paragyrans', 'antigyrans']   # unnamed in the file (lines 32-34)
 KEYS = ['b', 'm', 's', 'h', 'r', 'c']
 
 lines = open(SRC).read().split('\n')

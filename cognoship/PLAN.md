@@ -638,3 +638,81 @@ data) and used in the browser during development; README "Stats mode" has the de
 - [ ] Phase 3 exit criteria (§6.5) pass.
 - [ ] Research (§6.4): learned co-pilot.
 - [ ] Research (§6.4): CARL-like agent that steers by masking, compared with players' maps.
+
+## 8. Suggestions: more game mechanics and the rest of the story (2026-11-09, not built)
+
+A design pass over the game as it stands (mechanics in `game.js`, the script in `script.txt`,
+the species in `aquarium233.js`, the lab's tools). The premises for the unused species come
+from their names, README notes and the test notes in `script.txt`, not from watching them, so
+each wants a short lab session before it is scripted.
+
+### 8.1 Where the script stands
+
+| Chapter | Species | Teaches |
+|---|---|---|
+| 1 Metamorphosis | 5N7KKM | masking, morphs, the morph book |
+| 2 You are not alone | 5N7KKM | dots / energy, the gun, bullet types |
+| 3 Brave new world | GDNQYX | clone, recycle |
+| 4 Megastructure | Z18A9R | building up an object count (unfinished: ends at "We will") |
+
+Unused: VT049W, PJ1EF7, XEH4YR, KZ2BLD, KH97WU, HAESRE, HGMLH8, G6G6CR (Cilium).
+
+Typos in `script.txt` to fix: "techonologies", "wheels or levels" (levers?), "speices", "This
+supermassive black releases" (black hole).
+
+### 8.2 New mechanics
+
+Roughly from cheap (reusing what exists) to bigger:
+
+1. **Time goals:** `[need:survive:<s>]`, and `[need:hold:<morph>:<s>]` (stay that morph for
+   s seconds; hard with unstable morphs, a good test of steering). The first is already wanted
+   in the chapter 5 notes. Both are small additions next to the existing conditions.
+2. **Beacons:** `[beacon:<x>,<y>]` and `[need:reach]`, a target marked in the world view.
+   Steering by masking is the core skill, yet no chapter asks the player to go anywhere. A row
+   of beacons makes a race or an escort.
+3. **A cap on objects:** `[need:object_max:<n>:<s>]` (at most n objects for s seconds), the
+   opposite of chapter 4. It suits the replicating species: thin out an outbreak with bullets
+   and recycling, which gives the gun a real job.
+4. **Energy as a currency:** firing, cloning and recycling cost energy (the score goes down).
+   Dots become fuel rather than points, and the player chooses between shooting, cloning and
+   saving.
+5. **Lab tools as technology:** Draw ("synthesis", adding mass, the partner of recycling),
+   Detect: Every ("scanner": names every creature, a help for finding morphs), the mask-radius
+   slider ("sensor jammer" upgrade), body-axis view ("gyroscope"). Each unlocks by
+   `[need:energy:…]`, as the second bullet type does.
+6. **Radiation that hurts:** in chapter 4 the gamma bursts are only told and shown (the orange
+   background). Let them slowly wear down creatures in the open, but not those near big
+   clusters, so the megastructure really shelters the ship. The bullets channel already has the
+   wear-down mechanism to reuse.
+7. **Hostile creatures:** morphs that home on the ship (Carlman's ghosts are the model), or
+   creatures firing bullets of their own. Bigger work, but it turns "you are not alone" into a
+   real threat.
+8. **Docking:** `[need:merge:<morph>]`, reaching a pair morph by joining another creature
+   (KH97WU *impetus+gyrans*, 5N7KKM *lithos+gyrans*); detection already names composite
+   morphs. Cooperation as a mechanic, the opposite of shooting.
+9. **The stats chart as a "spectrometer":** a late chapter sets a target in the lab's phase
+   space (e.g. hold this spin rate). Niche, but true to the research side of the project.
+
+### 8.3 Finishing chapter 4
+
+The megastructure line (`[need:object:60:min]`) wants a payoff: build to 60 objects (mostly cloned
+*lithos*, the still discs), then a gamma burst (`[clear_world:radiation]` with a stronger pulse,
+using 8.2.6), then `[need:survive_time:30]`, then "The shield holds." Build, defend, survive.
+
+### 8.4 Chapters for the unused species
+
+| Species | What it's known for | Goal idea | New mechanic |
+|---|---|---|---|
+| **VT049W** (replicating) | *gyrans 💥* splits into 3–4; *tachus* is fast | **Outbreak:** keep at most 6 objects for 60 s while gyrans keeps splitting; then become *tachus* and outrun it to a beacon. | object cap, beacons |
+| **PJ1EF7** (multiplying) | *vagus 💥* multiplies | **Swarm:** survive 45 s in a crowd that keeps growing (as the chapter 5 notes say); Reset becomes a tactical retreat. | time goals |
+| **XEH4YR** (exploding) | *auctus 💥*, *cor* | **Core:** find all three morphs in a cramped space (as the notes say), then hold *cor* steady while *auctus* blows up around it. | `[need:discover_morph]`, hold |
+| **KH97WU** (dancing) | *impetus*, *impetus+gyrans* | **Dance:** dock with a gyrans to form *impetus+gyrans*; a cooperation chapter where shooting doesn't help. | docking |
+| **KZ2BLD** (striped) | *virgatus* | **Corridor:** stripes suggest a long, oriented body; steer through a line of beacons, then become *virgatus*. | beacons, hold |
+| **HAESRE** (zigzagging) | *zigzag*, *zigzag+lithos* | **Pilot's test:** collect energy along a path; zigzagging makes precise steering the challenge. | beacons, energy |
+| **HGMLH8** (shapeshifting) | *metamorpha*, *tardus*, *tachus* | **Metamorphosis II:** become each of the three in order, against the clock. The notes say some of its morphs aren't recognised, so check its detection settings first. | hold, time goals |
+| **G6G6CR** (Cilium) | the one non-Aquarium species; *munitus* = "fortified" | **First contact / finale:** a truly alien species; protect a *munitus* from hostile creatures, or recycle the ship into Cilium. | hostile creatures, synthesis |
+
+Suggested order after chapter 4: HAESRE (pure steering), KH97WU (cooperation), VT049W
+(containment), XEH4YR, PJ1EF7 (chaos), HGMLH8 (mastery), G6G6CR as the finale. Difficulty
+rises and each chapter mostly adds one mechanic; most of the goals need only new conditions
+(time goals, the object cap, beacons, docking), not new systems.

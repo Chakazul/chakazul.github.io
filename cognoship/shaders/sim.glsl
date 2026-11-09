@@ -15,6 +15,12 @@
 // The same circle can instead erase: uMaskOn = 2 sets the chosen channel to 0 inside it after
 // the update (removing mass, like Carlman's interventions), with no occlusion; or draw:
 // uMaskOn = 3 sets it to 1 there.
+//
+// The bullets channel (bulletsim.glsl) acts on the selected channels (uBulletCh) in one of two ways:
+// uBulletMode = 1 takes mass out, uBulletHit times the bullet mass per step, after the update;
+// uBulletMode = 2 is a cognitive mask by the bullets, soft: a cell's selected channels are seen
+// at (1 - bullet) of their value, renormalised as for the circle (every pixel then takes the
+// masked path, which costs one more fetch per tap).
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump on mobile (see Carlman action.glsl)
@@ -40,6 +46,10 @@ uniform vec2  uMaskC;       // mask centre, board cells (col, row)
 uniform float uMaskR;       // mask radius, cells
 uniform vec3  uMaskCh;      // one-hot: which channel the mask hides
 uniform float uReach;       // kernel reach, cells (max tap distance)
+uniform sampler2D uBullets; // bullets channel (R)
+uniform int   uBulletMode;  // 0 none, 1 erase, 2 mask
+uniform vec3  uBulletCh;    // which channels the bullets act on
+uniform float uBulletHit;   // erase: mass removed per step per unit of bullet mass
 
 out vec4 fragColor;
 
@@ -77,6 +87,9 @@ void main() {
         }
     }
 
+    bool bmask = uBulletMode == 2;
+    bool masked = near || bmask;
+
     vec4 U0 = vec4(0.0), U1 = vec4(0.0), U2 = vec4(0.0), U3 = vec4(0.0);
     vec4 N0 = vec4(0.0), N1 = vec4(0.0), N2 = vec4(0.0), N3 = vec4(0.0);
     float r2 = uMaskR * uMaskR;
@@ -89,9 +102,13 @@ void main() {
         vec4 w1 = texelFetch(uTaps, ivec2(t, 2), 0);
         vec4 w2 = texelFetch(uTaps, ivec2(t, 3), 0);
         vec4 w3 = texelFetch(uTaps, ivec2(t, 4), 0);
-        if (near) {
-            vec2 d = wrapDelta(vec2(q) - mc);
-            vec3 vis = dot(d, d) <= r2 ? vec3(1.0) - uMaskCh : vec3(1.0);
+        if (masked) {
+            vec3 vis = vec3(1.0);
+            if (near) {
+                vec2 d = wrapDelta(vec2(q) - mc);
+                if (dot(d, d) <= r2) vis = vec3(1.0) - uMaskCh;
+            }
+            if (bmask) vis *= vec3(1.0) - texelFetch(uBullets, q, 0).r * uBulletCh;
             a *= vis;
             N0 += w0 * (uSrc[0] * vis);
             N1 += w1 * (uSrc[1] * vis);
@@ -104,7 +121,7 @@ void main() {
         U3 += w3 * (uSrc[3] * a);
     }
 
-    if (near) {
+    if (masked) {
         // A kernel whose whole reach is occluded sees nothing: U = 0.
         U0 = step(1e-6, N0) * U0 / max(N0, 1e-6);
         U1 = step(1e-6, N1) * U1 / max(N1, 1e-6);
@@ -121,5 +138,6 @@ void main() {
     vec3 A = texelFetch(uState, p, 0).rgb;
     vec3 Anew = clamp(A + uDt * delta * uGain, 0.0, 1.0);
     if (erase) Anew = uMaskOn == 3 ? max(Anew, uMaskCh) : Anew * (vec3(1.0) - uMaskCh);
+    if (uBulletMode == 1) Anew = max(Anew - uBulletHit * texelFetch(uBullets, p, 0).r * uBulletCh, 0.0);
     fragColor = vec4(Anew, 1.0);
 }

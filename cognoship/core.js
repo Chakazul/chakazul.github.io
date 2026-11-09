@@ -104,6 +104,39 @@ const Core = (function () {
                 over: () => status !== 'alive',
                 // pauseWhenEmpty: pause when nothing is left alive (the lab; the game plays on)
                 pauseWhenEmpty: () => true,
+                // nameBox: show the focus's morph name box (detection runs either way)
+                // autoFocus: after a spawn or a cleared world, follow the creature nearest the
+                // board centre (the lab); off, only an explicit focus does (the game's put_player)
+                autoFocus: () => true,
+                // overFill: a colour for the ship panel's background while over() holds, or null
+                overFill: () => null,
+                // worldShade: 0..1, how far the world view is faded to black
+                worldShade: () => 0,
+                // showKeys: draw the tool patches' keys (while the page shows its key badges)
+                showKeys: () => false,
+                // nameDot: a colour dot (the morph's hue) before the name in the name box
+                nameDot: () => false,
+                // zoomPress(off, e): a press on the ship view at board offset off (from the focus CoM);
+                // true = taken by the page (no tool). drawGhost(ctx, at, centre, cellPx, phi, focus):
+                // draw the page's own thing in the ship view (at: the hovering pointer, canvas px, or
+                // null; centre: the view's centre = the focus CoM; phi: viewAngle), instead of the tool
+                // circle when it returns true.
+                zoomPress: () => false,
+                keepHover: () => false,
+                // patchErase: the selected channel's patch toggles erase (no action patches)
+                patchErase: () => false,
+                // frameColor: the world view's frame around the followed creature (null: as the panel border)
+                frameColor: () => null,
+                // emptyView: with nothing followed, the ship view shows the world's centre (unrotated)
+                // instead of staying blank
+                emptyView: () => false,
+                // focusCircle: a yellow circle around the followed creature in the world view (as
+                // Detect: Every draws it), inside its frame, also when the other circles are off
+                focusCircle: () => false,
+                // zoomDrag(off, e): the pointer of a press zoomPress took moves (off as zoomPress's)
+                zoomDrag: () => {},
+                drawGhost: () => false,
+                nameBox: () => true,
                 noFocusText: () => ['No creature selected.', 'Click a creature on the left to follow it.'] };
   // morphLabel(det): the name shown for a detected (known) morph, or null to show it as unknown
   // ("???", no hue): the game shows only the morphs the player has been told about.
@@ -233,7 +266,8 @@ const Core = (function () {
   //     within the form's half-size + R of its centre), as the lab's Add;
   //   'far': as 'random', but of the empty candidates (mass within EMPTY_TOL of the least) the one
   //     farthest from the focus (as 'random' if there is no focus).
-  // focusNew: follow the new creature (the lab's Add); else only if nothing is followed.
+  // focusNew: true = follow the new creature (the lab's Add); false = only if nothing is followed;
+  // 'never' = never (the game's [min_morph]: a lost ship stays lost until Respawn).
   const EMPTY_TOL = 1;   // cell mass: "empty" is at most this much more than the emptiest candidate
   function putPattern(how = 'random', focusNew = true) {
     let f = Rule.formCells(pattern.cells, pattern.R, R), best;
@@ -263,7 +297,7 @@ const Core = (function () {
     if (status !== 'alive') { status = 'alive'; running = true; }
     analyze(0);
     // follow the new creature
-    if (focusNew || !focus) {
+    if (focusNew === true || (focusNew !== 'never' && !focus)) {
       const i = Creatures.pick(found, best[0], best[1], 2 * R, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH);
       if (i >= 0) setFocus(i);
     }
@@ -310,6 +344,7 @@ const Core = (function () {
     if (found.comps.length === 0) { status = 'dissolved'; if (opt.pauseWhenEmpty()) running = false; hooks.change(); }
 
     const T = n * dt;
+    if (autoFocus && !opt.autoFocus()) autoFocus = false;
     if (autoFocus) {
       autoFocus = false;
       setFocus(Creatures.pick(found, BW / 2, BH / 2, Infinity, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH));
@@ -415,6 +450,14 @@ const Core = (function () {
       out[3 * i] += ch[4 * k]; out[3 * i + 1] += ch[4 * k + 1]; out[3 * i + 2] += ch[4 * k + 2];
     }
     return (found.chan = out);
+  }
+  // The masses of all objects of this scan summed, per channel [R, G, B], in g (as the stats);
+  // null before the first scan.
+  function worldMass() {
+    if (!found || !found.comps) return null;
+    const ch = channelMasses(), m = 1 / (R * R), out = [0, 0, 0];
+    for (let i = 0; i < ch.length; i++) out[i % 3] += ch[i] * m;
+    return out;
   }
   // The stats sample of object i (this scan) with kinematics k, in R units.
   function sampleOf(i, k) {
@@ -584,15 +627,19 @@ const Core = (function () {
       // analyse after every step, not once per frame, so the stats get one sample per step
       // (at most 2 steps per frame, at the top speed)
       for (let i = 0; i < n && running; i++) { advance(1); analyze(1); }
+    } else if (masking && focus && action !== 0) {
+      // paused: erase / draw still act, at once (the mask has nothing to act on without a step)
+      const off = toolOffset();
+      SimGL.paint({ col: focus.col + off[0], row: focus.row + off[1], r: maskR, ch: channel, action });
     }
     if (n === 0) analyze(0);
     if (detectMode !== 'none' && (n > 0 || md.dirty || stats.long.len !== md.len)) detectMorphs();
-    const p = viewAngle(), c = Math.cos(p), s = Math.sin(p);
+    const p = focus ? viewAngle() : 0, c = Math.cos(p), s = Math.sin(p);
     SimGL.render({
       canvasW: CW, canvasH: CH, worldScale: WS,
       zoom: [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX],
       rot: [c, s, -s, c],
-      focus: focus ? [focus.col, focus.row, 1] : [0, 0, 0],
+      focus: focus ? [focus.col, focus.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
       stars: opt.stars(), time: (performance.now() / 1000) % 3600,   // star field follows the Stars button
     });
     drawOverlay();
@@ -621,6 +668,16 @@ const Core = (function () {
     for (const t of tracks) if (Math.hypot(wrapD(t.col - c.col, BW), wrapD(t.row - c.row, BH)) < 2) return t.hist.det;
     return null;
   }
+  const PANEL_BORDER = '#605e67';   // the ship panel's border, and the world view's frame of it: opaque (its old
+  // 60% grey over black), so it looks the same over anything and however often it is drawn
+  function panelBorder() {
+    ctx.setLineDash([]);
+    ctx.strokeStyle = PANEL_BORDER; ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(PX + 3, 1, PW - 4, CH - 2, 10);
+    else ctx.rect(PX + 3, 1, PW - 4, CH - 2);
+    ctx.stroke();
+  }
   const hueFill = (h, a) => Number.isFinite(h) ? `hsla(${h.toFixed(0)},100%,55%,${a})` : `rgba(200,200,200,${a})`;
 
   // ---- overlay --------------------------------------------------------------------------
@@ -636,6 +693,10 @@ const Core = (function () {
     ctx.clearRect(0, 0, CW, CH);
     ctx.lineJoin = 'round';
 
+    // the ship panel's background while the run is over (opt.overFill, e.g. grey), under the rest
+    const overFill = opt.over() && opt.overFill();
+    if (overFill) { ctx.fillStyle = overFill; ctx.fillRect(PX, 0, PW, CH); }   // (faded with the rest: worldShade)
+
     // panel separator
     ctx.fillStyle = '#1c1826';
     ctx.fillRect(PX, 0, 2, CH);
@@ -644,9 +705,18 @@ const Core = (function () {
     for (const bottom of patchRows()) {
       for (let i = 0; i < 3; i++) {
         const r = patchRect(i, bottom), sel = bottom ? i === action : i === channel;
+        // erase on the selected channel patch (opt.patchErase, the game's recycle): striped, "-G"
+        const striped = !bottom && sel && action === 1 && opt.patchErase();
         ctx.globalAlpha = sel ? 1 : 0.4;
         ctx.fillStyle = CH_COLORS[bottom ? channel : i];
-        ctx.fillRect(r.x, r.y, r.w, r.h);
+        if (striped) {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+          ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, r.w, r.h);
+          ctx.strokeStyle = CH_COLORS[i]; ctx.lineWidth = 7;
+          for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y + r.h); ctx.lineTo(r.x + d + r.h, r.y); ctx.stroke(); }
+          ctx.restore();
+        } else ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.globalAlpha = 1;
         if (sel) {
           ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
@@ -655,7 +725,21 @@ const Core = (function () {
         ctx.fillStyle = sel ? '#000' : 'rgba(0,0,0,.75)';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = bottom ? '700 17px system-ui, sans-serif' : '700 22px system-ui, sans-serif';
-        ctx.fillText(bottom ? ACTIONS[i] : CH_NAMES[i], r.x + r.w / 2, r.y + r.h / 2);
+        const label = bottom ? ACTIONS[i] : (striped ? '\u2212' : '') + CH_NAMES[i];
+        if (striped) {   // on the stripes: dark text in a light halo
+          ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.strokeText(label, r.x + r.w / 2, r.y + r.h / 2);
+        }
+        ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
+        if (!bottom && opt.showKeys()) {   // its key (1-3), as the page's key badges (style.css .kbd: 10 CSS px)
+          const k = CW / (ui.getBoundingClientRect().width || CW);   // canvas px per CSS px
+          ctx.font = `700 ${10 * k}px system-ui, sans-serif`;
+          const t = String(i + 1), w = ctx.measureText(t).width + 8 * k, h = 14 * k;
+          const bx = r.x + r.w - w - 2 * k, by = r.y + 2 * k;
+          ctx.fillStyle = 'rgba(0,0,0,.78)';
+          ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, by, w, h, 4 * k); else ctx.rect(bx, by, w, h); ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(t, bx + w / 2, by + h / 2);
+        }
       }
     }
 
@@ -687,7 +771,9 @@ const Core = (function () {
       }
     }
 
-    // zoom frame around the focus in the world view (rotated with the view)
+    // zoom frame around the focus in the world view (rotated with the view), as the ship panel's
+    // border; across the board's edge it wraps round: a copy on each side it crosses (up to four
+    // near a corner)
     if (focus) {
       const h = ZOOM_CELLS / 2, corners = [[-h, -h], [h, -h], [h, h], [-h, h]].map(v => {
         const b = rot(v);
@@ -695,9 +781,22 @@ const Core = (function () {
       });
       ctx.save();
       ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
-      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); corners.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-      ctx.closePath(); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = opt.frameColor() || PANEL_BORDER; ctx.lineWidth = 2;
+      for (const dx of [-BW * WS, 0, BW * WS])
+        for (const dy of [-BH * WS, 0, BH * WS]) {
+          ctx.beginPath(); corners.forEach((p, i) => i ? ctx.lineTo(p[0] + dx, p[1] + dy) : ctx.moveTo(p[0] + dx, p[1] + dy));
+          ctx.closePath(); ctx.stroke();
+        }
+      // opt.focusCircle: the followed creature's circle (unless the circles above drew it already)
+      if (opt.focusCircle() && !(opt.circlesAll() || detEvery)) {
+        const x = (focus.col + 0.5) * WS, y = (focus.row + 0.5) * WS, r = Math.max(3, 2 * focus.radius * WS);
+        ctx.strokeStyle = 'rgba(255,212,0,.9)'; ctx.lineWidth = 1.5;
+        for (const dx of [-BW * WS, 0, BW * WS])
+          for (const dy of [-BH * WS, 0, BH * WS]) {
+            ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, 2 * Math.PI); ctx.stroke();
+          }
+      }
       ctx.restore();
     }
 
@@ -711,7 +810,15 @@ const Core = (function () {
     }
     // ship view: the tool circle follows the pointer while it hovers, filled while pressed
     const ring = masking ? masking.view : hover;
-    if (ring && focus) {
+    let ghost = false;
+    if (focus && !masking) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
+      ghost = opt.drawGhost(ctx, ring ? [cx + ring[0] * CELL_PX, cy + ring[1] * CELL_PX] : null,
+                            [cx, cy], CELL_PX, viewAngle(), focus);
+      ctx.restore();
+    }
+    if (ring && focus && !ghost) {
       ctx.save();
       ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
       ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2.5; ctx.setLineDash(ACTION_DASH[action]);
@@ -740,11 +847,7 @@ const Core = (function () {
 
     // grey round-corner border around the ship panel: the zoom view and both rows of tool patches
     ctx.setLineDash([]);
-    ctx.strokeStyle = 'rgba(160,156,172,.6)'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(PX + 3, 1, PW - 4, CH - 2, 10);
-    else ctx.rect(PX + 3, 1, PW - 4, CH - 2);
-    ctx.stroke();
+    panelBorder();
 
     // small labels in the zoom view's top corners
     ctx.setLineDash([]);
@@ -758,15 +861,21 @@ const Core = (function () {
     }
 
     // Detect: the focus's morph in a box at the top of the ship view, under the channel patches
-    if (detectMode !== 'none' && focus) {
+    if (detectMode !== 'none' && focus && opt.nameBox()) {
       const lab = shownLabel(stats.short.det), txt = lab || '???';
       ctx.font = (lab ? ital() : '') + '600 22px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const w = ctx.measureText(txt).width + 24, bx = cx - w / 2, by = ZOOM.y + 8;
+      // a known morph's colour dot before its name (opt.nameDot; as the game's morph book)
+      const det = stats.short.det, dot = lab && opt.nameDot(), D = 13, G = 10;
+      const tw = ctx.measureText(txt).width, w = tw + 24 + (dot ? D + G : 0), bx = cx - w / 2, by = ZOOM.y + 16;
       ctx.fillStyle = 'rgba(40,40,46,.75)';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(bx, by, w, 34, 7); else ctx.rect(bx, by, w, 34);
       ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillText(txt, cx, by + 17);
+      if (dot) {
+        ctx.fillStyle = Number.isFinite(det.hue) ? `hsl(${det.hue.toFixed(0)},100%,55%)` : '#ccc';
+        ctx.beginPath(); ctx.arc(bx + 12 + D / 2, by + 17, D / 2, 0, 2 * Math.PI); ctx.fill();
+      }
+      ctx.fillStyle = '#fff'; ctx.fillText(txt, bx + w - 12 - tw / 2, by + 17);
     }
 
     // no focus: say how to get one
@@ -787,7 +896,7 @@ const Core = (function () {
       if (s) { ctx.font = `${s}px system-ui, sans-serif`; w = Math.max(w, ctx.measureText(core.banner).width + 2 * s); }
       w = Math.min(maxW, w);
       const h = 1.8 * t + (s ? 1.6 * s : 0);   // padding 0.4 t, title, [gap 0.6 s, line,] padding 0.4 t
-      const top = CH / 2 - h / 2;
+      const top = CH / 2 - h / 2 + (bn.dy || 0);   // dy: the page may move it up or down
       ctx.fillStyle = 'rgba(10,8,16,.85)';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(x - w / 2, top, w, h, 10); else ctx.rect(x - w / 2, top, w, h);
@@ -808,6 +917,17 @@ const Core = (function () {
       ctx.fillText(msg, PX / 2, CH / 2 - 12);
       ctx.font = '14px system-ui, sans-serif'; ctx.fillStyle = '#bbb';
       ctx.fillText(core.banner, PX / 2, CH / 2 + 18);
+    }
+
+    // the world view and the ship view's square shaded black by opt.worldShade() (0 clear ..
+    // 1 hidden): everything drawn in them, "Dissolved" included (the game's scene and chapter fades);
+    // the tool patches above and below the square, and the page's buttons, stay
+    const shade = opt.worldShade();
+    if (shade > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${Math.min(1, shade)})`;
+      ctx.fillRect(0, 0, PX, CH);
+      ctx.fillRect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge);
+      panelBorder();   // its sides run through the square: drawn again, unfaded
     }
   }
 
@@ -836,17 +956,27 @@ const Core = (function () {
       for (let i = 0; i < 3; i++) {
         const r = patchRect(i, bottom);
         if (p[0] >= r.x && p[0] < r.x + r.w && p[1] >= r.y && p[1] < r.y + r.h) {
-          if (bottom) action = i; else channel = i;
+          if (bottom) action = i; else pickChannel(i);
           return;
         }
       }
     }
     if (inZoom(p) && focus && !masking && e.button === 0) {
+      if (opt.zoomPress(rot(viewOffset(p)), e)) {   // taken by the page: its drag follows (opt.zoomDrag)
+        pageDrag = e.pointerId; ui.setPointerCapture(e.pointerId); e.preventDefault(); return;
+      }
       masking = { id: e.pointerId, view: viewOffset(p) };
       ui.setPointerCapture(e.pointerId);
       e.preventDefault();
     }
   });
+  // A channel patch (or its key): that channel. With opt.patchErase (the game, which has no action
+  // patches), the selected channel's patch again toggles erase (its "recycle") on and off, and
+  // another channel goes back to mask.
+  function pickChannel(i) {
+    if (opt.patchErase()) action = i === channel && action === 0 ? 1 : 0;
+    channel = i;
+  }
   // Tooltip over the tool patches (they are drawn on the canvas, so the canvas title changes).
   const CH_WORDS = ['red', 'green', 'blue'];
   function patchTip(p) {
@@ -857,6 +987,7 @@ const Core = (function () {
           `Mask (4): pressing on the ship view hides the ${CH_WORDS[channel]} channel there from the creature's senses`,
           `Erase (5): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 0`,
           `Draw (6): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 1`][i]
+          : opt.patchErase() ? `${CH_NAMES[i]} (${i + 1}): mask the ${CH_WORDS[i]} channel; again: erase it (recycle), striped`
           : `${CH_NAMES[i]} (${i + 1}): act on the ${CH_WORDS[i]} channel`;
     }
     return '';
@@ -865,16 +996,24 @@ const Core = (function () {
     const p = canvasPoint(e);
     const tip = patchTip(p);
     if (ui.title !== tip) ui.title = tip;
+    ui.style.cursor = tip ? 'pointer' : '';   // a hand over the patches
     if (masking && e.pointerId === masking.id) masking.view = viewOffset(p);
+    if (pageDrag === e.pointerId) opt.zoomDrag(rot(viewOffset(p)), e);
     hover = e.pointerType === 'mouse' && inZoom(p) ? viewOffset(p) : null;
     worldHover = e.pointerType === 'mouse' && p[0] < PX ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
   });
-  ui.addEventListener('pointerleave', () => { hover = null; worldHover = null; });
-  const endMask = e => { if (masking && e.pointerId === masking.id) masking = null; };
+  // (opt.keepHover(el): keep the ship-view hover point when the pointer moves onto el, e.g. a
+  // button over the view)
+  ui.addEventListener('pointerleave', e => { if (!opt.keepHover(e.relatedTarget)) hover = null; worldHover = null; });
+  let pageDrag = null;   // the pointer of a press the page took (opt.zoomPress), while held
+  const endMask = e => { if (masking && e.pointerId === masking.id) masking = null; if (pageDrag === e.pointerId) pageDrag = null; };
   ui.addEventListener('pointerup', endMask);
   ui.addEventListener('pointercancel', endMask);
   ui.addEventListener('lostpointercapture', endMask);
   ui.addEventListener('contextmenu', e => e.preventDefault());
+  // The ship-view hover point from a pointer event elsewhere (a page's button over the view), so
+  // what follows the pointer keeps following it there.
+  function hoverAt(e) { const p = canvasPoint(e); hover = e.pointerType === 'mouse' && inZoom(p) ? viewOffset(p) : null; }
   // Drop the held tool and the hover ring (e.g. when something covers the ship view).
   function clearPointer() { masking = null; hover = null; }
 
@@ -905,16 +1044,17 @@ const Core = (function () {
 
   const core = {
     // constants
-    q, R, DEBUG, BW, BH, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
+    q, R, DEBUG, BW, BH, WS, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
     CH_NAMES, ACTIONS, SPEED_MIN, REC_STEPS, VIEW_LABELS, SPECIES_NAMES, BOOM,
     // live objects (mutated in place)
     stats, md, opt, hooks,
     // the end-of-run banner's second line
     banner: 'Reset or Add to try again',
     // helpers
-    deg, wrapD, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking,
+    deg, wrapD, viewAngle, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass,
     // actions
-    start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer,
+    start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt,
+    pickChannel,
     setDetectMode, setEveryObject, setRunning, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
     setZoom, setMaskR,
   };

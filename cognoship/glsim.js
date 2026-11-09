@@ -11,13 +11,20 @@
 //    readChannelComs() per-channel CoMs inside a window around the focused creature (reduce ->
 //                      com), for the body-axis view mode.
 //
+//  Dots channel (setDots, ported from Carlman): a separate single-channel Lenia field of small
+//  stationary solitons under its own rule, stepped after the creatures and eaten wherever their
+//  mass is (dotsim.glsl); readDotSites() gives the mass left around each dot, for scoring.
+//  Bullets channel (setBullets): another single-channel field, of gliders (bulletsim.glsl), which
+//  takes mass out of the creatures (or masks them, sim.glsl) while they wear it down;
+//  readBulletBlocks() gives its coarse mass map, so the page can count and find the bullets.
+//
 //  Board state is a ping-pong pair of RGBA32F textures (rgb = channels). Needs
 //  EXT_color_buffer_float, as Carlman does.
 // ============================================================================================
 
 const SimGL = (function () {
   const SHADER_DIR = './shaders/';
-  const NAMES = ['vertex', 'sim', 'reduce', 'com', 'blocks', 'draw'];
+  const NAMES = ['vertex', 'sim', 'reduce', 'com', 'blocks', 'draw', 'dotsim', 'dotsites', 'bulletsim', 'blocksum'];
   const GRID = 16;    // reduce.glsl output is GRID x GRID
   const BLOCK = 4;    // blocks.glsl block edge
 
@@ -30,6 +37,20 @@ const SimGL = (function () {
   let comTex = null, comFbo = null;
   let blkTex = null, blkChanTex = null, blkFbo = null, BW = 0, BH = 0, blkBuf = null, blkChanBuf = null;
   const comBuf = new Float32Array(16);
+  // dots channel: ping-pong pair (R used), its rule's tap table, and the per-dot site pass
+  const MAX_SITES = 256;
+  const DOT_EAT = 0.1;   // creature mass above this erases the dot there (Carlman's EAT_THRESHOLD)
+  let dotTex = [], dotFbo = [], dcur = 0, dotsOn = false, dotRGB = [0.8, 0.86, 1];
+  let dotOff = 0;   // the dots' drift to the left, cells in [0, W): dot cell x is at board cell x - dotOff
+  let dotTapTex = null, dotTapCount = 0, dotRule = null;
+  let siteTex = null, siteOutTex = null, siteOutFbo = null;
+  const siteIn = new Float32Array(MAX_SITES * 4), siteOut = new Float32Array(MAX_SITES * 4);
+  // bullets channel: ping-pong pair (R used), its rule's tap table, and how it acts (setBullets)
+  const BUL_BLOCK = 8;   // readBulletBlocks block edge
+  let bulTex = [], bulFbo = [], bcur = 0, bulletsOn = false, bulRGB = [1, 0.42, 0.24];
+  let bulTapTex = null, bulTapCount = 0, bulRule = null;
+  let bul = { mode: 1, ch: [1, 1, 1], wearCh: [1, 1, 1], hit: 0.2, wear: 0.05, sub: 2 };
+  let bblkTex = null, bblkFbo = null, BBW = 0, BBH = 0, bblkBuf = null;
 
   // ---- setup ----------------------------------------------------------------------------
   async function loadSources() {
@@ -124,6 +145,17 @@ const SimGL = (function () {
     blkFbo = makeFbo([blkTex, blkChanTex]);
     blkBuf = new Float32Array(BW * BH * 4);
     blkChanBuf = new Float32Array(BW * BH * 4);
+    dotTex = [makeTex(W, H), makeTex(W, H)];
+    dotFbo = dotTex.map(t => makeFbo([t]));
+    bulTex = [makeTex(W, H), makeTex(W, H)];
+    bulFbo = bulTex.map(t => makeFbo([t]));
+    BBW = Math.ceil(W / BUL_BLOCK); BBH = Math.ceil(H / BUL_BLOCK);
+    bblkTex = makeTex(BBW, BBH);
+    bblkFbo = makeFbo([bblkTex]);
+    bblkBuf = new Float32Array(BBW * BBH * 4);
+    siteTex = makeTex(MAX_SITES, 1);
+    siteOutTex = makeTex(MAX_SITES, 1);
+    siteOutFbo = makeFbo([siteOutTex]);
     setRule(opts.kernels, opts.R, opts.kn ?? 1);
     clear();
   }
@@ -159,7 +191,7 @@ const SimGL = (function () {
 
   // ---- board ----------------------------------------------------------------------------
   function clear() {
-    for (const f of stateFbo) {
+    for (const f of stateFbo.concat(dotFbo, bulFbo)) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, f);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -198,6 +230,174 @@ const SimGL = (function () {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
   }
 
+  // ---- dots channel ---------------------------------------------------------------------
+  // rule: { R, mu, sigma, dt }: one kernel of the standard Lenia shell, quad4 core, beta [1],
+  // normalised, taps below 1e-7 dropped (as Carlman's kernelData), and a Gaussian growth.
+  // The classic Lenia kernel: rings b (betas) over r = distance / R, each a quad4 bump
+  // (Lenia/Python Board kernel, kn = 1), normalised, taps below 1e-7 dropped.
+  function shellTaps(R, betas = [1]) {
+    const quad4 = r => { const q = 4 * r * (1 - r); return q * q * q * q; };
+    const B = betas.length;
+    const KS = 2 * R + 1, taps = [];
+    let sum = 0;
+    for (let iy = 0; iy < KS; iy++)
+      for (let ix = 0; ix < KS; ix++) {
+        const yy = -1 + 2 * iy / (KS - 1), xx = -1 + 2 * ix / (KS - 1);
+        const r = Math.hypot(xx, yy), Br = B * r;
+        const v = r > 1 || Br >= B ? 0 : betas[Math.min(B - 1, Math.floor(Br))] * quad4(Br - Math.floor(Br));
+        if (v > 0) { taps.push([ix - R, iy - R, v]); sum += v; }
+      }
+    const kept = taps.filter(t => t[2] / sum > 1e-7);
+    const data = new Float32Array(kept.length * 4);
+    kept.forEach(([dx, dy, v], i) => data.set([dx, dy, v / sum, 0], i * 4));
+    return { tex: makeTex(kept.length, 1, data), count: kept.length };
+  }
+  function setDotRule(rule) {
+    if (dotTapTex) gl.deleteTexture(dotTapTex);
+    ({ tex: dotTapTex, count: dotTapCount } = shellTaps(rule.R));
+    dotRule = rule;
+  }
+  function clearFbos(fbos) {
+    for (const f of fbos) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+  }
+  // Write an h x w block (row-major `flat`, or zeros if null) into the R of tex, top-left at
+  // (row0, col0), replacing what is there. The block must lie inside the board (no wrap).
+  function putField(tex, flat, h, w, row0, col0) {
+    const buf = new Float32Array(w * h * 4);
+    if (flat) for (let i = 0; i < w * h; i++) buf[i * 4] = flat[i];
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, col0, row0, w, h, gl.RGBA, gl.FLOAT, buf);
+  }
+  // Dots on or off. Either way the field starts empty.
+  function setDots(on) { dotsOn = on; clearFbos(dotFbo); }
+  // Write an h x w block of dot values (row-major `flat`, or zeros if null), top-left at (row0, col0).
+  function putDots(flat, h, w, row0, col0) { putField(dotTex[dcur], flat, h, w, row0, col0); }
+
+  // ---- bullets channel ------------------------------------------------------------------
+  // rule: { R, betas, mu, sigma, dt }: the classic Lenia rule, one kernel of quad4 rings (betas,
+  // default [1]), polynomial growth.
+  function setBulletRule(rule) {
+    if (bulTapTex) gl.deleteTexture(bulTapTex);
+    ({ tex: bulTapTex, count: bulTapCount } = shellTaps(rule.R, rule.betas));
+    bulRule = rule;
+  }
+  // Bullets on (opts: { mode: 1 erase | 2 mask, ch: [r, g, b] 0/1 (acted on), wearCh (wearing them),
+  // hit, wear, sub: bullet steps per
+  // step }) or off (null). Turning them on or off empties the field; a change of opts while on keeps it.
+  function setBullets(opts) {
+    const was = bulletsOn;
+    bulletsOn = !!opts;
+    if (opts) bul = { ...bul, ...opts };
+    if (was !== bulletsOn) clearFbos(bulFbo);
+  }
+  function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); }
+  function clearBullets() { clearFbos(bulFbo); }
+  function stepBullets() {
+    const p = prog.bulletsim;
+    gl.useProgram(p);
+    gl.viewport(0, 0, W, H);
+    gl.uniform2i(loc(p, 'uSize'), W, H);
+    gl.uniform1i(loc(p, 'uTapCount'), bulTapCount);
+    gl.uniform1f(loc(p, 'uMu'), bulRule.mu);
+    gl.uniform1f(loc(p, 'uSigma'), bulRule.sigma);
+    gl.uniform1f(loc(p, 'uDt'), bulRule.dt);
+    gl.uniform1f(loc(p, 'uWear'), bul.wear);
+    gl.uniform3fv(loc(p, 'uWearCh'), bul.wearCh);
+    for (let i = 0; i < bul.sub; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, bulFbo[1 - bcur]);
+      bindTex(0, bulTex[bcur], p, 'uField');
+      bindTex(1, state[cur], p, 'uState');
+      bindTex(2, bulTapTex, p, 'uTaps');
+      draw4();
+      bcur = 1 - bcur;
+    }
+  }
+  // The bullets' coarse mass map: BBW x BBH sums over BUL_BLOCK x BUL_BLOCK cells, row-major
+  // (row 0 = board row 0), one float per block.
+  function readBulletBlocks() {
+    const p = prog.blocksum;
+    gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bblkFbo);
+    gl.viewport(0, 0, BBW, BBH);
+    bindTex(0, bulTex[bcur], p, 'uField');
+    gl.uniform2i(loc(p, 'uSize'), W, H);
+    gl.uniform1i(loc(p, 'uBlock'), BUL_BLOCK);
+    draw4();
+    gl.readPixels(0, 0, BBW, BBH, gl.RGBA, gl.FLOAT, bblkBuf);
+    const out = new Float32Array(BBW * BBH);
+    for (let i = 0; i < out.length; i++) out[i] = bblkBuf[i * 4];
+    return out;
+  }
+  function setBulletColor(rgb) { bulRGB = rgb; }
+  // The dots step, on the board the creatures' step just wrote (state[cur]).
+  function stepDots() {
+    const p = prog.dotsim;
+    gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dotFbo[1 - dcur]);
+    gl.viewport(0, 0, W, H);
+    bindTex(0, dotTex[dcur], p, 'uDots');
+    bindTex(1, state[cur], p, 'uState');
+    bindTex(2, dotTapTex, p, 'uTaps');
+    gl.uniform2i(loc(p, 'uSize'), W, H);
+    gl.uniform1i(loc(p, 'uTapCount'), dotTapCount);
+    gl.uniform1f(loc(p, 'uMu'), dotRule.mu);
+    gl.uniform1f(loc(p, 'uSigma'), dotRule.sigma);
+    gl.uniform1f(loc(p, 'uDt'), dotRule.dt);
+    gl.uniform1f(loc(p, 'uEat'), DOT_EAT);
+    gl.uniform1i(loc(p, 'uOffX'), Math.round(dotOff) % W);
+    draw4();
+    dcur = 1 - dcur;
+  }
+  // The dot mass within `radius` cells (a square window) of each site [col, row], as an array
+  // (at most MAX_SITES sites).
+  function readDotSites(sites, radius) {
+    const n = Math.min(sites.length, MAX_SITES);
+    if (!n) return [];
+    siteIn.fill(0);
+    for (let i = 0; i < n; i++) { siteIn[i * 4] = sites[i][0]; siteIn[i * 4 + 1] = sites[i][1]; }
+    gl.bindTexture(gl.TEXTURE_2D, siteTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAX_SITES, 1, gl.RGBA, gl.FLOAT, siteIn);
+    const p = prog.dotsites;
+    gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, siteOutFbo);
+    gl.viewport(0, 0, n, 1);
+    bindTex(0, dotTex[dcur], p, 'uDots');
+    bindTex(1, siteTex, p, 'uSites');
+    gl.uniform2i(loc(p, 'uSize'), W, H);
+    gl.uniform1i(loc(p, 'uRadius'), radius);
+    draw4();
+    gl.readPixels(0, 0, n, 1, gl.RGBA, gl.FLOAT, siteOut);
+    return Array.from({ length: n }, (_, i) => siteOut[i * 4]);
+  }
+  function setDotColor(rgb) { dotRGB = rgb; }
+  let bgRGB = [0, 0, 0];
+  function setBackground(rgb) { bgRGB = rgb; }   // behind the board, where it is empty (draw.glsl uBg)
+  function setDotOffset(x) { dotOff = ((x % W) + W) % W; }
+
+  // Erase (action 1: set to 0) or draw (2: set to 1) channel ch inside a circle (centre col, row,
+  // radius r, cells; round the torus) on the board as it is, with no step: the tools while paused.
+  // Reads the board back, so only while a tool is held.
+  function paint(tool) {
+    const buf = new Float32Array(W * H * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[cur]);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
+    const v = tool.action === 2 ? 1 : 0, R = Math.ceil(tool.r), r2 = tool.r * tool.r;
+    const c0 = Math.round(tool.col), r0 = Math.round(tool.row);
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) {
+        const ddx = c0 + dx - tool.col, ddy = r0 + dy - tool.row;
+        if (ddx * ddx + ddy * ddy > r2) continue;
+        const y = ((r0 + dy) % H + H) % H, x = ((c0 + dx) % W + W) % W;
+        buf[(y * W + x) * 4 + tool.ch] = v;
+      }
+    gl.bindTexture(gl.TEXTURE_2D, state[cur]);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
+  }
+
   function bindTex(unit, tex, p, name) {
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -232,8 +432,14 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uMaskR'), tool ? tool.r : 0);
     gl.uniform3f(loc(p, 'uMaskCh'), tool && tool.ch === 0 ? 1 : 0, tool && tool.ch === 1 ? 1 : 0, tool && tool.ch === 2 ? 1 : 0);
     gl.uniform1f(loc(p, 'uReach'), reach);
+    bindTex(2, bulTex[bcur], p, 'uBullets');
+    gl.uniform1i(loc(p, 'uBulletMode'), bulletsOn && bulTapTex ? bul.mode : 0);
+    gl.uniform3fv(loc(p, 'uBulletCh'), bul.ch);
+    gl.uniform1f(loc(p, 'uBulletHit'), bul.hit);
     draw4();
     cur = 1 - cur;
+    if (dotsOn && dotTapTex) stepDots();
+    if (bulletsOn && bulTapTex) stepBullets();
   }
 
   // Coarse map: BW x BH texels of (mass, sum m*dx, sum m*dy, potential) per BLOCK x BLOCK
@@ -292,6 +498,13 @@ const SimGL = (function () {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, view.canvasW, view.canvasH);
     bindTex(0, state[cur], p, 'uState');
+    bindTex(1, dotTex[dcur], p, 'uDots');
+    bindTex(2, bulTex[bcur], p, 'uBullets');
+    gl.uniform1f(loc(p, 'uBulletsOn'), bulletsOn ? 1 : 0);
+    gl.uniform3fv(loc(p, 'uBulletRGB'), bulRGB);
+    gl.uniform1f(loc(p, 'uDotsOn'), dotsOn ? 1 : 0);
+    gl.uniform3fv(loc(p, 'uDotRGB'), dotRGB);
+    gl.uniform1f(loc(p, 'uDotOff'), dotOff);
     gl.uniform2i(loc(p, 'uSize'), W, H);
     gl.uniform2f(loc(p, 'uCanvas'), view.canvasW, view.canvasH);
     gl.uniform1f(loc(p, 'uWorldScale'), view.worldScale);
@@ -300,12 +513,16 @@ const SimGL = (function () {
     gl.uniform3fv(loc(p, 'uFocus'), view.focus);
     gl.uniform1f(loc(p, 'uStars'), view.stars ? 1 : 0);
     gl.uniform1f(loc(p, 'uTime'), view.time || 0);
+    gl.uniform3fv(loc(p, 'uBg'), bgRGB);
     draw4();
   }
 
   function finish() { gl.finish(); }
 
-  return { init, setRule, setUpdate, seed, add, step, readBlocks, readChannelComs, render, finish, BLOCK,
+  return { init, setRule, setUpdate, seed, add, paint, step, readBlocks, readChannelComs, render, finish, BLOCK,
+           setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, MAX_SITES,
+           setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
+           get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },
            get blockChannels() { return blkChanBuf; },
            get tapCount() { return tapCount; } };
