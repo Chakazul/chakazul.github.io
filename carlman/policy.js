@@ -104,12 +104,16 @@ function createPolicyRuntime(ort, cfg) {
     const ok = cands.filter(c => c.session);
     if (!ok.length) throw new Error(cands.map(c => `${c.ep}: ${c.error}`).join('; ') || 'no backend available');
     const best = ok.reduce((a, b) => (faster(b.ep, b.ms, a.ep, a.ms) ? b : a));
-    // The runner-up is kept, warm, for the re-check during play (see infer()); anything else goes.
-    const runnerUp = ok.find(c => c !== best) || null;
+    // The runner-up is kept, warm, for the re-check during play (see infer()) -- but only when
+    // WebGPU won. A cold load can only make WASM look slower than it is (V8's baseline tier, see
+    // the warm-up above), never faster, so a WASM win here is trustworthy, and re-checking it would
+    // only hand a few steps' decisions to a backend already measured slower: each one a visible
+    // stutter early in the game. Anything not kept is released.
+    const runnerUp = best.ep === 'webgpu' ? ok.find(c => c !== best) || null : null;
     for (const c of ok) if (c !== best && c !== runnerUp) try { await c.session.release(); } catch (e) { /* ignore */ }
     session = best.session; model = best.model; ep = best.ep;
     alt = runnerUp && { session: runnerUp.session, model: runnerUp.model, ep: runnerUp.ep, xs: [] };
-    live = []; recheck = { started: now(), lastSample: 0 };
+    live = []; recheck = alt ? { started: now(), lastSample: 0 } : null;
     return { ep, model, ms: best.ms, candidates: cands.map(({ session: _, ...rest }) => rest) };
   }
 
@@ -126,39 +130,69 @@ function createPolicyRuntime(ort, cfg) {
   // Re-check during play. The load-time pick runs while the page is still busy loading and the
   // browser may not have optimized its code yet, so it can be wrong in a way no warm-up fully
   // rules out. Once the game is running, every inference's time on the chosen backend is
-  // recorded, and about once a second one extra inference runs on the runner-up, under the same
-  // load. After RECHECK_SAMPLES of those the medians are compared with the same margin, the
-  // backend is switched live if the runner-up wins, and the loser is released. One extra
-  // inference a second costs a step or so for those ~10 s; it happens once per page load.
-  const RECHECK_DELAY_MS = 3000, RECHECK_EVERY_MS = 1000, RECHECK_SAMPLES = 8;
+  // recorded, and about once a second the runner-up makes that step's decision instead, under
+  // the same load. After RECHECK_SAMPLES of those the medians are compared with the same margin,
+  // the backend is switched live if the runner-up wins, and the loser is released.
+  //
+  // The runner-up *replaces* the chosen backend on a sample step rather than running beside it:
+  // it is the same policy, so the decision is the same, and the step pays one inference, not two.
+  // Running both stalled every sample step by a whole extra inference -- the handful of lag
+  // spikes in the first ~10 s of a game. A runner-up that can't win even on its best sample is
+  // dropped after RECHECK_EARLY_OUT of them, so a clearly slower one costs two steps, not eight.
+  const RECHECK_DELAY_MS = 3000, RECHECK_EVERY_MS = 1000, RECHECK_SAMPLES = 8, RECHECK_EARLY_OUT = 2;
+  const RECHECK_MIN_LIVE = 5;   // chosen-backend timings needed before judging against them
   let alt = null, live = [], recheck = null, switched = null;
-  async function recheckStep(state, ctx) {
+  const median = xs => xs.slice().sort((a, b) => a - b)[xs.length >> 1];
+  // Whether this inference is a re-check sample; claims the slot if so.
+  function recheckDue() {
     const t = now();
-    if (t - recheck.started < RECHECK_DELAY_MS || t - recheck.lastSample < RECHECK_EVERY_MS) return;
+    if (t - recheck.started < RECHECK_DELAY_MS || t - recheck.lastSample < RECHECK_EVERY_MS) return false;
     recheck.lastSample = t;
-    const feeds = await feedsFor(alt.model, state, ctx);
-    const t1 = now(); await alt.session.run(feeds); alt.xs.push(now() - t1);
-    if (alt.xs.length < RECHECK_SAMPLES) return;
-    const median = xs => xs.slice().sort((a, b) => a - b)[xs.length >> 1];
-    const curMs = median(live.slice(-30)), altMs = median(alt.xs);
-    let loser = alt;
-    if (faster(alt.ep, altMs, ep, curMs)) {
-      switched = { from: ep, to: alt.ep, fromMs: Math.round(curMs * 10) / 10, toMs: Math.round(altMs * 10) / 10 };
-      loser = { session };
-      session = alt.session; model = alt.model; ep = alt.ep;
-    }
+    return true;
+  }
+  async function endRecheck(loser) {
     alt = null; recheck = null; live = [];
-    try { await loser.session.release(); } catch (e) { /* ignore */ }
+    try { await loser?.session.release(); } catch (e) { /* ignore */ }
+  }
+  async function recordSample(ms) {
+    alt.xs.push(ms);
+    if (live.length < RECHECK_MIN_LIVE) return;
+    const curMs = median(live.slice(-30));
+    if (alt.xs.length >= RECHECK_EARLY_OUT && !faster(alt.ep, Math.min(...alt.xs), ep, curMs)) return endRecheck(alt);
+    if (alt.xs.length < RECHECK_SAMPLES) return;
+    const altMs = median(alt.xs);
+    if (!faster(alt.ep, altMs, ep, curMs)) return endRecheck(alt);
+    switched = { from: ep, to: alt.ep, fromMs: Math.round(curMs * 10) / 10, toMs: Math.round(altMs * 10) / 10 };
+    const loser = { session };
+    session = alt.session; model = alt.model; ep = alt.ep;
+    return endRecheck(loser);
+  }
+  async function runOn(s, state, ctx) {
+    const feeds = await feedsFor(s.model, state, ctx);
+    const t = now();
+    const q = (await s.session.run(feeds)).q.data;
+    return { q, runMs: now() - t };
   }
 
   // `thr`: the action threshold. An add/remove only goes ahead if its Q beats the best no-op by at
   // least this much; otherwise the step becomes a no-op at the same cell. 0 is the plain argmax.
   // Damps reactions to a soliton's natural wobble (see the steering_small report in rlca).
   async function infer(state, ctx, thr = 0) {
-    const feeds = await feedsFor(model, state, ctx);
-    const t = now();
-    const q = (await session.run(feeds)).q.data;
-    const runMs = now() - t;
+    let r = null, sampled = false;
+    if (recheck && recheckDue()) {
+      // A runner-up that fails is dropped; the chosen backend then makes this decision as usual.
+      try { r = await runOn(alt, state, ctx); sampled = true; }
+      catch (e) { await endRecheck(alt); }
+    }
+    if (!r) r = await runOn({ session, model }, state, ctx);
+    const { q, runMs } = r;
+    if (recheck) {
+      if (!sampled) live.push(runMs);
+      else {
+        try { await recordSample(runMs); }
+        catch (e) { await endRecheck(alt); }
+      }
+    }
     let best = 0, bv = q[0];
     for (let i = 1; i < q.length; i++) if (q[i] > bv) { bv = q[i]; best = i; }
     const SS = S * S, noop = NOOP_CHANNEL;
@@ -167,11 +201,6 @@ function createPolicyRuntime(ort, cfg) {
       let bn = -Infinity;
       for (let i = noop * SS; i < (noop + 1) * SS; i++) if (q[i] > bn) bn = q[i];
       if (bv - bn < thr) { best = noop * SS + (best % SS); suppressed = true; }
-    }
-    if (recheck) {
-      live.push(runMs);
-      try { await recheckStep(state, ctx); }
-      catch (e) { try { await alt?.session.release(); } catch (e2) { /* ignore */ } alt = null; recheck = null; }
     }
     // ep/model ride along so the caller sees a live switch; `switched` reports it (once known).
     return { best, runMs, suppressed, ep, model, switched };

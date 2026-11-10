@@ -371,9 +371,11 @@ const SimGL = (function () {
 
   // R8 is a normalized format, so a stored 1 would sample as 1/255 (false in the shaders' "is
   // this a wall" tests). Expand the incoming 0/1 mask to 0/255 so it samples as 0.0/1.0.
-  function setWall(mask) {
+  // `door` (optional, 0/1) is stored at 96, sampling as ~0.38: sim.glsl treats it as wall for
+  // Carlman (> 0.25), ghostsim.glsl lets the ghosts through (> 0.5), draw.glsl colours it apart.
+  function setWall(mask, door) {
     const t = new Uint8Array(mask.length);
-    for (let i = 0; i < mask.length; i++) t[i] = mask[i] ? 255 : 0;
+    for (let i = 0; i < mask.length; i++) t[i] = mask[i] ? 255 : (door && door[i] ? 96 : 0);
     gl.bindTexture(gl.TEXTURE_2D, wallTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, W, H, 0, gl.RED, gl.UNSIGNED_BYTE, t);
   }
@@ -794,6 +796,7 @@ const SimGL = (function () {
     gl.uniform2i(u(p, 'uSize'), W, H);
     const rgb = (name, c) => gl.uniform3f(u(p, name), c[0] / 255, c[1] / 255, c[2] / 255);
     rgb('uWallRGB', o.wall);
+    rgb('uDoorRGB', o.door || o.wall);
     rgb('uSolitonRGB', o.soliton);
     rgb('uSoliton2RGB', o.soliton2);
     rgb('uPelletRGB', o.pellet || o.soliton2);

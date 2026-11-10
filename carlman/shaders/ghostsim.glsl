@@ -85,7 +85,7 @@ void main() {
     ivec2 b = uOrigin[i] + l;
     b.x -= uSize.x * int(floor(float(b.x) / float(uSize.x)));
     b.y -= uSize.y * int(floor(float(b.y) / float(uSize.y)));
-    if (texelFetch(uWall, b, 0).r > 0.5) v = 0.0;
+    if (texelFetch(uWall, b, 0).r > 0.5) v = 0.0;     // > 0.5: the ghost-house door (~0.38) lets ghosts through
     else if (uFrightened[i] != 0 && texelFetch(uCarlman, b, 0).r > uEatThreshold) v = 0.0;
 
     fragColor = vec4(v, 0.0, 0.0, 1.0);

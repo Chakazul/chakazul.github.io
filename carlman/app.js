@@ -84,26 +84,28 @@ const DOTS_EVERY = intParam('dotsim', IS_MOBILE ? 3 : 1);
 // and holds together like the original -- the report checked R=12 and R=15/16 for the 5 easy
 // solitons, and found R=13-14 makes rule57 explode on its own and R=9 breaks two of them.
 //
+// `label` is the kernel radius (meta.json's kernel_R) and parameter count (n_params; 790k for the
+// paper model, whose meta predates that field).
 // `cost` and `thr` are the starting action cost and action threshold (?cost= / ?thr= override).
 // DEFAULT_AGENT is the one loaded without ?agent=.
 const AGENTS = [
-  { id: 'r12-med-band600', label: 'R12 medium, mass band, with time',
+  { id: 'r12-med-band600', label: 'Lenia r=12, 375k params',
     meta: 'models/agents/r12-med-band600/meta.json', model: 'models/agents/r12-med-band600/agent.onnx',
     cost: 5, thr: 0.15 },
-  { id: 'r15-med-l900', label: 'R15 medium-large, mass band, with time',
+  { id: 'r15-med-l900', label: 'Lenia r=15, 475k params',
     meta: 'models/agents/r15-med-l900/meta.json', model: 'models/agents/r15-med-l900/agent.onnx',
-    cost: 2.5, thr: 0 },
-  { id: 'r16-med-l950', label: 'R16 medium-large, mass band, with time',
+    cost: 5, thr: 0.15 },
+  { id: 'r16-med-l950', label: 'Lenia r=16, 475k params',
     meta: 'models/agents/r16-med-l950/meta.json', model: 'models/agents/r16-med-l950/agent.onnx',
-    cost: 2.5, thr: 0 },
-  { id: 'r18-med-orig950', label: 'R18 medium, original reward, with time',
+    cost: 5, thr: 0.15 },
+  { id: 'r18-med-orig950', label: 'Lenia r=18, 375k params',
     meta: 'models/agents/r18-med-orig950/meta.json', model: 'models/agents/r18-med-orig950/agent.onnx',
-    cost: 2.5, thr: 0 },
-  { id: 'paper', label: 'R18 (paper model)', net: 96,
+    cost: 5, thr: 0.15 },
+  { id: 'paper', label: 'Lenia r=18, 790k params (paper model)', net: 96,
     meta: 'models/meta_direction.json', model: 'models/agent_direction.onnx',
     film: 'models/agent_direction_film.onnx',
     core: { slice: 'models/agent_direction_core.onnx', gather: 'models/agent_direction_core_gather.onnx' },
-    cost: 2.5, thr: 0 },
+    cost: 5, thr: 0.15 },
 ];
 const DEFAULT_AGENT = 'r18-med-orig950';
 const AGENT = AGENTS.find(a => a.id === new URLSearchParams(location.search).get('agent'))
@@ -161,9 +163,9 @@ const CFG = {
   // 3 of the 5 rules the candidate agents were trained on (include_solitons in their configs), in
   // picker order. models/solitons_direction.json holds these plus the dots' and ghosts' rules below.
   allowedRuleNames: [
-    'rule73_mu0.2250_s0.0250_R18', 'rule74_mu0.2300_s0.0350_R18', 'rule67_mu0.2800_s0.0410_R18',
+    'rule74_mu0.2300_s0.0350_R18', 'rule73_mu0.2250_s0.0250_R18', 'rule67_mu0.2800_s0.0410_R18',
   ],
-  defaultRuleName: 'rule74_mu0.2300_s0.0350_R18',  // or rule73_mu0.2250_s0.0250_R18
+  defaultRuleName: 'rule74_mu0.2300_s0.0350_R18',  // first in the picker, the one starred
   // Dots channel's rule: one soliton per '.' in the layout, free-running under its own growth,
   // never steered.
   channel2RuleName: 'rule0_mu0.3800_s0.0700_R18',
@@ -182,7 +184,7 @@ const CFG = {
   // Difficulty dial: how often a ghost's turn deliberately closes on Carlman rather than rolling
   // the dice. 0 = wanders, 1 = closes whenever a junction allows it. ?chase=N (0-100) to retune.
   chaseBias: pctParam('chase', 0.6),
-  easyRuleCount: 5,            // leading entries flagged as easy-to-steer -- one picker row
+  easyRuleCount: 1,            // leading entries starred as easy to steer (index.html's note covers the rest)
   actionFadeSeconds: 0.85,     // how long an intervention marker takes to fade out, in sim time
   // Wall-clock (not sim) gap with nothing eaten before the eat_dot_0/1 "waka waka" loop stops.
   eatSoundGraceMs: 1000,
@@ -197,8 +199,9 @@ const CFG = {
   // never falls below ~80% over its ~52-step breathing cycle, while a bitten one dissolves to 0
   // within a few steps.
   dotGoneFraction: 0.4,
-  // How long a power pellet's frightened window stays open, wall-clock ms (player-perceived time,
-  // so it doesn't scale with sim speed). A second pellet eaten mid-window resets rather than stacks.
+  // How long a power pellet's frightened window stays open, ms of play (player-perceived time, so
+  // it doesn't scale with sim speed, but it stops while the game is paused or holding for a
+  // jingle -- see loop()). A second pellet eaten mid-window resets rather than stacks.
   frightenedDurationMs: 15000,
   // Bonus fruit: a bonus dot appears on Carlman's spawn tile the moment the level's dots-eaten
   // fraction crosses each entry of bonusFruitThresholds -- twice a level at the defaults (30%,
@@ -239,6 +242,7 @@ const COLORS = {
     [130, 130, 130],            // grey
   ],
   wall:       [33, 33, 180],    // dark arcade blue
+  door:       [255, 184, 222],  // the ghost-house door, arcade pink
   background: [0, 0, 0],
   frightened: [0, 0, 139],      // every ghost's colour during a power pellet's frightened window
 };
@@ -262,8 +266,7 @@ let maze = { start: [0, 0] };
 let dir = [0, 1];                             // current target direction (dy,dx), unit length
 let comHistory = [[0, 0], [0, 0], [0, 0], [0, 0]];
 let lastCoM = null, initialMass = 0;
-let steps = 0, actions = 0, solitonDead = false;
-let courseChanges = 0;          // target direction changes the user made this episode
+let steps = 0, solitonDead = false;
 // Pending auto-respawn from a death, so a manual Restart/etc. during the gap can cancel it.
 let deathTimer = 0;
 let levelWon = false;
@@ -277,7 +280,7 @@ let lives = STARTING_LIVES;
 // count (see placeGhosts()). Advances by one per win, resets on a genuine new game same as lives
 // -- not on a death-respawn or a win -- so the game gets harder round over round, not per death.
 // ?level=N to start elsewhere (also what a reset falls back to).
-const STARTING_LEVEL = intParam('level', 3);
+const STARTING_LEVEL = intParam('level', 4);
 let level = STARTING_LEVEL;
 // The maze layout's highest numbered ghost spawn (see MAZE_LAYOUT) -- clearing this level already
 // has every ghost in play, so a further level would spawn nothing new. Winning it ends the run
@@ -286,11 +289,13 @@ const MAX_LEVEL = 9;
 let winTimer = 0;    // pending auto-restart from clearing the board, same shape as deathTimer
 // Tracked per ghost (newGhost()'s `frightened`), not as one global mode: a pellet marks every
 // not-already-frightened ghost, but one eaten and respawned ends its own window immediately while
-// its packmates keep counting down theirs. frightenedTimer is the shared duration, restarted on
-// every pellet eaten so a second pellet extends the window rather than stacking one behind it.
-let frightenedTimer = 0;
-// Set by frightenedTimer's callback (no fresh readback there to turn ghosts with) -- just flags
-// the window ended. updateFrightened() reacts on the next step it notices, turning every *still*-
+// its packmates keep counting down theirs. frightenedLeftMs is the shared window's time left,
+// reset on every pellet eaten so a second pellet extends the window rather than stacking one
+// behind it. loop() counts it down, and only while the game is actually playing -- a setTimeout
+// kept running through a pause, so the ghosts came back dangerous while the player was away.
+let frightenedLeftMs = 0;
+// Set by loop() when frightenedLeftMs runs out (no fresh readback there to turn ghosts with) --
+// just flags the window ended. updateFrightened() reacts on the next step it notices, turning every *still*-
 // frightened ghost back toward Carlman (one already normal from an earlier respawn is untouched).
 let frightenedExpired = false;
 // True while the sim holds for the eat_ghost.wav jingle -- set by handleGhostEaten(), cleared by
@@ -400,7 +405,8 @@ function toroidalDelta(ny, nx, oy, ox) {
 //  are corner posts (always wall), and everything else is a wall slot between two cells.
 //
 //  '+' and '-' are pure authoring aliases for '.' and ' ', kept so a hand-edited row still reads
-//  as ASCII art. '^' is open floor too, except a ghost standing on it is sent north rather than
+//  as ASCII art. '^' (and the house's centre spawn, '4' -- see GHOST_NORTH_CHARS) is open floor
+//  too, except a ghost standing on it is sent north rather than
 //  choosing for itself -- what gives a centre room a one-way exit.
 //
 //  '.'/'+' places a dot and 'O' a power pellet (both a channel-2 soliton, see placeDots()) on
@@ -411,7 +417,8 @@ function toroidalDelta(ny, nx, oy, ox) {
 //  ghosts numbered at or below the current `level`) · '#' solid cell · 'O' a power pellet (same
 //  soliton/rule as a dot, just recoloured -- see placeDots()'s power mask) · anything else open
 //  floor (a 'C' or digit is open floor too, just marking what spawns there).
-//  On a wall slot: '#'/'|' wall · anything else an open passage -- including on the outer ring,
+//  On a wall slot: '#'/'|' wall · '=' the ghost-house door: open to the ghosts, a wall to
+//  Carlman (see the door mask in layoutMaze()) · anything else an open passage -- including on the outer ring,
 //  since the sim wraps toroidally regardless of walls, so an opening there is a real side tunnel
 //  to the opposite edge, not a dead end.
 //
@@ -430,7 +437,9 @@ const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 // Cells a ghost may turn on -- the same "dot"/"open"/"ghost spawn"/"power pellet" characters
 // doing double duty, since in this layout they land on exactly the 32 corner/junction cells.
 const GHOST_TURN_CHARS = '+-O^123456789';
-const GHOST_NORTH_CHAR = '^';   // the one that doesn't leave the choice open -- always sent north
+// The ones that don't leave the choice open -- always sent north. '4' is the house's centre cell
+// doubling as ghost 4's spawn, so it has to keep the centre's one-way exit.
+const GHOST_NORTH_CHARS = '^4';
 // Wall thickness and outer border, matching the old generator (ww=9, edgeWall=9). At 5x5 cells
 // that leaves cw=39, tighter than the widest curated soliton (46px) -- see placeSoliton()'s clip.
 // Both at R=18; loadAgent() scales them.
@@ -443,8 +452,8 @@ const MAZE_LAYOUT = [
   "#O...9#+.......+#7...O#",
   "#.###.#.#######.#.###.#",
   "#.#+.+.+...3...+.+.+#.#",
-  "#.#.###.##   ##.###.#.#",
-  " +.4...+#1 ^ 2#+...5.+ ",
+  "#.#.###.## = ##.###.#.#",
+  " +.+...+#1 4 2#+...5.+ ",
   "#.#.###.#######.###.#.#",
   "#.#+.+.+.. C ..+.+.+#.#",
   "#.###.#.#######.#.###.#",
@@ -485,9 +494,15 @@ function layoutMaze(layout, bh, bw, enableWalls) {
 
   // Carve-out-of-solid: start all wall, open up the cells, then open the passages between them.
   const wallArr = new Uint8Array(bh * bw).fill(enableWalls ? 1 : 0);
-  const carve = (y0, x0, y1, x1) => {
+  // 1 on a '=' door: carved open like any passage (the ghosts' own wall test ignores it), but
+  // glsim.js uploads it into the wall texture at half strength, which Carlman's sim reads as wall.
+  const doorArr = new Uint8Array(bh * bw);
+  const carve = (y0, x0, y1, x1, door = false) => {
     y0 = Math.max(0, y0); x0 = Math.max(0, x0); y1 = Math.min(bh, y1); x1 = Math.min(bw, x1);
-    for (let y = y0; y < y1; y++) { const row = y * bw; for (let x = x0; x < x1; x++) wallArr[row + x] = 0; }
+    for (let y = y0; y < y1; y++) {
+      const row = y * bw;
+      for (let x = x0; x < x1; x++) { wallArr[row + x] = 0; if (door) doorArr[row + x] = 1; }
+    }
   };
 
   let startCell = null;
@@ -516,9 +531,9 @@ function layoutMaze(layout, bh, bw, enableWalls) {
     // Only the gap itself is carved, not the union of the two cells, so a passage next to a
     // solid cell opens the connector without hollowing the cell out.
     if (c + 1 < cols && !isWall(at(2 * r + 1, 2 * c + 2)))
-      carve(cellTop(r), cellLeft(c) + cwX, cellTop(r) + cwY, cellLeft(c + 1));
+      carve(cellTop(r), cellLeft(c) + cwX, cellTop(r) + cwY, cellLeft(c + 1), at(2 * r + 1, 2 * c + 2) === '=');
     if (r + 1 < rows && !isWall(at(2 * r + 2, 2 * c + 1)))
-      carve(cellTop(r) + cwY, cellLeft(c), cellTop(r + 1), cellLeft(c) + cwX);
+      carve(cellTop(r) + cwY, cellLeft(c), cellTop(r + 1), cellLeft(c) + cwX, at(2 * r + 2, 2 * c + 1) === '=');
   }
   // Same idea on the outer ring: an open wall slot there carves clear to the physical board edge
   // instead of to a neighbour, becoming a real side tunnel since sim.glsl wraps toroidally anyway.
@@ -581,7 +596,7 @@ function layoutMaze(layout, bh, bw, enableWalls) {
   };
 
   return {
-    wall: wallArr, start: cellCenter(startCell), dots: dotPos, power: powerPos,
+    wall: wallArr, door: doorArr, start: cellCenter(startCell), dots: dotPos, power: powerPos,
     // [y, x, id] per ghost -- id is the layout digit, which placeGhosts() filters the current
     // level's spawns against.
     ghosts: ghostCells.map(g => [...cellCenter([g.r, g.c]), g.id]),
@@ -734,7 +749,10 @@ function newGhost(r, c, cellIdx, home = [r, c]) {
     // Stamped in the bank's own orientation and turned to face the house exit once it has moved
     // far enough to say which way it's going -- aiming it at stamp time would need knowing each
     // rule's canonical heading, which varies.
-    aim: cellIdx >= 0 ? maze.cells[cellIdx].open.indexOf(true) : -1,
+    // A ghost spawned on a north-only cell leaves north, through the house door.
+    aim: cellIdx < 0 ? -1
+      : GHOST_NORTH_CHARS.includes(maze.cells[cellIdx].ch) && maze.cells[cellIdx].open[3] ? 3
+      : maze.cells[cellIdx].open.indexOf(true),
     spawnMass: 0,               // 0 disarms this ghost's death check
     // Per-ghost: a ghost eaten mid-frightened-window respawns with this false, ending its own
     // window immediately while untouched packmates keep counting down theirs. See updateFrightened().
@@ -776,7 +794,7 @@ function placeGhosts() {
   ghosts = [];
   SimGL.setGhostTiles([], []);
   if (!GHOSTS_ENABLED) return;
-  // Level N spawns every numbered ghost at or below N (level 3, the start, is ghosts 1-3); a
+  // Level N spawns every numbered ghost at or below N (level 4, the start, is ghosts 1-4); a
   // level past the layout's highest number just spawns all of them, since nothing's left to exclude.
   const spawns = maze.ghosts.filter(([, , id]) => id <= level);
   const entry = spawns.length ? ruleBank.get(CFG.channel3RuleName) : null;
@@ -882,8 +900,7 @@ function turnGhost180(rb, i, away) {
 function updateFrightened(rb) {
   if (rb.pelletEaten > EAT_SOUND_MIN_MASS) {
     playFrightSound();
-    clearTimeout(frightenedTimer);
-    frightenedTimer = setTimeout(() => { frightenedExpired = true; }, CFG.frightenedDurationMs);
+    frightenedLeftMs = CFG.frightenedDurationMs;
     frightenedExpired = false;   // a fresh pellet supersedes any pending expiry from the old window
     for (let i = 0; i < ghosts.length; i++) {
       if (ghosts[i].frightened) continue;   // already fleeing -- window just extended
@@ -989,7 +1006,7 @@ function steerGhost(g, idx, s, rb) {
     // Left, straight, right -- never a reversal, so the ghost reads as patrolling. A '^' cell
     // overrides this and sends it north (a centre room's one-way exit). Only actually-open
     // candidates survive; a dead end leaves reversing as the only option.
-    const wanted = cell.ch === GHOST_NORTH_CHAR ? [3] : [(cur + 3) % 4, cur, (cur + 1) % 4];
+    const wanted = GHOST_NORTH_CHARS.includes(cell.ch) ? [3] : [(cur + 3) % 4, cur, (cur + 1) % 4];
     const open = wanted.filter(k => cell.open[k]);
     let next;
     if (!open.length) next = (cur + 2) % 4;
@@ -1034,17 +1051,18 @@ function placeSoliton(entry, resetDots = true, playIntro = true, resetLives = pl
 
   clearTimeout(deathTimer);
   clearTimeout(winTimer);
-  clearTimeout(frightenedTimer);
+  frightenedLeftMs = 0;
   stopEatingSound();
   sndEatGhost.pause(); sndEatGhost.currentTime = 0;   // in case a respawn lands mid-jingle
   sndEatFruit.pause(); sndEatFruit.currentTime = 0;
-  steps = 0; actions = 0; courseChanges = 0; solitonDead = false; levelWon = false; ghostEatPause = false;
+  steps = 0; solitonDead = false; levelWon = false; ghostEatPause = false;
   ghostEatPopup = null;
   frightenedExpired = false;   // placeGhosts() above already gave every ghost a fresh, unfrightened newGhost()
   ghostChainMultiplier = 1;    // fresh ghosts (placeGhosts() above is unconditional): fresh combo too
   bonusFruit = null; fruitEatPause = false; fruitEatPopup = null;
   if (resetLives) lives = STARTING_LIVES;
   if (resetLives) score = 0;
+  if (resetLives) resetLab();
   sometimesRemaining = sometimesWindow;
   strideCounter = 0;
   lastAction = null; nextAction = null;
@@ -1160,7 +1178,7 @@ function newMaze() {
   spawnRotation = (Math.random() * 4) | 0;
   maze = layoutMaze(MAZE_LAYOUT, H, W, mazeEnabled);
   wall = maze.wall;
-  SimGL.setWall(wall);
+  SimGL.setWall(wall, maze.door);
   placeSoliton(bank[currentIndex]);
 }
 function initBoard() {
@@ -1385,7 +1403,6 @@ async function agentAct() {
   lab.queries++;
   if (suppressed) lab.suppressed++;
   if (sign === 0) return null;
-  actions++;
   lab.actions++;
   actionTrail.push({ r, c, sign, step });
   if (actionTrail.length > MAX_TRAIL) actionTrail.shift();
@@ -1705,11 +1722,13 @@ function render() {
 
   $('r-mass').textContent = lastCoM ? lastCoM[2].toFixed(0) : '0';
   $('r-step').textContent = steps;
-  $('r-acts').textContent = actions;
-  $('r-course').textContent = courseChanges;
-  $('r-ms').textContent = lastMs ? lastMs.toFixed(1) + 'ms' : '–';
-  $('r-rate').textContent = measSps ? measSps.toFixed(0) + '/s' : '–';
+  $('r-ms').textContent = lastMs ? lastMs.toFixed(0) + ' ms' : '–';
+  $('r-rate').textContent = measSps ? measSps.toFixed(0) + ' steps/s' : '–';
   $('lives').textContent = '💛'.repeat(lives);
+  // Counted from the starting level, so the first board reads as level 1 whatever ?level= is.
+  const lvl = level - STARTING_LEVEL + 1, lvls = MAX_LEVEL - STARTING_LEVEL + 1;
+  $('level').textContent = `${lvl}/${lvls}`;
+  $('level').setAttribute('aria-label', `Level ${lvl} of ${lvls}`);
   $('score').textContent = score;
   renderLab();
 }
@@ -1730,6 +1749,13 @@ async function loop() {
     // Steps the budget can't afford are dropped, not carried over (that would only lengthen the
     // next batch). Checked after a step, not before, so one step blowing the whole budget still
     // advances by one instead of stalling forever.
+    // The frightened window counts down only here, so it stops whenever the loop does (paused,
+    // hidden tab) and while the board holds for a jingle -- the arcade freezes it then too.
+    const holding = solitonDead || levelWon || ghostEatPause || fruitEatPause;
+    if (frightenedLeftMs > 0 && !holding) {
+      frightenedLeftMs -= elapsed * 1000;
+      if (frightenedLeftMs <= 0) { frightenedLeftMs = 0; frightenedExpired = true; }
+    }
     let done = 0;
     try {
       for (let k = 0; k < want; k++) {
@@ -1759,16 +1785,17 @@ function setRunning(v) {
 // ====================================================================================
 let actionCost = 2.5;
 let actThreshold = 0;   // see infer() in policy.js; set from the agent's default / ?thr= at boot
-// Model-lab tallies, kept across restarts for the whole page visit so agents can be compared over
-// several games: CARL queries, actions taken, actions the threshold turned into no-ops, and how
-// Carlman died (explosion = mass runaway; death = dissolved, a ghost included).
+// Model-stats tallies for the current game, reset by every new game (placeSoliton() with
+// resetLives; picking another model reloads the page): CARL queries, actions taken, actions the
+// threshold turned into no-ops, and how Carlman died (explosion = mass runaway; death = dissolved,
+// a ghost included).
 const lab = { queries: 0, actions: 0, suppressed: 0, explosions: 0, deaths: 0 };
+function resetLab() { for (const k in lab) lab[k] = 0; }
 // Every user-initiated steer goes through here. Re-issuing the direction already being chased
 // (holding an arrow key, clicking straight ahead) isn't counted as a change of course.
 function steerTo(dy, dx) {
   const n = Math.hypot(dy, dx); if (n < 1e-6) return;
   const ny = dy / n, nx = dx / n;
-  if (ny * dir[0] + nx * dir[1] < 0.9999) courseChanges++;
   dir = [ny, nx];
   sometimesRemaining = sometimesWindow;    // a fresh steer wakes CARL up again in 'sometimes' mode
   strideCounter = 0;                       // ...and gets an immediate inference, not a stale skip
@@ -1782,10 +1809,15 @@ cv.addEventListener('click', e => {
 });
 window.addEventListener('keydown', e => {
   const tag = document.activeElement && document.activeElement.tagName;
-  if (tag === 'SELECT' || tag === 'INPUT') return;
   const map = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
   const v = map[e.key];
-  if (v) { steerTo(v[0], v[1]); e.preventDefault(); return; }
+  // Arrows always steer. A dropdown or slider keeps focus after a click and would take them
+  // itself -- on the model dropdown that switches model, which reloads the page mid-game.
+  if (v) {
+    if (tag === 'SELECT' || tag === 'INPUT') document.activeElement.blur();
+    steerTo(v[0], v[1]); e.preventDefault(); return;
+  }
+  if (tag === 'SELECT' || tag === 'INPUT') return;
   if (e.key === ' ') { setRunning(!running); e.preventDefault(); }
 });
 $('play').addEventListener('click', () => setRunning(!running));
@@ -1833,11 +1865,6 @@ $('sound').textContent = soundEnabled ? 'Sound ON' : 'Sound OFF';
 $('sound').setAttribute('aria-pressed', String(soundEnabled));
 $('sound').addEventListener('click', () => setSound(!soundEnabled));
 $('respawn').addEventListener('click', respawnCurrentSoliton);
-$('shuffle').addEventListener('click', () => {
-  currentIndex = (Math.random() * bank.length) | 0;
-  updateSolitonSelection();
-  respawnCurrentSoliton();
-});
 function setActionCost(v) {
   actionCost = v;
   const el = $('v-cost');
@@ -1873,8 +1900,7 @@ function initLab() {
 }
 function renderLab() {
   const pct = (n, d) => d ? (100 * n / d).toFixed(0) + '%' : '–';
-  $('lab-rate').textContent = lab.queries ? (lab.actions / lab.queries).toFixed(2) : '–';
-  $('lab-queries').textContent = lab.queries;
+  $('lab-rate').textContent = pct(lab.actions, lab.queries);
   $('lab-supp').textContent = pct(lab.suppressed, lab.queries);
   $('lab-expl').textContent = lab.explosions;
   $('lab-deaths').textContent = lab.deaths;

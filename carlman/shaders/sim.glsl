@@ -89,7 +89,9 @@ void main() {
 
     // Wall collision, applied after the step so mass an action dropped into a wall is still
     // visible to this step's convolution, and only then removed.
-    if (uWallEnabled != 0 && texelFetch(uWall, p, 0).r > 0.5) v = 0.0;
+    // > 0.25, not 0.5: the ghost-house door is stored at ~0.38 (glsim.js's setWall()), a wall
+    // to this channel but not to the ghosts (ghostsim.glsl tests > 0.5).
+    if (uWallEnabled != 0 && texelFetch(uWall, p, 0).r > 0.25) v = 0.0;
 
     fragColor = vec4(v, 0.0, 0.0, 1.0);
 }

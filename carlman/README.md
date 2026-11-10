@@ -9,12 +9,12 @@ work.
 ## URL parameters
 
 - `?agent=<id>` — which trained policy steers Carlman (default `r12-med-band600`); see *Model lab* below.
-- `?cost=X` / `?thr=X` — starting action cost and action threshold (default: the agent's own; `cost=5`, `thr=0.15` for `r12-med-band600`, 2.5 and 0 for the rest).
+- `?cost=X` / `?thr=X` — starting action cost and action threshold (default `cost=5`, `thr=0.15` for every agent).
 - `?sound=0` — mute (default on).
 - `?dots=0` — turn off the dots/pellets channel (default on).
 - `?ghost=0` — turn off the ghosts channel; nothing but Carlman's own dynamics can kill him (default on).
 - `?god=1` — god mode: deaths still play out but never cost a life, for testing deep levels without a game over cutting the run short (default off).
-- `?level=N` — starting level, i.e. starting ghost count (default `3`).
+- `?level=N` — starting level, i.e. starting ghost count (default `4`).
 - `?chase=N` (`0`-`100`) — ghost chase-bias difficulty dial: `0` wanders, `100` always closes at a junction (default `60`).
 - `?net=N` — override the policy's input window size, for off-distribution experiments (default `96`, matching training).
 - `?sometimes=N` — steps CARL stays active per window in "CARL acts sometimes" mode before going idle again (default `100`).
@@ -22,7 +22,7 @@ work.
 - `?pipeline=0` — don't overlap inference with the GPU step. By default, with the worker, each step applies the action CARL decided on the previous step while the worker decides the next one, so a CARL step costs max(inference, sim) instead of their sum, for one step of action latency (see PERF.md).
 - `?stride=N` — infer the model only every Nth active step, taking no action in between; cheaper but reacts more slowly to a moving soliton (default `1`, i.e. every step).
 - `?budget=N` — per-frame sim-step time budget in ms, to tune per device (default `10`).
-- `?ep=wasm` / `?ep=webgpu` — force the policy's backend. By default the game times both on the device at load (while the board waits for the model) and keeps the faster: neither wins everywhere (see PERF.md, "Device measurements"). Each backend is warmed until its speed settles (up to ~2 s) before it is timed, because on a cold load, such as a fresh incognito session, WASM starts on V8's slow baseline tier and would otherwise lose to WebGPU on phones where it is really faster. Before any of that, a page that isn't cross-origin isolated yet waits for the COOP/COEP service worker and reloads into it (once per session), so WASM is never timed on a single thread. WebGPU has to be at least 20% faster than WASM to be picked, since WASM's near-ties cost nothing once inference is pipelined against the sim. The pick is then re-checked during play: for about 10 s after the first 3, one extra inference a second runs on the runner-up under real game load, and if it wins by the same rule the game switches backend live, with no reload. `?debug=1`'s report records a switch under `switched`.
+- `?ep=wasm` / `?ep=webgpu` — force the policy's backend. By default the game times both on the device at load (while the board waits for the model) and keeps the faster: neither wins everywhere (see PERF.md, "Device measurements"). Each backend is warmed until its speed settles (up to ~2 s) before it is timed, because on a cold load, such as a fresh incognito session, WASM starts on V8's slow baseline tier and would otherwise lose to WebGPU on phones where it is really faster. Before any of that, a page that isn't cross-origin isolated yet waits for the COOP/COEP service worker and reloads into it (once per session), so WASM is never timed on a single thread. WebGPU has to be at least 20% faster than WASM to be picked, since WASM's near-ties cost nothing once inference is pipelined against the sim. When WebGPU wins, the pick is then re-checked during play (a WASM win needs no re-check: a cold load can only make WASM look slower, never faster): for about 10 s after the first 3, once a second the runner-up makes that step's decision instead of the chosen backend, under real game load, and if it wins by the same rule the game switches backend live, with no reload. It replaces the chosen backend on those steps rather than running beside it, so a step never pays for two inferences (running both caused a handful of lag spikes early in a game), and a runner-up that can't win even on its best of two samples is dropped there. `?debug=1`'s report records a switch under `switched`.
 - `?dotsim=N` — run the dots channel's full Lenia step only every Nth step; the steps in between only apply Carlman's erase, so eating stays instant while the dots breathe, and a bitten dot dissolves, N times slower (default `3` on phones and tablets, `1` elsewhere). The dots are the most expensive channel on the board; see PERF.md.
 - `?model=orig|slice|gather` — which policy graph runs: `orig` is the export as-is, `slice` and `gather` are the same network split by `tools/split_model.py` into a FiLM model (run only when the target direction or action cost changes) and a conv core with far fewer ops. Bit-identical outputs. Default: each backend gets the graph measured fastest on it, `gather` on WebGPU (96 crop only) and `slice` on WASM; `?model=` forces one for both.
 - `?kernel=tex` — read convolution weights from a texture (the original path) instead of the default uniform buffer, to A/B the two on a new device (see Fidelity, below).
@@ -55,10 +55,11 @@ Any radius works, but per the report R=13-14 makes rule57 explode on its own and
 the easy solitons; 12, 15, 16 and 18 are fine.
 
 **What to compare.** The goal is an agent that acts sparsely, never explodes Carlman, and follows
-direction changes well. The lab readout under the picker keeps totals for the whole visit:
-`act/query` (sparsity), `held back` (share of actions the threshold turned into no-ops),
+direction changes well. **Model stats** under the picker (collapsed) keep totals for the current game, reset by every
+restart or model switch: `action frequency` (share of CARL's decisions that add or remove mass),
+`held back` (share the threshold turned into no-ops),
 `exploded` (mass runaway), and `died` (anything else, ghosts included). Play with `?ghost=0` to
-judge CARL alone. The **action threshold** slider makes CARL act only when its best add/remove beats
+judge CARL alone. The **action threshold** slider (under **Settings**, below the intro, with action cost, game speed and the live readout) makes CARL act only when its best add/remove beats
 doing nothing by that margin. The report found 0.3-0.6 halves the actions without hurting
 steering, and 1 or more breaks it. The address bar keeps `?agent&cost&thr` current, so a setting that
 plays well can be shared as a link.
@@ -100,10 +101,13 @@ and `thr`, then decide whether the picker and lab readout stay visible on the pu
   mass wherever a non-frightened ghost overlaps him, draining him below `massDeathFraction` and
   triggering the ordinary death path — no separate collision test. During a frightened window
   (below) that reverses per-ghost. Ghosts are re-placed on every spawn, including death respawns,
-  so they always restart in their house. `?ghost=0` turns the whole channel off, which also
+  so they always restart in their house. The house's
+  door (`=` in the layout, drawn pink) is a wall to Carlman but not to the ghosts: it sits in the
+  wall texture at ~0.38, which `sim.glsl` reads as wall (> 0.25) and `ghostsim.glsl` doesn't (> 0.5). `?ghost=0` turns the whole channel off, which also
   removes the only thing that can kill Carlman other than his own dynamics.
 - **Power pellets & frightened ghosts.** Eating an `O` starts (or, mid-window, extends) a shared
-  `frightenedDurationMs` window: every not-already-frightened ghost turns to flee, slows to
+  `frightenedDurationMs` window (counted only while the game plays, so it stops while paused or
+  holding for a jingle): every not-already-frightened ghost turns to flee, slows to
   `GHOST_FRIGHTENED_SPEED` of normal, and can now be eaten by Carlman instead of the reverse — the
   same one-fetch erase, just pointed the other way, per ghost tile (`uFrightened[i]` in
   `ghostsim.glsl`). Any ghost that dies (dissolves or explodes, see Ghost death below) while
@@ -135,7 +139,7 @@ and `thr`, then decide whether the picker and lab readout stay visible on the pu
   again). Clearing the board (all dots and pellets gone) awards a life back, advances `level` by
   one, and respawns everything — dots refilled, ghost count following the new level — after an
   intermission jingle, carrying the current life count forward rather than resetting it. `?level=N`
-  picks a starting level other than the default 3 (also what a Restart falls back to). `?god=1`
+  picks a starting level other than the default 4 (also what a Restart falls back to; the title row counts levels from there, as level 1 of 6). `?god=1`
   keeps the death beat (jingle, pause, respawn) but stops it from costing a life, so a game over
   never interrupts a run.
 - **Carlman is windowed too.** His simulation is confined to a 128-square patch that follows his

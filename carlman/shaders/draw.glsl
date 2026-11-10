@@ -15,6 +15,7 @@ uniform sampler2D uPower;    // 1 where a power pellet was stamped rather than a
                              // mass, same rule, coloured differently (see glsim.js's setPowerMask())
 uniform ivec2 uSize;         // board (W, H)
 uniform vec3  uWallRGB;      // 0..1, flat fill for wall cells
+uniform vec3  uDoorRGB;      // 0..1, flat fill for the ghost-house door (wall texture ~0.38)
 uniform vec3  uSolitonRGB;   // 0..1, the colour mass 1 reaches
 uniform vec3  uSoliton2RGB;  // 0..1, the colour an ordinary dot reaches
 uniform vec3  uPelletRGB;    // 0..1, the colour a power pellet reaches
@@ -32,8 +33,13 @@ void main() {
     int row = uSize.y - 1 - int(gl_FragCoord.y);   // GL y is up, board row 0 is at top
     ivec2 p = ivec2(col, row);
 
-    if (texelFetch(uWall, p, 0).r > 0.5) {
+    float w = texelFetch(uWall, p, 0).r;
+    if (w > 0.75) {
         fragColor = vec4(uWallRGB, 1.0);
+        return;
+    }
+    if (w > 0.25) {
+        fragColor = vec4(uDoorRGB, 1.0);
         return;
     }
 
