@@ -94,7 +94,7 @@ const AGENTS = [
     cost: 5, thr: 0.15 },
   { id: 'r15-med-l900', label: 'Lenia r=15, 475k params',
     meta: 'models/agents/r15-med-l900/meta.json', model: 'models/agents/r15-med-l900/agent.onnx',
-    cost: 5, thr: 0.15 },
+    cost: 3.8, thr: 0.15 },
   { id: 'r16-med-l950', label: 'Lenia r=16, 475k params',
     meta: 'models/agents/r16-med-l950/meta.json', model: 'models/agents/r16-med-l950/agent.onnx',
     cost: 5, thr: 0.15 },

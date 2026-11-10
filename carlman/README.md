@@ -9,7 +9,7 @@ work.
 ## URL parameters
 
 - `?agent=<id>` — which trained policy steers Carlman (default `r12-med-band600`); see *Model lab* below.
-- `?cost=X` / `?thr=X` — starting action cost and action threshold (default `cost=5`, `thr=0.15` for every agent).
+- `?cost=X` / `?thr=X` — starting action cost and action threshold (default `thr=0.15` for every agent, and `cost=5` for every agent but `r15-med-l900`, the site default, which starts at `cost=3.8`).
 - `?sound=0` — mute (default on).
 - `?dots=0` — turn off the dots/pellets channel (default on).
 - `?ghost=0` — turn off the ghosts channel; nothing but Carlman's own dynamics can kill him (default on).
