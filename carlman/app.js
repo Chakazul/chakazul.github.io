@@ -107,7 +107,7 @@ const AGENTS = [
     core: { slice: 'models/agent_direction_core.onnx', gather: 'models/agent_direction_core_gather.onnx' },
     cost: 5, thr: 0.15 },
 ];
-const DEFAULT_AGENT = 'r18-med-orig950';
+const DEFAULT_AGENT = 'r15-med-l900';
 const AGENT = AGENTS.find(a => a.id === new URLSearchParams(location.search).get('agent'))
   || AGENTS.find(a => a.id === DEFAULT_AGENT);
 function floatParam(name, def) {

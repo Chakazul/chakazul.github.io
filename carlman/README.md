@@ -31,7 +31,7 @@ work.
 
 ## Model lab
 
-A picker under **Setup** (or `?agent=`) swaps the policy that steers Carlman, so candidates can be
+The model picker (or `?agent=`) swaps the policy that steers Carlman, so candidates can be
 compared in the actual game before one ships. The candidates are the finalists of the
 `steering_small` report (`rlca/experiments/steering_small/REPORT.md`), alongside the paper model:
 
@@ -39,7 +39,7 @@ compared in the actual game before one ships. The candidates are the finalists o
 |---|---|---|
 | `r12-med-band600` | 375k, R=12, mass band, time input, @600k (**the report's pick**, cosine 0.967) | 0.59 · 100% · 0.10 |
 | `paper` | the current site's model, 790k params, R=18 | 0.59 · 92.5% · 0.49 |
-| `r15-med-l900` | 475k, R=15, mass band, time input, @900k (cosine 0.970; ~1.6× the sim cost of R=12) | 0.53 · 100% · 0.14 |
+| `r15-med-l900` | **the site default.** 475k, R=15, mass band, time input, @900k (cosine 0.970; ~1.6× the sim cost of R=12) | 0.53 · 100% · 0.14 |
 | `r16-med-l950` | 475k, R=16, mass band, time input, @950k (cosine 0.970; not in the report's shortlist) | 0.55 · 100% · 0.14 |
 | `r18-med-orig950` | 375k, R=18, original reward (no mass band), time input, @950k (cosine 0.963; sparsest in the sweep; not in the report's shortlist) | 0.52 · 100% · 0.08 |
 
