@@ -41,7 +41,7 @@ const SimGL = (function () {
   const MAX_SITES = 256;
   const DOT_EAT = 0.1;   // creature mass above this erases the dot there (Carlman's EAT_THRESHOLD)
   let dotTex = [], dotFbo = [], dcur = 0, dotsOn = false, dotRGB = [0.8, 0.86, 1];
-  let dotOff = 0;   // the dots' drift to the left, cells in [0, W): dot cell x is at board cell x - dotOff
+  let dotOff = [0, 0];   // the dots' drift, cells in [0, W) x [0, H): dot cell (x, y) is at board cell (x, y) - dotOff
   let dotTapTex = null, dotTapCount = 0, dotRule = null;
   let siteTex = null, siteOutTex = null, siteOutFbo = null;
   const siteIn = new Float32Array(MAX_SITES * 4), siteOut = new Float32Array(MAX_SITES * 4);
@@ -348,7 +348,7 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uSigma'), dotRule.sigma);
     gl.uniform1f(loc(p, 'uDt'), dotRule.dt);
     gl.uniform1f(loc(p, 'uEat'), DOT_EAT);
-    gl.uniform1i(loc(p, 'uOffX'), Math.round(dotOff) % W);
+    gl.uniform2i(loc(p, 'uOff'), Math.round(dotOff[0]) % W, Math.round(dotOff[1]) % H);
     draw4();
     dcur = 1 - dcur;
   }
@@ -376,7 +376,7 @@ const SimGL = (function () {
   function setDotColor(rgb) { dotRGB = rgb; }
   let bgRGB = [0, 0, 0];
   function setBackground(rgb) { bgRGB = rgb; }   // behind the board, where it is empty (draw.glsl uBg)
-  function setDotOffset(x) { dotOff = ((x % W) + W) % W; }
+  function setDotOffset(x, y = 0) { dotOff = [((x % W) + W) % W, ((y % H) + H) % H]; }
 
   // Erase (action 1: set to 0) or draw (2: set to 1) channel ch inside a circle (centre col, row,
   // radius r, cells; round the torus) on the board as it is, with no step: the tools while paused.
@@ -491,7 +491,8 @@ const SimGL = (function () {
 
   // view: { canvasW, canvasH, worldScale, zoom: [x0, y0, edge, pxPerCell], rot: mat2 (column-
   // major, view (right, down) -> board (col, row)), focus: [col, row, on],
-  //   stars: star field on, time: seconds (star drift) }
+  //   stars: star field on, time: seconds (star sway), starOff: [x, y] drift (cells, at unit
+  //   layer speed), starDir: [x, y] unit drift direction, starSpeed, starBright: 1 = default }
   function render(view) {
     const p = prog.draw;
     gl.useProgram(p);
@@ -504,7 +505,7 @@ const SimGL = (function () {
     gl.uniform3fv(loc(p, 'uBulletRGB'), bulRGB);
     gl.uniform1f(loc(p, 'uDotsOn'), dotsOn ? 1 : 0);
     gl.uniform3fv(loc(p, 'uDotRGB'), dotRGB);
-    gl.uniform1f(loc(p, 'uDotOff'), dotOff);
+    gl.uniform2fv(loc(p, 'uDotOff'), dotOff);
     gl.uniform2i(loc(p, 'uSize'), W, H);
     gl.uniform2f(loc(p, 'uCanvas'), view.canvasW, view.canvasH);
     gl.uniform1f(loc(p, 'uWorldScale'), view.worldScale);
@@ -513,6 +514,10 @@ const SimGL = (function () {
     gl.uniform3fv(loc(p, 'uFocus'), view.focus);
     gl.uniform1f(loc(p, 'uStars'), view.stars ? 1 : 0);
     gl.uniform1f(loc(p, 'uTime'), view.time || 0);
+    gl.uniform2fv(loc(p, 'uStarOff'), view.starOff || [-(view.time || 0), 0]);
+    gl.uniform2fv(loc(p, 'uStarDir'), view.starDir || [-1, 0]);
+    gl.uniform1f(loc(p, 'uStarSpeed'), view.starSpeed ?? 1);
+    gl.uniform1f(loc(p, 'uStarBright'), view.starBright ?? 1);
     gl.uniform3fv(loc(p, 'uBg'), bgRGB);
     draw4();
   }

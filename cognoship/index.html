@@ -21,9 +21,7 @@
 <body>
 <div class="wrap game">
   <div class="title-row">
-    <h1>Cognoship <small>steer by cognitive masking</small></h1>
-    <!-- the score, while the dots are on ([dot:<n>]) -->
-    <div id="score" class="score" hidden><span id="score-v">0</span></div>
+    <h1>Cognoship</h1>
     <div class="icons">
       <button id="sound" class="icon" data-label="Music" aria-pressed="false" title="Background music on / off (M)" aria-label="Music">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -41,6 +39,14 @@
     <div class="canvas-box">
       <canvas id="gl" width="1152" height="512"></canvas>
       <canvas id="ui" width="1152" height="512"></canvas>
+      <!-- the score (energy), at the top of the world view, centred, while the dots are on ([dot:<n>]) -->
+      <div id="score" class="score" hidden><span id="score-v">0</span></div>
+      <!-- ?god=1: test buttons at the top left of the world view (I, O, P) -->
+      <div id="god" class="god" hidden>
+        <button id="god-ch" title="Go to the next chapter (I)">Ch</button>
+        <button id="god-ok" title="Complete the waiting line's conditions (O)">Ok</button>
+        <button id="god-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
+      </div>
       <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
       <div class="ship-ctl">
         <button id="headup" aria-pressed="false" title="Upward: rotate the ship view so the creature's heading points up (E toggles)">Upward</button>
@@ -92,9 +98,9 @@
   <div class="below">
     <div class="msg" id="msg" aria-live="polite"></div>
     <div class="controls">
-      <button id="restart" title="Reset the scene: redo the script from its last checkpoint ([chapter] or [new_scene]) to here">Reset</button>
+      <button id="restart" title="Reset the scene: redo the script from its last checkpoint ([chapter] or [new_scene]) to here (Backspace)">Reset</button>
       <button id="play" aria-pressed="false" title="Play / pause (Enter)">Play</button>
-      <label title="Simulation speed (Q faster, W slower)">Speed <input id="speed" type="range" min="1" max="7" step="1"></label>
+      <label title="Simulation speed (Q slower, W faster)">Speed <input id="speed" type="range" min="1" max="7" step="1"></label>
     </div>
   </div>
 </div>

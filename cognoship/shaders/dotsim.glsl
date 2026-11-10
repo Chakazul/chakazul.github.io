@@ -5,8 +5,8 @@
 // creature channel of the just-stepped board is above uEat, the dot mass there is erased. The
 // dots do not act back on the creatures.
 //
-// The field drifts to the left (as the star field's near layer): this texture is the dots' own
-// frame, and dot cell x is at board cell x - uOffX, so eating reads the board there.
+// The field drifts (as the star field, to the left by default): this texture is the dots' own
+// frame, and dot cell p is at board cell p - uOff, so eating reads the board there.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump on mobile (see Carlman action.glsl)
@@ -20,7 +20,7 @@ uniform float uMu;          // growth centre
 uniform float uSigma;       // growth width (Gaussian)
 uniform float uDt;
 uniform float uEat;         // creature mass above this erases the dot mass at that cell
-uniform int   uOffX;        // the drift, whole cells in [0, W)
+uniform ivec2 uOff;         // the drift, whole cells in [0, W) x [0, H)
 
 out vec4 fragColor;
 
@@ -35,7 +35,7 @@ void main() {
     float d = conv - uMu;
     float v = texelFetch(uDots, p, 0).r + uDt * (2.0 * exp(-d * d / (2.0 * uSigma * uSigma)) - 1.0);
     v = clamp(v, 0.0, 1.0);
-    vec3 a = texelFetch(uState, ivec2((p.x - uOffX + uSize.x) % uSize.x, p.y), 0).rgb;
+    vec3 a = texelFetch(uState, (p - uOff + uSize) % uSize, 0).rgb;
     if (max(a.r, max(a.g, a.b)) > uEat) v = 0.0;
     fragColor = vec4(v, 0.0, 0.0, 1.0);
 }

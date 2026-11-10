@@ -151,6 +151,13 @@ const Core = (function () {
   // Speed: 7 slots. Each slot runs SPEEDS[i] * STEPS_PER_SPEED steps per frame, so
   // speed 1 is one step every 4 frames (under LeniaF's rule the glider moves ~0.65 cells a step).
   const SPEEDS = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8], STEPS_PER_SPEED = 1 / 4;
+  // A "game second": the steps speed 1 runs in a second at 60 frames per second. The game counts
+  // its times (survive time, discovery, fire cooldown, ...) in steps, so they are the same against
+  // the creatures on any device and at any speed; given in seconds, as at speed 1 on a 60 Hz screen.
+  const STEPS_PER_S = 60 * STEPS_PER_SPEED;   // 15
+  let simSteps = 0;     // every step run since the page loaded (steps resets with the world; this never does)
+  let driftSec = 0;     // game seconds the dots drift this frame (frame(): driftTick)
+  let starSec = 0;      // real seconds the star field drifts this frame
   let running = true, speedIdx = nearestIdx(SPEEDS, num('speed', 1, 1 / 8, 8)), stepAcc = 0;
   let maskR = Math.round(num('radius', 2.5 * R / 12, 1, 8)), channel = 1, action = 0;   // selected tool: G mask (best for steering and shape-shifting)
   // Zoom-view rotation modes:
@@ -331,7 +338,7 @@ const Core = (function () {
       }
       SimGL.step(tool);
     }
-    steps += n;
+    steps += n; simSteps += n;
     if (DEBUG) { SimGL.finish(); msPerStep = 0.9 * msPerStep + 0.1 * (performance.now() - t0) / n; }
   }
 
@@ -612,11 +619,39 @@ const Core = (function () {
     focus = { col: c.col, row: c.row, mass: c.mass, radius: c.radius };
   }
 
+  // The star field's drift (setStars): angle (degrees, clockwise from left: 0 drifts left, 90 up),
+  // speed and brightness (1 = the default). The drift is integrated here, so changing the speed or
+  // angle moves the stars on smoothly from where they are. off wraps every 10 boards: the layers'
+  // speeds (draw.glsl, 0.6 / 1.5 / 3.5) times 10 are whole numbers, so the wrap is invisible.
+  // The stars go by real time (starSec), whatever the speed or pause. The dots (dots.js) go by
+  // game time (driftSec): while playing, the simulation's own rate (the speed's steps per frame,
+  // in game seconds: smooth, not step by step), so they keep pace with the creatures; while paused
+  // (or no species yet), at the speed-1 rate in real time, so they still drift.
+  const star = { angle: 0, speed: 1, bright: 1, off: [0, 0], t: 0, last: null };
+  const SWAY_PERIOD = 2 * Math.PI / 0.3;   // s (draw.glsl STAR_SWAY_W)
+  function driftTick() {
+    const now = performance.now() / 1000, real = star.last === null ? 0 : Math.min(0.25, now - star.last);
+    star.last = now;
+    starSec = real;
+    driftSec = running && ruleLoaded ? SPEEDS[speedIdx] * STEPS_PER_SPEED / STEPS_PER_S : real;
+    star.t = (star.t + starSec) % (100 * SWAY_PERIOD);
+  }
+  function setStars(angle = 0, speed = 1, bright = 1) { Object.assign(star, { angle, speed, bright }); }
+  // the drift's unit direction (board x right, y down) and speed factor (the dots follow it too)
+  function starDrift() { const a = star.angle * Math.PI / 180; return { dir: [-Math.cos(a), -Math.sin(a)], speed: star.speed }; }
+  function starView() {
+    const a = star.angle * Math.PI / 180, dir = [-Math.cos(a), -Math.sin(a)];
+    star.off[0] = (star.off[0] + dir[0] * star.speed * starSec) % (10 * BW);
+    star.off[1] = (star.off[1] + dir[1] * star.speed * starSec) % (10 * BH);
+    return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: dir, starSpeed: star.speed, starBright: star.bright };
+  }
+
   function frame() {
     let n = 0;
+    driftTick();
     if (!ruleLoaded) {   // started empty, no species yet (the game's script loads one)
       SimGL.render({ canvasW: CW, canvasH: CH, worldScale: WS, zoom: [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX],
-                     rot: [1, 0, 0, 1], focus: [0, 0, 0], stars: opt.stars(), time: (performance.now() / 1000) % 3600 });
+                     rot: [1, 0, 0, 1], focus: [0, 0, 0], ...starView() });
       drawOverlay(); hooks.frame(); requestAnimationFrame(frame);
       return;
     }
@@ -640,7 +675,7 @@ const Core = (function () {
       zoom: [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX],
       rot: [c, s, -s, c],
       focus: focus ? [focus.col, focus.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
-      stars: opt.stars(), time: (performance.now() / 1000) % 3600,   // star field follows the Stars button
+      ...starView(),   // the star field (opt.stars: the lab's Stars button)
     });
     drawOverlay();
     hooks.frame();
@@ -1045,7 +1080,7 @@ const Core = (function () {
   const core = {
     // constants
     q, R, DEBUG, BW, BH, WS, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
-    CH_NAMES, ACTIONS, SPEED_MIN, REC_STEPS, VIEW_LABELS, SPECIES_NAMES, BOOM,
+    CH_NAMES, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
     // live objects (mutated in place)
     stats, md, opt, hooks,
     // the end-of-run banner's second line
@@ -1056,7 +1091,7 @@ const Core = (function () {
     start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt,
     pickChannel,
     setDetectMode, setEveryObject, setRunning, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
-    setZoom, setMaskR,
+    setZoom, setMaskR, setStars, starDrift,
   };
   // live state, read through getters (and set where a page may change it directly)
   const rw = { channel: [() => channel, v => { channel = v; }], action: [() => action, v => { action = v; }] };
@@ -1065,7 +1100,7 @@ const Core = (function () {
                found: () => found, masking: () => masking, tracks: () => tracks, speedIdx: () => speedIdx,
                maskR: () => maskR, viewMode: () => viewMode, zoomIdx: () => zoomIdx, CELL_PX: () => CELL_PX,
                ZOOM_CELLS: () => ZOOM_CELLS, detectMode: () => detectMode, everyObject: () => everyObject,
-               msPerStep: () => msPerStep };
+               msPerStep: () => msPerStep, simSteps: () => simSteps, driftSec: () => driftSec };
   for (const [k, [get, set]] of Object.entries(rw)) Object.defineProperty(core, k, { get, set, enumerable: true });
   for (const [k, get] of Object.entries(ro)) Object.defineProperty(core, k, { get, enumerable: true });
   return core;

@@ -152,7 +152,7 @@
   // ---- morph book -----------------------------------------------------------------------------
   // The morphs the player has discovered, empty at first. [discover_morph:<ids>] adds to it;
   // while the book is on, a morph is also added by being found: a visible morph not yet
-  // discovered that the followed ship has been detected as for DISCOVER_MS of play in a row; that
+  // discovered that the followed ship has been detected as for DISCOVER_STEPS (a game second) of play in a row; that
   // also opens the book, titled "New morph discovered!", the new morph marked.
   // [morph_book:on] shows the Morphs button (it opens the book). The book has a slot per visible
   // morph, in the visible list's order: the name if discovered, else "?"; a click on a discovered
@@ -200,6 +200,7 @@
     grid.replaceChildren(...visibleList().map((name, slot) => {
       const d = discovered.find(x => x.name === name), el = document.createElement('div');
       el.className = 'book-slot' + (d ? '' : ' empty') + (d && d.name === book.newName ? ' new' : '');
+      if (d && d.name === book.newName && book.reveal) revealSlot(el, 0);
       // Every slot is the same size: a picture box (SNAP_CELLS across, at the world view's scale)
       // above a label line.
       const scale = $('gl').getBoundingClientRect().width / $('gl').width;   // CSS px per canvas px
@@ -267,8 +268,9 @@
   // of the tool circle), turned by ↻ (45 degrees clockwise) and flipped by ↔ (left to right, as
   // seen), until a click on the ship view pastes it there, or the Morphs button cancels it. Clone
   // mode stays allowed until [clone:off].
-  const newBullets = new Set();   // the patterns [new_bullet] added, green in the bullet book until it is closed
-  let bulletNew = false;   // a pattern added by [new_bullet] since the bullet book was last opened: "New", green
+  const newBullets = new Set();   // the patterns created in the bullet book, green in it until it is closed
+  let bulletNew = false;   // a new pattern can be created ([new_bullet]): the Bullets button reads "Create", green
+  let revealName = null;   // the pattern just created: revealed as a new card as the book re-renders
   let clonesPlaced = 0;   // clones pasted into the world so far ([need:first_clone] counts on from its line)
   const clone = { on: true, held: null };   // on: allowed (the default, until [clone:off])   // held: { name, M (board-frame 2x2), src form, form, img }
   function startClone(name) {
@@ -380,15 +382,59 @@
   // The bullet book shares the morph book's window (book.mode 'bullet'): every bullet pattern by
   // name, 4 to a row (as the morph book); the ones the gun has ([bullet]) can be
   // clicked to switch to them (the one in use with a yellow border), the others are "?".
-  // Keys picking a slot, by its place: the books' rows of 4 on the keyboard's rows (morphs: QWER,
-  // ASDF; bullets: 1234, QWER, ASDF, ZX..).
-  const SLOT_KEYS = { morph: [...'QWERASDF'], bullet: [...'1234QWERASDFZXCV'] };
+  // Keys picking a slot, by its place: the books' rows of 4 on the keyboard's rows (morphs: ASDF,
+  // ZXCV; bullets: 1234, QWER, ASDF, ZX..).
+  const SLOT_KEYS = { morph: [...'ASDFZXCV'], bullet: [...'1234QWERASDFZXCV'] };
+  // [new_bullet:<n>]: one pattern for every n energy (the score, from 0), less those listed: how
+  // many more can be created now
+  function bulletCredits() {
+    if (!newBullet || !Bullets.on) return 0;
+    const have = Bullets.list.length, all = Object.keys(Bullets.KINDS).length;
+    return Math.max(0, Math.min(all - have, Math.floor(Dots.score / newBullet.every) - have));
+  }
+  // The Bullets button reads "Create" (green) while one can be created; turning so, with a glint
+  function syncNew() {
+    const was = bulletNew;
+    bulletNew = bulletCredits() > 0;
+    if (bulletNew === was) return;
+    syncButtons();
+    if (bulletNew) revealButton($('bullets'));
+  }
+  // A "?" slot clicked while one can be created: that pattern is added to the list (the one in use
+  // stays), revealed as a new card, green until the book closes; the book stays open
+  function createBullet(name) {
+    if (bulletCredits() <= 0 || !Bullets.addRandom(name)) return;
+    newBullets.add(name);
+    revealName = name; renderBook(); revealName = null;
+    syncNew();
+  }
+  // Each slot: yellow border, the one in use; cyan, another listed (a click fires it); green, one
+  // created since the book opened; "?", not listed (cyan, a click creates it, while one can be:
+  // "Create or choose bullet").
+  // [bullet:<list>:<name>]: open the bullet book on the patterns just added, revealed as new cards
+  // (green); the one equipped turns yellow once they are all revealed
+  const REVEAL_FLIP_MS = 750;   // as .book-slot.reveal's card-flip (style.css)
+  const revealing = new Set();
+  function showNewBullets(names) {
+    for (const n of names) newBullets.add(n);
+    revealing.clear(); names.forEach(n => revealing.add(n));
+    openBulletBook();
+    setTimeout(() => {
+      revealing.clear();
+      if (book.open && book.mode === 'bullet') renderBook();
+    }, ZAP.length * ZAP_MS + (names.length - 1) * REVEAL_STAGGER_MS + REVEAL_FLIP_MS);
+  }
   function renderBullets() {
-    $('book-title').textContent = 'Choose a bullet';
+    const create = bulletCredits() > 0;
+    $('book-title').textContent = create ? 'Create or choose bullet' : 'Choose bullet';
     const have = Bullets.list;
+    let nNew = 0;
     $('book-grid').replaceChildren(...Object.keys(Bullets.KINDS).map((name, slot) => {
       const el = document.createElement('div'), ok = have.includes(name);
-      el.className = 'book-slot' + (ok ? ' pick' : ' empty') + (name === Bullets.kind ? ' current' : '') + (newBullets.has(name) ? ' new' : '');
+      const current = name === Bullets.kind && !revealing.has(name);   // (yellow once revealed)
+      el.className = 'book-slot' + (ok ? ' pick' : ' empty') + (current ? ' current' : '') + (newBullets.has(name) ? ' new' : '');
+      if (newBullets.has(name) && book.reveal) revealSlot(el, nNew++);
+      if (name === revealName) revealSlot(el, 0, 0);   // just created: at once
       const label = document.createElement('span');
       label.className = 'label';
       if (ok) label.append(bulletPic(name), name);   // its stored pattern, small, in white, before the name
@@ -396,6 +442,10 @@
       el.append(label);
       if (ok) {
         el.title = `Fire ${name}`; el.onclick = () => { Bullets.select(name); closeBook(); };
+        if (SLOT_KEYS.bullet[slot]) el.dataset.key = SLOT_KEYS.bullet[slot];
+      } else if (create) {
+        el.classList.add('pick', 'create');
+        el.title = 'Create this new bullet'; el.onclick = () => createBullet(name);
         if (SLOT_KEYS.bullet[slot]) el.dataset.key = SLOT_KEYS.bullet[slot];
       }
       return el;
@@ -423,7 +473,6 @@
   }
   function openBulletBook() {
     if (!Bullets.on) return;
-    if (bulletNew) { bulletNew = false; syncButtons(); }   // seen: the button back to "Bullets"
     if (book.open && book.mode === 'morph') closeBook();
     book.mode = 'bullet';
     showBook();
@@ -434,9 +483,25 @@
     book.newName = newName; book.fromDiscovery = book.fromDiscovery || !!newName;
     showBook();
   }
+  // A new morph or bullet, in the book opened to show it: revealed once as a new card (style.css
+  // .reveal: flipped over, a glint across it, a green glow), after the zap in; several in turn.
+  const REVEAL_STAGGER_MS = 180;
+  function revealSlot(el, k, base = ZAP.length * ZAP_MS) {   // base: the zap in, by default
+    el.classList.add('reveal');
+    el.style.setProperty('--reveal-delay', base + k * REVEAL_STAGGER_MS + 'ms');
+  }
+  // The same reveal on a button (the Bullets button turning "Create"), once, from now
+  function revealButton(el) {
+    el.classList.remove('reveal');
+    void el.offsetWidth;   // restart the animation
+    el.classList.add('reveal');
+    el.addEventListener('animationend', e => { if (e.animationName === 'card-glow') el.classList.remove('reveal'); });
+  }
   function showBook() {
     if (chapterShowing()) return;
+    book.reveal = !book.open;   // only as it opens: a later re-render shows the slots as they are
     renderBook();
+    book.reveal = false;
     if (book.open) return;
     book.open = true; book.wasRunning = C.running;
     C.setRunning(false);
@@ -448,7 +513,7 @@
   function closeBook() {
     if (!book.open) return;
     book.open = false;
-    if (book.mode === 'bullet') newBullets.clear();   // seen: no longer new
+    if (book.mode === 'bullet') { newBullets.clear(); revealing.clear(); }   // seen: no longer new (the button stays "Create" while more can be created)
     zap(false);
     if (book.fromDiscovery && book.newName) book.found.push(book.newName);
     book.fromDiscovery = false; book.newName = null;
@@ -494,27 +559,27 @@
   $('book-close').onclick = closeBook;
   $('book').addEventListener('pointerdown', e => { if (e.target === $('book')) closeBook(); });   // outside the box
   // Each frame: has the followed ship been a visible morph not discovered yet, without a break, for
-  // DISCOVER_MS of play (paused time does not count, whatever the speed)? A passing detection is not
-  // a discovery. A discovered one gets a new picture (after SNAPSHOT_MS) only once after each
+  // DISCOVER_STEPS (a game second, in steps: paused time does not count)? A passing detection is
+  // not a discovery. A discovered one gets a new picture (after SNAPSHOT_STEPS) only once after each
   // Respawn or book pick (retake), when the ship is usually alone in a cleared world.
-  const DISCOVER_MS = 1000, SNAPSHOT_MS = 1000;
-  let cand = null, lastT = 0;   // cand: { name, ms } the morph the ship is in now, if it would be new
+  const DISCOVER_STEPS = C.STEPS_PER_S, SNAPSHOT_STEPS = C.STEPS_PER_S;
+  let cand = null, lastStep = 0;   // cand: { name, n: steps } the morph the ship is in now, if it would be new
   let retake = false;   // set by Respawn and a book pick: the next known morph held gets a new picture
   function checkDiscovery() {
-    const now = performance.now(), dt = Math.min(100, now - lastT);   // capped: a hidden tab's gap
-    lastT = now;
+    const dn = C.simSteps - lastStep;
+    lastStep = C.simSteps;
     if (chapterShowing()) return;   // no discovery (nor its book) under a chapter card; it waits
     const d = C.focus && C.stats.short.det;
     const known = d && d.name && discovered.find(x => x.name === d.name);
     if (known && !Number.isFinite(known.hue) && Number.isFinite(d.hue)) known.hue = d.hue;   // put in unseen: its colour now
-    // a new discovery; or a known morph, whose picture is retaken quietly after SNAPSHOT_MS (once
+    // a new discovery; or a known morph, whose picture is retaken quietly after SNAPSHOT_STEPS (once
     // the detection has settled), replacing the old one: only once after a Respawn or a book pick
     if (!book.on || !d || !d.name || !isVisible(d.name)) { cand = null; return; }
     if (known && known.img && !retake) return;   // (one with no picture yet, from [discover_morph], gets it any time)
-    if (!cand || cand.name !== d.name) { cand = { name: d.name, ms: 0, taken: false }; return; }
+    if (!cand || cand.name !== d.name) { cand = { name: d.name, n: 0, taken: false }; return; }
     if (cand.taken) return;
-    if (C.running) cand.ms += dt;
-    if (cand.ms < (known ? SNAPSHOT_MS : DISCOVER_MS)) return;
+    cand.n += dn;
+    if (cand.n < (known ? SNAPSHOT_STEPS : DISCOVER_STEPS)) return;
     cand.taken = true;   // kept, so the same stretch as this morph takes no more pictures
     retake = false;
     if (known) { known.img = snapshot(); if (book.open) renderBook(); return; }
@@ -654,8 +719,14 @@
     gun: (...options) => Bullets.setGun(options),
     // bullet:<names>[:<name>]: the patterns the gun can fire: add names (separated by commas),
     // random (one more at random), all, or clear (none); then equip <name> (added too if not
-    // listed). With two or more, ◀ ▶ (D / F) switch between them.
-    bullet: (names = '', equip) => Bullets.setList(names, equip),
+    // listed). With two or more, ◀ ▶ (D / F) switch between them. The patterns it adds are shown:
+    // the bullet book opens and reveals them (not when replayed: [jump_here], Reset, I).
+    bullet: (names = '', equip) => {
+      const before = Bullets.list;
+      Bullets.setList(names, equip);
+      const added = Bullets.list.filter(n => !before.includes(n));
+      if (!replaying && added.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(added);
+    },
     // bullet_limit:<x>: the bullets channel is emptied once it holds more than x bullets' worth of
     // mass (bullets run into each other and grow); default 8
     bullet_limit: (x = '8') => {
@@ -663,12 +734,14 @@
       if (!(v > 0)) { console.warn(`script.txt: bad value [bullet_limit:${x}], ignored`); return; }
       Bullets.setLimit(v);
     },
-    // new_bullet:<n>|off: from now on, every n energy collected (dots eaten, [dot]) adds a bullet
-    // pattern not listed yet, at random, quietly (the one in use stays); off: no more
+    // new_bullet:<n>|off: one bullet pattern may be listed for every n energy (the score, counted
+    // from 0, not from this line): while fewer are, the Bullets button reads "Create" and a "?" in
+    // the bullet book creates that pattern (bulletCredits); off: no more
     new_bullet: (n) => {
       const v = parseFloat(n);
-      newBullet = n === 'off' ? null : v > 0 ? { every: v, gained: 0, last: Dots.score } : null;
+      newBullet = n === 'off' ? null : v > 0 ? { every: v } : null;
       if (n !== 'off' && !(v > 0)) console.warn(`script.txt: bad value [new_bullet:${n}], ignored`);
+      syncNew();
     },
     // new_scene: fade the world view and the ship view's picture to black (WORLD_FADE_MS; the
     // line waits for it), so the actions after it set the scene unseen; the next message fades
@@ -688,6 +761,21 @@
       const [a, b] = String(x).split('/'), v = b !== undefined ? +a / +b : +a;
       if (!(v > 0)) return console.warn(`script.txt: bad value [speed:${x}], ignored`);
       C.setSpeed(C.SPEEDS.reduce((best, s, i) => Math.abs(Math.log(s / v)) < Math.abs(Math.log(C.SPEEDS[best] / v)) ? i : best, 0));
+    },
+    // upward:on|off: the ship view's Upward (heading up) on or off, as the Upward button / E
+    upward: (v = 'on') => {
+      if (v !== 'on' && v !== 'off') return console.warn(`script.txt: bad value [upward:${v}], ignored`);
+      if ((C.viewMode !== 'board') !== (v === 'on')) C.toggleHeadUp();
+    },
+    // stars:<angle>:<speed>:<bright>: the star field drifts at <angle> degrees, clockwise from left
+    // (0: to the left, the default; 90: up), at <speed> and <bright> times the default (1); a part
+    // left out or empty is the default
+    stars: (angle = '', speed = '', bright = '') => {
+      const num = (x, d) => x === '' ? d : parseFloat(x);
+      const [a, s, b] = [num(angle, 0), num(speed, 1), num(bright, 1)];
+      if (![a, s, b].every(Number.isFinite) || s < 0 || b < 0)
+        return console.warn(`script.txt: bad value [stars:${angle}:${speed}:${bright}], ignored`);
+      C.setStars(a, s, b);
     },
     // music:<list>[:<play>]: the background playlist becomes <list> (track numbers separated by
     // commas, 1 = the first of page.js TRACKS), played in turn and looped; <play>: switch to that
@@ -777,24 +865,27 @@
       t.progress = () => `${(mass() ?? 0).toFixed(1)}/${v}`;
       return t;
     },
-    // survive_time:<s>: the ship has stayed alive for s seconds of play (paused time does not
-    // count), from when the line is reached; dissolving stops the count, and the next ship (Respawn)
-    // starts it again from 0. Progress: "<t>/<s>".
+    // survive_time:<s>: the ship has stayed alive for s game seconds (C.STEPS_PER_S steps each:
+    // paused time does not count, and the same against the creatures on any device or speed), from
+    // when the line is reached, not under a chapter card; dissolving stops the count, and the next
+    // ship (Respawn) starts it again from 0. Progress: "<t>/<s> sec".
     survive_time: (s) => {
       const v = parseFloat(s);
       if (!(v >= 0)) { console.warn(`script.txt: bad value [need:survive_time:${s}], ignored`); return () => true; }
-      let ms = 0, last = performance.now(), lost = false;
+      let n = 0, last = C.simSteps, lost = false;
       const t = () => {
-        const now = performance.now(), dt = Math.min(100, now - last);   // capped: a hidden tab's gap
-        last = now;
+        const dn = C.simSteps - last;
+        last = C.simSteps;
         if (shipLost()) lost = true;   // the count stops (still shown) ...
-        else if (lost) { lost = false; ms = 0; }   // ... and starts again from 0 once a ship is back (Respawn)
-        else if (C.running && !book.open && !chapterShowing()) ms += dt;
-        return ms >= v * 1000;
+        else if (lost) { lost = false; n = 0; }   // ... and starts again from 0 once a ship is back (Respawn)
+        else if (!book.open && !chapterShowing()) n += dn;
+        return n >= v * C.STEPS_PER_S;
       };
-      t.progress = () => `${Math.min(v, Math.floor(ms / 1000))}/${v} sec`;
+      t.progress = () => `${Math.min(v, Math.floor(n / C.STEPS_PER_S))}/${v} sec`;
       return t;
     },
+    // upward: the ship view's Upward is on
+    upward: () => () => C.viewMode !== 'board',
     // energy:<n>: the energy (the score from eating dots, [dot]) has reached at least n
     energy: (n) => {
       const v = parseFloat(n);
@@ -822,17 +913,20 @@
   // the objects in the world, the player's ship included (null: not detected yet)
   const allObjects = () => C.found ? C.found.comps.length : null;
   // A value smoothed (the object count, the world's mass): the detection flickers (a creature
-  // splits or merges for a frame or two), so the value is the median of fn()'s values over the
-  // last OBJECT_SMOOTH_MS (the same value for the test and the progress shown). fn() null: not yet.
-  const OBJECT_SMOOTH_MS = 1000;
+  // splits or merges for a step or two), so the value is the median of fn()'s values over the last
+  // OBJECT_SMOOTH_STEPS steps, one sample per step (the latest value at that step: it may change
+  // while paused, e.g. a clone pasted) (the same value for the test and the progress shown).
+  // fn() null: not yet.
+  const OBJECT_SMOOTH_STEPS = C.STEPS_PER_S;   // a game second
   function smoothed(fn) {
-    const samples = [];   // [time, value]
+    const samples = [];   // [step, value]
     let med = null;
     return () => {
-      const now = performance.now(), k = fn();
+      const now = C.simSteps, k = fn();
       if (k === null) return med;
-      samples.push([now, k]);
-      while (samples.length > 1 && now - samples[0][0] > OBJECT_SMOOTH_MS) samples.shift();
+      if (samples.length && samples[samples.length - 1][0] === now) samples[samples.length - 1][1] = k;
+      else samples.push([now, k]);
+      while (samples.length > 1 && now - samples[0][0] >= OBJECT_SMOOTH_STEPS) samples.shift();
       const sorted = samples.map(x => x[1]).sort((a, b) => a - b);
       med = sorted[Math.floor(sorted.length / 2)];
       return med;
@@ -875,6 +969,7 @@
   // card, no extra fade), nor what only steers the script or the music.
   const CHECKPOINTS = ['chapter', 'new_scene'], REPLAY_SKIP = new Set([...CHECKPOINTS, 'jump_here', 'next_msg', 'music']);
   let resetting = false;
+  let replaying = false;   // actions redone (Reset, [jump_here], god I): nothing pops up ([bullet]'s book)
   function resetScene() {
     if (line < 0 || resetting || chapterShowing() || bookShowing()) return;
     if (clone.held) endClone();
@@ -885,8 +980,10 @@
     fadeWorld(1);
     setTimeout(() => {
       Dots.clear(); Bullets.clear();   // the dots put in afresh, no bullets in flight
+      replaying = true;
       for (let i = cp; i < cur; i++)
         for (const a of SCRIPT[i].actions) if (!REPLAY_SKIP.has(a.name)) ACTIONS[a.name](...a.args);
+      replaying = false;
       sceneHidden = false;
       run(cur);
       fadeWorld(0);
@@ -938,10 +1035,15 @@
     if (to < 0) return;
     if (clone.held) endClone();
     if (chapterOpen) closeChapter();
+    replaying = true;
     for (let i = cur; i < to; i++)
       for (const a of SCRIPT[i].actions) if (a.name !== 'chapter') ACTIONS[a.name](...a.args);
+    replaying = false;
     run(to);
   }
+  // its buttons, at the top left of the world view: Ch (I), Ok (O), Do (P)
+  $('god').hidden = !GOD;
+  $('god-ch').onclick = godChapter; $('god-ok').onclick = godSkip; $('god-do').onclick = () => { if (GOD) Dots.eat(); };
   // "SUCCESS" over the game window when a waiting line's [need] conditions are met: fades in, holds,
   // then slowly fades out (the .success animation, SUCCESS_MS); the game goes on meanwhile
   const SUCCESS_MS = 3000;
@@ -989,17 +1091,18 @@
 
   // ---- [min_morph] ------------------------------------------------------------------------
   // Each frame: fewer creatures than minMorph.n besides the ship -> put one more in. At most one
-  // every MIN_MORPH_MS, so a creature just put in is counted (detected) before the next.
-  const MIN_MORPH_MS = 500;
-  let minMorph = null;   // { n, ids, how, next: time of the next allowed put }
+  // every MIN_MORPH_STEPS (half a game second), so a creature just put in is counted (detected)
+  // before the next. (In steps: none is put in while paused.)
+  const MIN_MORPH_STEPS = Math.round(C.STEPS_PER_S / 2);
+  let minMorph = null;   // { n, ids, how, next: the step (C.simSteps) of the next allowed put }
   function checkMinMorph() {
-    if (!minMorph || !C.found || performance.now() < minMorph.next) return;
+    if (!minMorph || !C.found || C.simSteps < minMorph.next) return;
     const others = C.found.comps.length - (C.focusIdx >= 0 ? 1 : 0);
     if (others >= minMorph.n) return;
     const pool = (minMorph.ids.length ? minMorph.ids : visibleList()).filter(id => findMorph(id));
     if (!pool.length) return;
     putMorph('min_morph', pool[Math.floor(Math.random() * pool.length)], minMorph.how, 'never');   // never the new focus
-    minMorph.next = performance.now() + MIN_MORPH_MS;
+    minMorph.next = C.simSteps + MIN_MORPH_STEPS;
   }
 
   // ---- chapter title card ([chapter]) ----------------------------------------------------------
@@ -1044,8 +1147,9 @@
   // its data-key; a slider gets one at each end, from data-key-lo / data-key-hi, over the track),
   // and the channel patches' 1-3 (core opt.showKeys). Space is left out (it moves the messages on).
   const KEYS = { play: '\u21b5', sound: 'M', headup: 'E', morphs: 'X', reset: 'Z', 'morphs-dead': 'X', fire: 'A',
-                 'book-close': 'X', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S' };
-  const SLIDER_KEYS = { speed: ['W', 'Q'], zoom: ['R', 'T'] };   // [left end (less), right end (more)]
+                 'book-close': 'X', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S', restart: '\u2190',
+                 'god-ch': 'I', 'god-ok': 'O', 'god-do': 'P' };
+  const SLIDER_KEYS = { speed: ['Q', 'W'], zoom: ['R', 'T'] };   // [left end (less), right end (more)]
   const SLIDER_INSET = 10;   // px in from each end of the track
   // (a button with a .kt text span gets its badge there, at the text's top right)
   for (const [id, k] of Object.entries(KEYS)) ($(id).querySelector('.kt') || $(id)).dataset.key = k;
@@ -1078,28 +1182,17 @@
 
   // ---- core hooks -------------------------------------------------------------------------
   C.hooks.change = () => syncButtons();
-  // the score, centred in the title row while the dots are on
+  // the score, at the top of the world view (centred) while the dots are on; in fullscreen too
   Dots.hooks.score = () => {
     $('score').hidden = !Dots.on; $('score-v').textContent = Dots.score;
-    if (newBullet) {   // [new_bullet:<n>]: count the energy gained since (a score restarting from 0 gains none)
-      newBullet.gained += Math.max(0, Dots.score - newBullet.last); newBullet.last = Dots.score;
-      while (newBullet.gained >= newBullet.every) {
-        newBullet.gained -= newBullet.every;
-        const name = Bullets.addRandom();
-        if (name) {   // marked green in the bullet book until it is closed; the button "New!" unless the book is open
-          newBullets.add(name);
-          if (!(book.open && book.mode === 'bullet')) bulletNew = true;
-          syncButtons();
-        }
-      }
-    }
+    const was = bulletNew;
+    syncNew();   // [new_bullet:<n>]: one more may be creatable
+    if (bulletNew !== was && book.open && book.mode === 'bullet') renderBook();   // "Create or choose bullet" now, or no more
   };
-  let newBullet = null;   // [new_bullet:<n>]: { every: n, gained since the last added, last score seen }
-  // in the dots' colour; on the light page the same hue, darker, so it reads on white
+  let newBullet = null;   // [new_bullet:<n>]: { every: n }
+  // in the dots' colour (over the world view, dark on either page)
   Dots.hooks.color = (hue, rgb) => {
-    const light = document.documentElement.getAttribute('data-theme') === 'light';
-    const c = light ? Dots.hsl(hue, 0.7, 0.38) : rgb;
-    $('score').style.color = `rgb(${c.map(v => Math.round(v * 255)).join(',')})`;
+    $('score').style.color = `rgb(${rgb.map(v => Math.round(v * 255)).join(',')})`;
   };
   // Fire (and X): dimmed while it can't fire (no ship, or just fired)
   function doFire() { if (Bullets.fire()) flash('fire'); }
@@ -1114,11 +1207,16 @@
     $('fire-id').textContent = (Bullets.kind || '').replace(' ', '\n');   // two words: two rows
     $('bullet-nav').hidden = !many;
     syncButtons();   // the Bullets button
+    syncNew();   // the list changed: as many more creatable?
     if (book.open && book.mode === 'bullet') { if (Bullets.on) renderBook(); else closeBook(); }
     $('fire').title = 'Fire a bullet the way the ship moves (A)' + (many ? '; D / F: the previous / next pattern' : '');
   };
   C.hooks.frame = () => {
     updateBackground();
+    // Respawn / Choose fade with the views ([new_scene], [chapter]), as "Dissolved" (core)
+    const shade = worldShade(), dead = document.querySelector('.ship-dead');
+    dead.style.opacity = 1 - shade;
+    dead.style.visibility = shade > 0.99 ? 'hidden' : '';
     $('msg').classList.toggle('next', byContinue());
     if (Bullets.on) {   // Fire: its ring in the bullets' colour
       $('fire').classList.toggle('ready', Bullets.canFire());
@@ -1141,7 +1239,7 @@
                                  : 'The morph book: the morphs you have discovered (X)';
     $('clone-ok').hidden = !(clone.held && clone.held.at);   // ✓ once a touch has placed it
     $('bullets').classList.toggle('new', bulletNew);
-    $('bullets').textContent = bulletNew ? 'New!' : 'Bullets';
+    $('bullets').textContent = bulletNew ? 'Create' : 'Bullets';
     $('bullets').hidden = !Bullets.on || shipLost();   // the bullet book's button: while the gun is on, not while lost
     $('headup').setAttribute('aria-pressed', C.viewMode !== 'board');
     $('speed').value = C.speedIdx + 1;
@@ -1176,7 +1274,8 @@
   if (C.zoomIdx !== clampZoom(C.zoomIdx)) C.setZoom(clampZoom(C.zoomIdx));   // e.g. ?zoom=2
   const doZoom = d => { flash('zoom'); C.setZoom(clampZoom(C.zoomIdx + d)); };   // R out, T in
   $('play').onclick = doPlay;
-  $('restart').onclick = () => { flash('restart'); resetScene(); };
+  const doRestart = () => { flash('restart'); resetScene(); };   // Reset (and Backspace)
+  $('restart').onclick = doRestart;
   $('reset').onclick = doReset;
   $('morphs-dead').onclick = () => openBook();
   $('headup').onclick = doView;
@@ -1197,9 +1296,9 @@
       return;
     }
     if (e.code === 'Space') { e.preventDefault(); if (byContinue()) next(); }
-    else if (k === 'o') godSkip();
-    else if (k === 'p') { if (GOD) Dots.eat(); }
-    else if (k === 'i') godChapter();
+    else if (k === 'o') { if (GOD) flash('god-ok'); godSkip(); }
+    else if (k === 'p') { if (GOD) { flash('god-do'); Dots.eat(); } }
+    else if (k === 'i') { if (GOD) flash('god-ch'); godChapter(); }
     else if (k === 'Enter') { e.preventDefault(); doPlay(); }
     else if (k === 'z') { if (lostShown()) doReset(); }   // only while Respawn shows
     else if (k === 'a') doFire();
@@ -1207,14 +1306,22 @@
     else if (k === 's') { if (!$('bullets').hidden) openBulletBook(); }   // the bullet book, as the Bullets button
     else if (k === 'd') { if (Bullets.cycle(-1)) flash('bullet-prev'); }
     else if (k === 'f') { if (Bullets.cycle(1)) flash('bullet-next'); }
-    else if (k === 'q') doSpeed(1);
-    else if (k === 'w') doSpeed(-1);
+    else if (k === 'q') doSpeed(-1);   // slower
+    else if (k === 'w') doSpeed(1);    // faster
+    else if (k === 'Backspace') { e.preventDefault(); doRestart(); }
     else if (k === 'e') doView();
     else if (k === 'r') doZoom(-1);
     else if (k === 't') doZoom(1);
     else if (k === 'm') Page.toggleSound();
     else if (e.key >= '1' && e.key <= '3') C.pickChannel(+e.key - 1);   // the same one again: erase on / off
   });
+
+  // No keyboard focus cycling (Tab, Shift+Tab) anywhere on the page, whatever has the focus (a
+  // button, a slider), and no control takes part in it; nor a focus ring on a control after a click
+  // or a change (style.css .game-page)
+  window.addEventListener('keydown', e => { if (e.key === 'Tab') e.preventDefault(); }, { capture: true });
+  for (const el of document.querySelectorAll('button, input, select, a[href]')) el.tabIndex = -1;
+  document.documentElement.classList.add('game-page');
 
   // ---- start ------------------------------------------------------------------------------
   // The world starts empty with no species; the script, run once the simulation has started,
@@ -1227,8 +1334,10 @@
     // the lines before it runs first, in order, so the set-up is as if played up to there; their
     // messages and conditions are skipped, and so are the chapter cards.
     const from = Math.max(0, SCRIPT.findIndex(L => L.actions.some(a => a.name === 'jump_here')));
+    replaying = true;
     for (const L of SCRIPT.slice(0, from))
       for (const a of L.actions) if (a.name !== 'chapter') ACTIONS[a.name](...a.args);
+    replaying = false;
     if (from < SCRIPT.length) run(from);
   }, err => { console.error(err); say('Could not load the script (script.txt).'); }), Page.showError);
 })();

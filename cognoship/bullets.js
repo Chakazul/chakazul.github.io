@@ -11,7 +11,7 @@
 //  The player fires (A, fire()): a bullet is put just in front of the ship, flying the way the
 //  ship moves; a ship standing still (no arrow) fires at a random angle. A ship faster than the bullets runs
 //  into its own: part of the game (a fast morph is a poor gunship). At most one shot every
-//  FIRE_MS; and if the field holds more than maxBullets (8, [bullet_limit]) bullets' worth of mass (bullets that
+//  FIRE_STEPS (0.7 game seconds, in steps); and if the field holds more than maxBullets (8, [bullet_limit]) bullets' worth of mass (bullets that
 //  ran into each other and grew), it is emptied.
 //
 //  Tuning (URL): ?bhit= mass a bullet takes out of a creature per step per unit of bullet mass
@@ -35,7 +35,7 @@ const Bullets = (function () {
   const betasOf = b => String(b).split(',').map(x => { const [n, d] = x.split('/'); return d ? n / d : +n; });
   const num = (k, d) => { const v = parseFloat(C.q.get(k)); return Number.isFinite(v) && v >= 0 ? v : d; };
   const HIT = num('bhit', 0.2), WEAR = num('bwear', 0.03), SUB = Math.max(1, Math.round(num('bsub', 5)));
-  const FIRE_MS = 1000 * num('bcool', 0.7);   // the least time between shots (wall clock): ?bcool= seconds
+  const FIRE_STEPS = num('bcool', 0.7) * C.STEPS_PER_S;   // the least time between shots, in steps: ?bcool= game seconds
   let maxBullets = 8;      // more mass than this many bullets in the field: it is emptied ([bullet_limit:<x>])
   const GAP = 8;            // cells between the ship's edge and a new bullet's back edge (as most patterns had when placed by their box)
   const EDGE = 0.1;         // a stamp cell at least this is part of the bullet (its back edge, fire)
@@ -94,12 +94,13 @@ const Bullets = (function () {
     else if (last) kind = last;   // gun off: it starts with it when turned on
     hooks.change();
   }
-  // Add a pattern not listed yet, at random, quietly: the one in use stays (none in use: the new
-  // one). Returns its name, or null if every pattern is listed already. ([new_bullet:<n>])
-  function addRandom() {
+  // Add pattern `pick` (if not listed yet), else one not listed yet at random, quietly: the one in
+  // use stays (none in use: the new one). Returns its name, or null if none could be added (the
+  // game's bullet book, creating one: [new_bullet:<n>])
+  function addRandom(pick) {
     const rest = IDS.filter(n => !list.includes(n));
-    if (!rest.length) return null;
-    const name = rest[Math.floor(Math.random() * rest.length)];
+    if (!rest.length || (pick !== undefined && !rest.includes(pick))) return null;
+    const name = pick ?? rest[Math.floor(Math.random() * rest.length)];
     list.push(name);
     list.sort((a, b) => IDS.indexOf(a) - IDS.indexOf(b));
     if (!kind) { if (on) setKind(list[0]); else kind = list[0]; }
@@ -174,19 +175,19 @@ const Bullets = (function () {
     }
   }
 
-  // Could fire now: on, and the ship moving (its arrow shows), FIRE_MS after the last shot.
+  // Could fire now: on, and the ship moving (its arrow shows), FIRE_STEPS after the last shot (steps: no cooldown passes while paused).
   function canFire() {
-    return on && !!kind && !!C.focus && performance.now() - lastShot >= FIRE_MS;
+    return on && !!kind && !!C.focus && C.simSteps - lastShot >= FIRE_STEPS;
   }
   // A or the Fire button: fire a bullet from the ship if canFire(). True if a bullet was put in.
-  // Always from the front: the way the ship moves (its arrow); standing still, the way it last
-  // headed (kin.heading); a ship that has never moved, at a random angle.
+  // From the front, the way the ship moves (its arrow); while it is (near) stationary, the arrow
+  // hidden (core SPEED_MIN), at a random angle.
   function fire() {
     if (!canFire()) return false;
     const ship = C.focus, k = C.kin;
-    lastShot = performance.now();
+    lastShot = C.simSteps;
     const moving = k && k.speed >= C.SPEED_MIN;
-    const ang0 = moving ? k.velAng : k && k.heading !== null && k.heading !== undefined ? k.heading : Math.random() * 2 * Math.PI;
+    const ang0 = moving ? k.velAng : Math.random() * 2 * Math.PI;
     const K = KINDS[kind], dir0 = K.dir ? Math.atan2(K.dir[1], K.dir[0]) : 0;   // dir null: it stays put
     const ang = ang0 + (K.back ? Math.PI : 0);   // a bomb (back): dropped behind the ship, set off away from it
     // Placed by the bullet's own mass, not its stamp's box (a pattern stored off centre, or with a

@@ -19,7 +19,7 @@ uniform vec3  uDotRGB;
 uniform sampler2D uBullets; // bullets channel (R), shown in uBulletRGB over everything where uBulletsOn
 uniform float uBulletsOn;
 uniform vec3  uBulletRGB;
-uniform float uDotOff;      // the dots' drift to the left, cells: board x shows dot x + uDotOff
+uniform vec2  uDotOff;      // the dots' drift, cells: board cell p shows dot cell p + uDotOff
 uniform vec3  uFocus;       // (col, row, on): the focused creature's CoM; off = blank zoom view
 uniform ivec2 uSize;        // board (W, H)
 uniform vec2  uCanvas;      // canvas (w, h), px
@@ -27,7 +27,11 @@ uniform float uWorldScale;  // px per cell in the world view
 uniform vec4  uZoom;        // (x0, y0, edge, px per cell), top-left origin
 uniform mat2  uView;        // view vector (right, down) -> board vector (col, row)
 uniform float uStars;       // 1 = star field on
-uniform float uTime;        // seconds, for the star drift
+uniform float uTime;        // seconds, for the star sway
+uniform vec2  uStarOff;     // the star drift so far, cells at unit layer speed (core.js starView)
+uniform vec2  uStarDir;     // the drift direction, unit (default (-1, 0): to the left)
+uniform float uStarSpeed;   // drift and sway speed, 1 = default
+uniform float uStarBright;  // brightness, 1 = default
 uniform vec3  uBg;          // the background behind the board (glsim.js setBackground), black by default
 
 out vec4 fragColor;
@@ -40,10 +44,11 @@ vec3 cellColor(vec2 cell) {
     ivec2 q = (ivec2(floor(cell)) + uSize * 8) % uSize;
     vec3 c = texelFetch(uState, q, 0).rgb;
     if (uDotsOn > 0.5) {
-        // linear across x, so the drift is smooth rather than whole cells at a time
-        float x = cell.x + uDotOff - 0.5, f = fract(x);
-        int x0 = (int(floor(x)) + uSize.x * 8) % uSize.x, x1 = (x0 + 1) % uSize.x;
-        float v = mix(texelFetch(uDots, ivec2(x0, q.y), 0).r, texelFetch(uDots, ivec2(x1, q.y), 0).r, f);
+        // sharp cells, as the creatures and bullets (nearest, not blended), but sliding smoothly
+        // by the drift's fraction of a cell, in screen px (the eating, dotsim.glsl uOff, goes by the
+        // rounded drift: at most half a cell off)
+        ivec2 d = (ivec2(floor(cell + uDotOff)) + uSize * 8) % uSize;
+        float v = texelFetch(uDots, d, 0).r;
         c = mix(c, uDotRGB, v);
     }
     if (uBulletsOn > 0.5) c = mix(c, uBulletRGB, texelFetch(uBullets, q, 0).r);
@@ -59,14 +64,15 @@ float rnd(uvec3 v) { return float(hash(v) & 0xffffffu) / 16777216.0; }
 
 // One layer: a grid of g x g cells (g divides the board, so it wraps), at most one star per grid
 // cell, placed away from the cell edge so only this cell needs testing. pxPerCell = view scale.
-// Drift: steadily to the left, with a slow sine sway up and down. Both scale with the layer's
-// speed, so near layers sway further (parallax). Period 2 pi / STAR_SWAY_W seconds.
+// Drift: steadily along uStarDir (to the left by default), with a slow sine sway across it. Both
+// scale with the layer's speed, so near layers sway further (parallax), and with uStarSpeed. Period 2 pi / STAR_SWAY_W seconds.
 const float STAR_SWAY_A = 1.6;    // sway amplitude, cells per unit of layer speed
 const float STAR_SWAY_W = 0.3;    // sway angular frequency, rad/s (about 21 s per swing)
 
 vec3 starLayer(vec2 b, float pxPerCell, float g, float speed, float bright, float density, uint layer) {
     vec2 sz = vec2(uSize);
-    vec2 shift = vec2(-uTime, STAR_SWAY_A * sin(STAR_SWAY_W * uTime)) * speed;
+    vec2 across = vec2(uStarDir.y, -uStarDir.x);   // (0, 1) for the default drift to the left
+    vec2 shift = (uStarOff + across * STAR_SWAY_A * uStarSpeed * sin(STAR_SWAY_W * uTime)) * speed;
     vec2 q = mod(b - shift, sz);
     vec2 gi = floor(q / g);
     uvec3 key = uvec3(uvec2(gi), layer);
@@ -82,7 +88,7 @@ vec3 starLayer(vec2 b, float pxPerCell, float g, float speed, float bright, floa
     float t = rnd(key + uvec3(0u, 0u, 303u));
     vec3 tint = t < 0.25 ? vec3(0.7, 1.0, 1.0) : t < 0.4 ? vec3(1.0, 0.75, 0.7)
               : t < 0.6 ? vec3(1.0, 0.95, 0.7) : vec3(1.0);
-    float level = bright * (0.6 + 0.4 * rnd(key + uvec3(0u, 0u, 404u)));
+    float level = bright * uStarBright * (0.6 + 0.4 * rnd(key + uvec3(0u, 0u, 404u)));
     return tint * level * a;
 }
 

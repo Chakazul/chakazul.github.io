@@ -19,11 +19,16 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple
 h1{font-size:clamp(20px,3vw,28px);margin:0;letter-spacing:-.01em;font-weight:650}
 h1 small{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.04em;margin-left:8px}
 .icons{display:flex;gap:6px}
-/* the game: h1 | score | icons, the score in the middle of the row */
-.game .title-row{display:grid;grid-template-columns:1fr auto 1fr}
-.game .title-row .icons{justify-self:end}
-.score{font-size:clamp(18px,2.4vw,24px);font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
-.score[hidden]{display:block;visibility:hidden}   /* keeps its grid column, so the icons stay at the end */
+/* the game's score: at the top of the world view (the left 2/3 of the canvas), centred; in fullscreen too */
+.score{position:absolute;top:8px;left:calc(100% / 3);transform:translateX(-50%);z-index:3;pointer-events:none;
+  font-size:clamp(22px,3.6vw,38px);font-weight:700;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;
+  text-shadow:0 0 4px #000,0 0 2px #000}
+.score[hidden]{display:none}
+/* ?god=1: the test buttons, at the top left of the world view */
+.god{position:absolute;left:10px;top:10px;z-index:3;display:flex;gap:6px}
+.god[hidden]{display:none}
+.game .god button{height:calc(var(--ui-h) * .8);padding:0 calc(var(--ui-padx) * .6);font-size:calc(var(--ui-font) * .9);
+  background:rgba(0,0,0,.45);color:#fff;border-color:rgba(255,255,255,.4)}
 button{font:inherit;font-size:13px;color:var(--ink);background:var(--raised);border:1px solid var(--line);
   border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap}
 button:hover{border-color:var(--muted)}
@@ -191,7 +196,7 @@ button,select,input{transition:background .25s,border-color .25s}
 #clone-ok[hidden]{display:block;visibility:hidden}   /* keeps its place, so 🗙 stays put */
 .clone-tools[hidden]{display:none}
 #morphs.clone-on{border:2px solid var(--clone)}   /* clone mode allowed ([clone:on]) */
-#bullets.new{border:2px solid var(--new);color:var(--new)}   /* a bullet pattern added ([new_bullet]), the book not opened since: "New!" */
+#bullets.new{border:2px solid var(--new);color:var(--new)}   /* a bullet pattern can be created ([new_bullet]): "Create" */
 #clone-tools button{width:var(--ui-h);padding:0;border-radius:50%;font-size:calc(var(--ui-font) * 1.3);line-height:1;
   border:2px solid var(--clone)}
 .ship-morphs{position:absolute;right:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
@@ -210,7 +215,7 @@ button,select,input{transition:background .25s,border-color .25s}
   box-shadow:0 0 12px color-mix(in srgb,var(--major) 55%,transparent),0 10px 40px rgba(0,0,0,.5)}   /* as the zap frames */
 .book-box>*{flex:none}   /* nothing in the book shrinks (fitBook shrinks the pictures instead) */
 .book-box{position:relative}
-.book-species{position:absolute;right:calc(var(--ui-h) * .6);bottom:calc(var(--ui-h) * .45);font-size:calc(var(--ui-font) * 1.15);color:var(--ink);letter-spacing:.04em}
+.book-species{position:absolute;right:calc(var(--ui-h) * .6);bottom:calc(var(--ui-h) * .45);font-size:calc(var(--ui-font) * 1.15);color:var(--muted);letter-spacing:.04em}
 .book-species[hidden]{display:none}
 .book-box.wide{width:min(1040px,94%)}   /* the bullet book: names with pictures need the room */
 .book-box h2{margin:0;font-size:calc(var(--ui-font) * 1.4);font-weight:650;letter-spacing:-.01em}
@@ -223,6 +228,29 @@ button,select,input{transition:background .25s,border-color .25s}
 .book-slot.empty::after{content:'?';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   font-size:calc(var(--ui-font) * 3);font-weight:650}
 .book-slot.new{border-color:var(--new);box-shadow:inset 0 0 0 2px var(--new)}   /* the morph just discovered: green */
+/* a new morph / bullet as its book opens (game.js revealSlot), once: the card flips over, a glint
+   sweeps across it, and it glows green; --reveal-delay waits for the zap in */
+.book-slot.reveal{position:relative;overflow:hidden;backface-visibility:hidden;
+  animation:card-flip .75s cubic-bezier(.2,.8,.3,1.15) var(--reveal-delay,0ms) both,
+            card-glow 1.6s ease-out calc(var(--reveal-delay,0ms) + .5s)}
+.book-slot.reveal::before{content:'';position:absolute;inset:-30% -60%;z-index:2;pointer-events:none;
+  background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.7) 50%,transparent 60%);
+  transform:translateX(-100%);animation:card-shine .9s ease-in-out calc(var(--reveal-delay,0ms) + .55s) both}
+@keyframes card-flip{
+  0%{transform:perspective(700px) rotateY(180deg) scale(.75)}
+  70%{transform:perspective(700px) rotateY(-12deg) scale(1.08)}
+  100%{transform:perspective(700px) rotateY(0) scale(1)}}
+@keyframes card-shine{to{transform:translateX(100%)}}
+@keyframes card-glow{
+  0%,100%{box-shadow:0 0 0 0 transparent,inset 0 0 0 2px var(--new)}
+  30%{box-shadow:0 0 22px 6px color-mix(in srgb,var(--new) 70%,transparent),inset 0 0 0 2px var(--new)}}
+/* the Bullets button turning "Create" (game.js revealButton): the glint and the glow, no flip */
+.ship-bullets.reveal{overflow:hidden;animation:card-glow 1.6s ease-out .2s}
+.ship-bullets.reveal::before{content:'';position:absolute;inset:-30% -60%;z-index:2;pointer-events:none;
+  background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.7) 50%,transparent 60%);
+  transform:translateX(-100%);animation:card-shine .9s ease-in-out both}
+@media (prefers-reduced-motion:reduce){.book-slot.reveal,.book-slot.reveal::before,.ship-bullets.reveal,.ship-bullets.reveal::before{animation:none}
+  .book-slot.reveal::before,.ship-bullets.reveal::before{display:none}}
 :root{--new:#3ddc6a}
 :root[data-theme="light"]{--new:#1e9e46}
 .book-slot .dot{flex:none;width:.6em;height:.6em;border-radius:50%}
@@ -251,6 +279,7 @@ button,select,input{transition:background .25s,border-color .25s}
 .book-slot.pick.clone,.book-slot.pick.clone:hover{border:3px solid var(--clone)}   /* a morph to clone ([clone:on]): pink */
 .book-slot.pick.current,.book-slot.pick.current:hover{border:3px solid var(--current)}   /* the bullet in use: yellow */
 #book-grid.bullets .book-slot.pick.new:not(.current),#book-grid.bullets .book-slot.pick.new:not(.current):hover{border:3px solid var(--new)}   /* a pattern [new_bullet] added: green, until the book is closed */
+.book-slot.pick.create{color:var(--major)}   /* a "?" that creates that bullet ([new_bullet]): cyan, as the other picks */
 :root{--current:#ffd23f}
 :root[data-theme="light"]{--current:#c99a00}
 :root{--clone:#ff7ad9}
@@ -312,3 +341,9 @@ button,select,input{transition:background .25s,border-color .25s}
   .below .msg{font-size:18px}
   .below .controls{margin-top:6px}
 }
+/* the game area (both views, the controls, the message box): no text selection (a drag or a long
+   press on a phone selects nothing) */
+.game .screen,.game .below{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* the game (game.js): no focus ring on a control after it is clicked or changed */
+.game-page :focus,.game-page :focus-visible{outline:none}
+.game-page input[type=range]:focus::-webkit-slider-thumb{outline:none}

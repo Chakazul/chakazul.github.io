@@ -42,11 +42,14 @@ const Dots = (function () {
   const POINTS = 10;     // per dot the player's ship eats
   // Colour: a pale blue at first, its hue turning slowly towards cyan and on round the wheel.
   const HUE0 = 220, HUE_DEG_PER_S = -2, SAT = 0.6, LIGHT = 0.82;   // a full turn in 3 minutes
-  // The field drifts to the left a bit faster than the star field's near layer (draw.glsl
-  // starLayer 3.5 cells per second, wall clock), with no sway. Sites are kept in the field's own
-  // frame; a site at col x is at board col x - offset.
-  const DRIFT = 4.5;
-  let offset = 0;
+  // The field drifts as the star field (to the left by default; [stars] sets its angle and speed),
+  // a bit slower than its near layer at speed 1 (draw.glsl starLayer 3.5 cells per second), with no
+  // sway, by game time (core driftSec: the simulation's rate while playing, so the dots keep pace
+  // with the ship at any speed and on any device; while paused, the speed-1 rate in real time),
+  // while the stars go by real time. Sites are kept in the field's own frame; a site at (col, row) is at board
+  // (col - offset[0], row - offset[1]).
+  const DRIFT = 3;     // cells per game second
+  let offset = [0, 0];
 
   let ready = false, dotR = 9, form = null, rad = 9;
   let on = false, target = 0, sites = [], score = 0, t0 = 0;
@@ -88,7 +91,7 @@ const Dots = (function () {
     for (let k = 0; k < 200; k++) {
       const col = m + Math.floor(Math.random() * (W - 2 * m)), row = m + Math.floor(Math.random() * (H - 2 * m));
       if (sites.some(s => Math.hypot(C.wrapD(s.col - col, W), C.wrapD(s.row - row, H)) < 3 * dotR)) continue;
-      if (comps.some(c => Math.hypot(C.wrapD(c.col - (col - offset), W), C.wrapD(c.row - row, H)) < (c.radius || C.R) + C.R + rad)) continue;
+      if (comps.some(c => Math.hypot(C.wrapD(c.col - (col - offset[0]), W), C.wrapD(c.row - (row - offset[1]), H)) < (c.radius || C.R) + C.R + rad)) continue;
       return { col, row };
     }
     return null;
@@ -124,14 +127,15 @@ const Dots = (function () {
   // Each frame: score and replace the eaten dots, top up to the target, turn the hue.
   function frame() {
     if (!on) return;
-    offset = (DRIFT * (performance.now() - t0) / 1000) % C.BW;
-    SimGL.setDotOffset(offset);
+    const dt = C.driftSec, d = C.starDrift();
+    offset = [(offset[0] - d.dir[0] * DRIFT * d.speed * dt) % C.BW, (offset[1] - d.dir[1] * DRIFT * d.speed * dt) % C.BH];
+    SimGL.setDotOffset(...offset);
     const left = SimGL.readDotSites(sites.map(s => [s.col, s.row]), rad);
     const found = C.found;
     sites = sites.filter((s, i) => {
       if (left[i] >= GONE * s.mass) return true;
       // eaten: by the player's ship if it is the creature there (or the nearest one close by)
-      const at = found ? Creatures.pick(found, s.col - Math.round(offset), s.row, C.R + rad, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
+      const at = found ? Creatures.pick(found, s.col - Math.round(offset[0]), s.row - Math.round(offset[1]), C.R + rad, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
       if (at >= 0 && at === C.focusIdx) { score += POINTS; hooks.score(); }
       wipe(s);
       return false;
