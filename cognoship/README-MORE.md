@@ -206,6 +206,7 @@ run with nothing discovered.
 - `?radius=4`: mask radius at start, in cells (default 2.5 · R / 12, rounded to 0.5).
 - `?headup=vel|axis`: start in heading-up or body-axis-up view (`1` = `vel`).
 - `?debug=1`: show GPU ms per step and the tap count in the readout.
+- `?fft=1` (game and lab): FFT mode, for testing: the creatures' convolution by FFT on the GPU (`fftsim.js`, see *FFT mode* below). With `?dev=1` the game's readout ends in "· FFT".
 - `?all=1` (the game, either mode): all discovered, for testing. Every visible morph of every species counts as discovered (no picture until the ship holds it), and the gun has every bullet pattern from the start. The central inventory is neither read nor written.
 - `?dev=1` (the game): dev mode. Test aids, as keys and as buttons at the top left of the world view (**Ch**,
   **Ok**, **Do**): `I` goes to the next `[chapter]`, running every action on the lines in between
@@ -387,6 +388,35 @@ The rule follows **LeniaF.py**, the program that reads 233.json (`LeniaF.py -c 3
 The engine's first version used LeniaNDKC-style exponential kernels and Gaussian growth at
 dt = 0.2. That was not what 233.json was found with. Under that rule *gyrans R* didn't replicate
 and *lithos* moved. The Phase 1 numbers below are from that version.
+
+## FFT mode (`?fft=1`)
+
+A plug-in (`fftsim.js`, `shaders/fft*.glsl`) that replaces the creatures' sim pass: `sim.glsl` sums
+~1,000 kernel taps per cell, a cost that grows with R²; the FFT's does not. Without the parameter the
+file does nothing; to remove it, delete it, its `<script>` tags and `shaders/fft*.glsl` (`glsim.js`
+keeps two small hooks, `internals.ext.step` / `.rule`, inert then).
+
+- **Per step:** `fftpack` writes the fields as complex pairs, (R, G) and (B, bullets); two forward
+  FFTs; `fftmul`, per pair of kernels, multiplies the spectrum of the channel each reads by the
+  kernel's spectrum (made once per rule, from the kernel as an image of the board, flipped: the
+  direct sum is a correlation); eight inverse FFTs give U for all 16 kernel slots; `fftgrow` does
+  the update exactly as `sim.glsl`.
+- **The cognitive mask:** its circle is small, so `fftgrow` takes its cells out of U and of the
+  normaliser directly, for the pixels within reach of it (the kernels as a small image, `uKimg`):
+  the same U = K∗(A·(1−B)) / K∗(1−B).
+- **The bullets' mask:** it covers the board, so it is done in the FFT: two more forward FFTs ((R,
+  G)·b and B·b, b the bullets field on the channels they act on) taken out of the numerators, and
+  eight more inverse ones for each kernel's hidden share (K∗b), so while bullets fly a step costs
+  about twice as much. Erase, draw and the bullets' erase act after the update, as in `sim.glsl`.
+- **The FFT:** mixed-radix (4, 3, 2) Stockham passes in gather form (`fft.glsl`), along x (384 =
+  4·4·4·2·3) then y (256 = 2·2·4·4·4, a 4 split so the count is even and each transform ends in its
+  own texture); twiddles from a table computed on the CPU in double precision (`sin` / `cos` are
+  coarse on some mobile GPUs).
+- **Checked on the CPU** (node, before the GPU code): the passes against a direct 2D DFT (relative
+  error 3e-13), the convolution against the taps (6e-17), and the mask and bullets corrections
+  against `sim.glsl`'s masked sum (4e-9, the kernels' float32 normalisation); with every operation
+  rounded to float32 as on the GPU, U is within 1.4e-7 of the direct sum.
+- **Memory:** 29 extra RGBA32F textures of the board (about 46 MB).
 
 ## Fidelity checks (Phase 1, legacy rule)
 

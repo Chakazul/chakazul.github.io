@@ -1371,7 +1371,7 @@
     fps.frames++;
     if (now - fps.t < 500) return;
     const s = (now - fps.t) / 1000;
-    $('dev-fps').textContent = `${Math.round(fps.frames / s)} fps · ${Math.round((C.simSteps - fps.steps) / s)} steps/s · ${C.stepMs.toFixed(1)} ms/step`;
+    $('dev-fps').textContent = `${Math.round(fps.frames / s)} fps · ${Math.round((C.simSteps - fps.steps) / s)} steps/s · ${C.stepMs.toFixed(1)} ms/step${FFTSim.on ? ' · FFT' : ''}`;
     Object.assign(fps, { t: now, frames: 0, steps: C.simSteps });
   }
   // "SUCCESS" over the game window when a waiting line's [need] conditions are met: fades in, holds,

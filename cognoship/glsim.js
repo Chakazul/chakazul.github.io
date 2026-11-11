@@ -54,6 +54,11 @@ const SimGL = (function () {
   let bulletsIdle = true;
   let bul = { mode: 1, ch: [1, 1, 1], wearCh: [1, 1, 1], hit: 0.2, wear: 0.05, sub: 2 };
   let bblkTex = null, bblkFbo = null, BBW = 0, BBH = 0, bblkBuf = null;
+  // Plug-ins (fftsim.js, ?fft=1): ext.step(tool) replaces the creatures' sim pass (it must write the
+  // next board into stateFbo[1 - cur]; step() then flips cur, steps the dots and bullets);
+  // ext.rule(taps) follows setRule. Both null: the direct convolution (sim.glsl) as ever.
+  const ext = { step: null, rule: null };
+  let lastTaps = null;   // setRule's tap table (offs, weights), for ext.rule
 
   // ---- setup ----------------------------------------------------------------------------
   async function loadSources() {
@@ -123,6 +128,7 @@ const SimGL = (function () {
       throw new Error('This GPU supports fewer than 4 draw buffers.');
 
     const src = await loadSources();
+    VERTEX_SRC = src.vertex;
     const vs = compile(gl.VERTEX_SHADER, src.vertex, 'vertex');
     let id = 0;
     for (const n of NAMES) if (n !== 'vertex') { prog[n] = link(vs, src[n], n); prog[n].__id = id++; }
@@ -182,6 +188,8 @@ const SimGL = (function () {
     reach = rmax;
     params = Rule.buildParams(kernels);
     kernelCount = kernels.length;
+    lastTaps = taps;
+    if (ext.rule) ext.rule(taps);
   }
 
   // The update: A += dt * gain * sum h G(U), G = growth function gn (1 polynomial, 2 Gaussian).
@@ -413,6 +421,13 @@ const SimGL = (function () {
   // tool: null, or { col, row, r, ch, action }: absolute circle centre in board cells;
   // action 0 = occlude (mask), 1 = erase (set to 0), 2 = draw (set to 1) inside the circle.
   function step(tool) {
+    if (ext.step) {   // a plug-in's sim pass (fftsim.js)
+      ext.step(tool);
+      cur = 1 - cur;
+      if (dotsOn && dotTapTex) stepDots();
+      if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
+      return;
+    }
     const p = prog.sim;
     gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[1 - cur]);
@@ -528,11 +543,25 @@ const SimGL = (function () {
 
   function finish() { gl.finish(); }
 
+  // For plug-ins (fftsim.js): the engine's context, helpers and live state. Read the getters each
+  // time: the values change (cur, the rule, the bullets).
+  const internals = {
+    ext, makeTex, makeFbo, loc, bindTex, draw4,
+    // a fragment shader linked with the engine's vertex shader
+    link: fsSrc => { const vs = compile(gl.VERTEX_SHADER, VERTEX_SRC, 'vertex'), p = link(vs, fsSrc, 'plugin'); p.__id = 'x' + (++pluginIds); return p; },
+    get gl() { return gl; }, get W() { return W; }, get H() { return H; },
+    get state() { return state; }, get stateFbo() { return stateFbo; }, get cur() { return cur; },
+    get params() { return params; }, get dt() { return dt; }, get gain() { return gain; }, get growthFn() { return growthFn; },
+    get reach() { return reach; }, get taps() { return lastTaps; },
+    get bulletsActive() { return bulletsOn && !!bulTapTex && !bulletsIdle; }, get bul() { return bul; }, get bulTex() { return bulTex[bcur]; },
+  };
+  let VERTEX_SRC = '', pluginIds = 0;
+
   return { init, setRule, setUpdate, seed, add, paint, step, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
            get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },
            get blockChannels() { return blkChanBuf; },
-           get tapCount() { return tapCount; } };
+           get tapCount() { return tapCount; }, internals };
 })();
