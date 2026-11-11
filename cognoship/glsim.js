@@ -54,7 +54,7 @@ const SimGL = (function () {
   let bulletsIdle = true;
   let bul = { mode: 1, ch: [1, 1, 1], wearCh: [1, 1, 1], hit: 0.2, wear: 0.05, sub: 2 };
   let bblkTex = null, bblkFbo = null, BBW = 0, BBH = 0, bblkBuf = null;
-  // Plug-ins (fftsim.js, ?fft=1): ext.step(tool) replaces the creatures' sim pass (it must write the
+  // Plug-ins (fftsim.js, FFT mode, on unless ?fft=0): ext.step(tool) replaces the creatures' sim pass (it must write the
   // next board into stateFbo[1 - cur]; step() then flips cur, steps the dots and bullets);
   // ext.rule(taps) follows setRule. Both null: the direct convolution (sim.glsl) as ever.
   const ext = { step: null, rule: null };

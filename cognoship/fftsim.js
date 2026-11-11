@@ -1,9 +1,9 @@
 "use strict";
 // ============================================================================================
-//  FFT mode (?fft=1): the creatures' convolution by FFT on the GPU, in place of sim.glsl's direct
-//  sum over ~1,000 kernel taps per cell, whose cost grows with R^2. A plug-in: with ?fft=1 it
-//  wraps SimGL.init and, once the engine is up, sets SimGL.internals.ext.step / .rule; without
-//  it, this file does nothing. To remove FFT mode, delete this file, its <script> tags and
+//  FFT mode (on by default; ?fft=0 off): the creatures' convolution by FFT on the GPU, in place of
+//  sim.glsl's direct sum over ~1,000 kernel taps per cell, whose cost grows with R^2. A plug-in:
+//  unless ?fft=0 it wraps SimGL.init and, once the engine is up, sets SimGL.internals.ext.step /
+//  .rule; with ?fft=0 this file does nothing (the direct convolution, sim.glsl). To remove FFT mode, delete this file, its <script> tags and
 //  shaders/fft*.glsl (glsim.js keeps two small hooks, ext and internals, which do nothing then).
 //
 //  Per step (step):
@@ -27,7 +27,7 @@
 // ============================================================================================
 
 const FFTSim = (function () {
-  const ON = new URLSearchParams(location.search).get('fft') === '1';
+  const ON = new URLSearchParams(location.search).get('fft') !== '0';   // on by default
   if (!ON) return { on: false };
 
   const NAMES = ['fft', 'fftpack', 'fftmul', 'fftgather', 'fftgrow'];

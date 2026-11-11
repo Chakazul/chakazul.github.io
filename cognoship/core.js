@@ -43,11 +43,10 @@ const Core = (function () {
   const PATCH = { top: 6, bottom: 452, h: 54, w: 104, gap: 16 };
   const ZOOM = { x: PX, y: 64, edge: PW };          // zoom view square
   // Stacked layout (setLayout, the game in a portrait window): the same logical layout, drawn on a
-  // canvas of the world's width: the world view (PX x CH) at the top, a band of BAND px (the page puts
-  // its message there), then the ship panel (PW x CH) scaled by STACK_S to the full width below.
+  // canvas of the world's width: the world view (PX x CH) at the top, a band of `band` px, then the
+  // ship panel (PW x CH) scaled by layout.s, centred (layout.ox from the left) below.
   // Everything above is in logical px; only the canvas (render, drawOverlay, canvasPoint) maps them.
-  const STACK_S = PX / PW;   // 2
-  const layout = { stacked: false, band: 0, w: CW, h: CH };   // w, h: the canvas's own size, px
+  const layout = { stacked: false, band: 0, s: 1, ox: 0, w: CW, h: CH };   // w, h: the canvas's own size, px
   const panelY = () => CH + layout.band;   // the panel's top on a stacked canvas
   // Zoom slider: px per cell in the zoom view (7 slots); the default shows about 4 R across.
   const ZOOMS = [2, 3, 4, 6, 8, 12, 16];
@@ -671,20 +670,21 @@ const Core = (function () {
   // The ship view's square on the canvas, and its px per cell: (x0, y0, edge, px per cell)
   function zoomRect() {
     if (!layout.stacked) return [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX];
-    const S = STACK_S;
-    return [(ZOOM.x - PX) * S, panelY() + ZOOM.y * S, ZOOM.edge * S, CELL_PX * S];
+    const S = layout.s;
+    return [layout.ox + (ZOOM.x - PX) * S, panelY() + ZOOM.y * S, ZOOM.edge * S, CELL_PX * S];
   }
   // Landscape (stacked false): the canvas is the logical CW x CH. Stacked: PX wide, the world view,
-  // a band of `band` px, then the ship panel at STACK_S.
-  function setLayout(stacked, band = 0) {
+  // a band of `band` px, then the ship panel at scale s (at most PX / PW: the full width), centred.
+  function setLayout(stacked, band = 0, s = PX / PW) {
     layout.stacked = !!stacked; layout.band = stacked ? band : 0;
-    layout.w = stacked ? PX : CW; layout.h = stacked ? CH + band + CH * STACK_S : CH;
+    layout.s = stacked ? Math.min(s, PX / PW) : 1; layout.ox = stacked ? (PX - PW * layout.s) / 2 : 0;
+    layout.w = stacked ? PX : CW; layout.h = stacked ? Math.round(CH + layout.band + CH * layout.s) : CH;
     for (const c of [glCanvas, ui]) if (c.width !== layout.w || c.height !== layout.h) { c.width = layout.w; c.height = layout.h; }
   }
   // Logical canvas px per CSS px, in the world view or (panel) in the ship panel
   function logicalPerCss(panel) {
     const k = layout.w / (ui.getBoundingClientRect().width || layout.w);
-    return panel && layout.stacked ? k / STACK_S : k;
+    return panel && layout.stacked ? k / layout.s : k;
   }
 
   function frame() {
@@ -779,7 +779,7 @@ const Core = (function () {
     ctx.clearRect(0, 0, layout.w, layout.h);
     if (!layout.stacked) return drawScene();
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip(); drawScene(); ctx.restore();
-    ctx.save(); ctx.setTransform(STACK_S, 0, 0, STACK_S, -STACK_S * PX, panelY());
+    ctx.save(); ctx.setTransform(layout.s, 0, 0, layout.s, layout.ox - layout.s * PX, panelY());
     ctx.beginPath(); ctx.rect(PX, 0, PW, CH); ctx.clip(); drawScene(); ctx.restore();
   }
   function drawScene() {
@@ -1031,7 +1031,8 @@ const Core = (function () {
     const x = (e.clientX - r.left) * layout.w / r.width, y = (e.clientY - r.top) * layout.h / r.height;
     if (!layout.stacked || y < CH) return [x, y];
     if (y < panelY()) return [-1e4, -1e4];
-    return [PX + x / STACK_S, (y - panelY()) / STACK_S];
+    const lx = PX + (x - layout.ox) / layout.s;
+    return lx < PX || lx >= CW ? [-1e4, -1e4] : [lx, (y - panelY()) / layout.s];   // (beside the panel: off both views)
   }
   const inZoom = p => p[0] >= ZOOM.x && p[0] < ZOOM.x + ZOOM.edge && p[1] >= ZOOM.y && p[1] < ZOOM.y + ZOOM.edge;
   function viewOffset(p) {

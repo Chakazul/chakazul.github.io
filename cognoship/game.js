@@ -156,26 +156,27 @@
     el.parentNode.append(probe);
     const widest = Math.max(0, ...Array.from(probe.children, d => d.getBoundingClientRect().width));
     probe.remove();
-    if (widest > 0 && widest * base / 100 > avail) el.style.setProperty('--msg-font', `${Math.floor(10 * avail * 100 / widest) / 10}px`);
+    // stacked: two lines (wrapping at words, so allow some slack)
+    const room = stacked ? avail * 2 * 0.85 : avail;
+    if (widest > 0 && widest * base / 100 > room) el.style.setProperty('--msg-font', `${Math.floor(10 * room * 100 / widest) / 10}px`);
   }
   window.addEventListener('resize', fitMsg);
 
   // ---- layout ---------------------------------------------------------------------------------
   // A portrait window, not fullscreen (a phone held upright): the stacked layout (core setLayout,
-  // style.css :root.stacked): the world view at the top, the message under it (moved into the
-  // canvas's band), the ship view at the full width below, then the controls. Otherwise side by
-  // side, the message back under the world view. Checked on every resize and fullscreen change.
-  const BAND = 96;   // canvas px between the world view and the ship view, for the message
+  // style.css :root.stacked): the world view at the top, the ship view at 1.5x below it, centred,
+  // with Fire and < > at its lower left (moved into its layer), then the controls, then the message
+  // (two lines). Otherwise side by side. Checked on every resize and fullscreen change.
+  const BAND = 16, SHIP_SCALE = 1.5;   // (style.css :root.stacked has the same numbers: 768 x 1296)
   let stacked = false;
   function applyLayout() {
     const want = innerHeight > innerWidth && !document.documentElement.classList.contains('fs');
     if (want === stacked) return;
     stacked = want;
     document.documentElement.classList.toggle('stacked', stacked);
-    C.setLayout(stacked, BAND);
-    const msg = $('msg');
-    if (stacked) document.querySelector('.canvas-box').append(msg);
-    else document.querySelector('.below').prepend(msg);
+    C.setLayout(stacked, BAND, SHIP_SCALE);
+    const layer = document.querySelector(stacked ? '.layer-ship' : '.layer-world');
+    layer.append($('bullet-nav'), $('fire'));
     fitMsg();
   }
   window.addEventListener('resize', applyLayout);
@@ -610,7 +611,7 @@
       thumbs.className = 'thumbs';
       for (const m of speciesMorphs(e)) {
         const d = found.find(x => x.name === m), t = document.createElement('div');
-        t.className = 'thumb';
+        t.className = 'thumb' + (d ? '' : ' unknown');   // not discovered: the box's colour (discovered with no picture: black)
         if (d) { t.title = m; if (d.img) { const img = new Image(); img.src = d.img; img.alt = m; t.append(img); } }
         thumbs.append(t);
       }
@@ -625,13 +626,24 @@
     fitBook();
   }
   let chosenSpecies = null;   // the species last chosen in the book: Retry's replay chooses it again
+  // As a [new_scene]: the views fade to black (WORLD_FADE_MS), the species is set up unseen, then
+  // they fade back in (as Retry does)
+  let speciesFading = false;
   function pickSpecies(id) {
     closeBook();
     if (clone.held) endClone();
-    chosenSpecies = id;
-    chooseSpecies(id);
-    retake = true; cand = null;
-    C.setRunning(true);
+    if (speciesFading) return;
+    speciesFading = true;
+    fadeWorld(1);
+    setTimeout(() => {
+      chosenSpecies = id;
+      chooseSpecies(id);
+      retake = true; cand = null;
+      sceneHidden = false;
+      fadeWorld(0);
+      C.setRunning(true);
+      speciesFading = false;
+    }, WORLD_FADE_MS);
   }
   function openBulletBook() {
     if (!Bullets.on) return;

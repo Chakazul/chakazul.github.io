@@ -716,3 +716,32 @@ Suggested order after chapter 4: HAESRE (pure steering), KH97WU (cooperation), V
 (containment), XEH4YR, PJ1EF7 (chaos), HGMLH8 (mastery), G6G6CR as the finale. Difficulty
 rises and each chapter mostly adds one mechanic; most of the goals need only new conditions
 (time goals, the object cap, beacons, docking), not new systems.
+
+## 9. Performance: next steps (2026-11-11, not built)
+
+Measured with `?dev=1` (fps / steps per s / ms per step, a step's time including its analysis and
+the GPU wait), after the per-frame step cap and FFT mode (`?fft=1`):
+
+| | direct | FFT |
+|---|---|---|
+| laptop, sandbox | 34 / 30 / 22.3 | 50 / 31 / 18.3 |
+| phone, sandbox | 17 / 17 / 51.0 | 23 / 23 / 37.4 |
+| phone, chapter 1 | 24 / 24 / 38.4 | 42 / 30 / 24.9 |
+
+FFT mode helps (18-35% per step), but far less than its ~10x fewer texture reads suggest: the
+convolution was not the only cost. Plan:
+
+1. **Measure first:** a breakdown in the `?dev=1` readout, per step: the sim pass on the GPU
+   (finished: `gl.finish` around it, dev only), the readback wait (`readBlocks`), and the CPU's
+   detection work (`Creatures.find`, tracking, classification). Run sandbox on the phone.
+2. Then, by what it shows:
+   - **`blocks.glsl`'s potential:** each step it convolves again, ~1,000 taps at each of the
+     96 x 64 block centres (~31M reads), for detection. In FFT mode the potential is the mean of
+     the U's the FFT already made (`P` textures): read it there instead.
+   - **The readback after every step:** the CPU waits for the GPU each step (probably much of the
+     laptop's 18 ms). Options: analyse once per frame, or read back a frame late (PBO + fence).
+   - **CPU detection in a crowded world** (sandbox is slower than chapter 1 on both devices):
+     classify fewer tracks per step, or detect less often.
+   - **FFT mode's ~100 draw calls a step:** fold `fftmul` into the first inverse pass, and use a
+     real-to-complex FFT (half the work).
+   - **Dots stepping every other step:** ~4-5% (their 9% of the direct step).

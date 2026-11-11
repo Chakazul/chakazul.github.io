@@ -153,13 +153,15 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
 Side by side (a landscape window, and fullscreen): the world view on the left 2/3 of the canvas, the
 ship view on the right 1/3, the message under the world view and Retry / Pause / Speed (one row)
 under the ship view. Stacked (a portrait window, not fullscreen, e.g. a phone held upright): the
-world view across the full width at the top, the message under it, then the ship view at twice its
-size across the full width, then Retry / Pause / Speed. The layout follows the window as it turns
-or resizes. Underneath, one canvas either way (`core.js` `setLayout`): stacked, it is 768 × 1632 px,
-the world view (768 × 512), a 96 px band for the message, and the ship panel drawn at 2× (768 ×
-1024); the overlay is drawn in the same logical coordinates as side by side, mapped to each part,
-and the page's buttons sit in a layer over each view (`.layer-world`, `.layer-ship`), placed
-relative to it.
+world view across the full width at the top, the ship view at 1.5x below it, centred, with Fire and
+◀ ▶ at its lower left (above Upward / Zoom), then Retry / Pause / Speed, then the message, two lines
+high, in a larger font (sized so the script's widest message fits two lines). The chapter card
+shrinks to the window, and the books take nearly its full width, their list scrolling sideways when
+the slots don't fit. The layout follows the window as it turns or resizes. Underneath, one canvas
+either way (`core.js` `setLayout`): stacked, it is 768 × 1296 px, the world view (768 × 512), a
+16 px gap, and the ship panel drawn at 1.5× (576 × 768), centred; the overlay is drawn in the same
+logical coordinates as side by side, mapped to each part, and the page's buttons sit in a layer
+over each view (`.layer-world`, `.layer-ship`), placed relative to it.
 
 ## Story mode, sandbox mode and the inventory
 
@@ -182,10 +184,10 @@ In sandbox mode only, a **Species** button (`C`) sits at the top of the ship vie
 Bullets and Morphs, and the species' name at the morph book's lower right is a link too. Both open
 the **species book**, "Choose a species" (as wide as the bullet book): a slot per species added by
 `[add_allow_species]`, in order, with a small thumbnail of each of its visible morphs in one row
-(up to 8: the centre of its picture if discovered, else black), above its name; the
+(up to 8: the centre of its picture if discovered; black if discovered without one; the book's own colour if not), above its name; the
 current species has a lighter background (so does the player's morph, the one Respawn puts back, in the morph book while choosing a morph to respawn). Every book's title shows its verb in the colour of the slots that do it (the morph book's "respawn" in cyan and "clone" in pink; "Choose" (species) or "use" (bullets) in cyan and "Create" in green in the others). Pickable slots in every book have a darker cyan border than the Respawn and Choose buttons. Keys pick slots, the book's rows on the keyboard's: `Q`–`R`,
 `A`–`F`, `Z` `X`; only Escape closes it (as every book; its Close button shows *Esc*). A
-pick does `[choose_species]` with it (its `[on_choose_species]` block sets the world up) and plays
+pick fades the views out as `[new_scene]` does, does `[choose_species]` with it unseen (its `[on_choose_species]` block sets the world up), fades them back in and plays
 on. Retry then redoes the species last chosen, not the script's first `[choose_species]`.
 
 Also in sandbox mode only, every book (morph, bullet, species) has a **Hold to clear data** link at
@@ -206,7 +208,7 @@ run with nothing discovered.
 - `?radius=4`: mask radius at start, in cells (default 2.5 · R / 12, rounded to 0.5).
 - `?headup=vel|axis`: start in heading-up or body-axis-up view (`1` = `vel`).
 - `?debug=1`: show GPU ms per step and the tap count in the readout.
-- `?fft=1` (game and lab): FFT mode, for testing: the creatures' convolution by FFT on the GPU (`fftsim.js`, see *FFT mode* below). With `?dev=1` the game's readout ends in "· FFT".
+- `?fft=0` (game and lab): FFT mode off: the creatures' convolution by the direct sum (`sim.glsl`) instead of by FFT on the GPU (`fftsim.js`, on by default, see *FFT mode* below). With `?dev=1` the game's readout ends in "· FFT" while FFT mode is on.
 - `?all=1` (the game, either mode): all discovered, for testing. Every visible morph of every species counts as discovered (no picture until the ship holds it), and the gun has every bullet pattern from the start. The central inventory is neither read nor written.
 - `?dev=1` (the game): dev mode. Test aids, as keys and as buttons at the top left of the world view (**Ch**,
   **Ok**, **Do**): `I` goes to the next `[chapter]`, running every action on the lines in between
@@ -389,10 +391,10 @@ The engine's first version used LeniaNDKC-style exponential kernels and Gaussian
 dt = 0.2. That was not what 233.json was found with. Under that rule *gyrans R* didn't replicate
 and *lithos* moved. The Phase 1 numbers below are from that version.
 
-## FFT mode (`?fft=1`)
+## FFT mode (on by default; `?fft=0` turns it off)
 
 A plug-in (`fftsim.js`, `shaders/fft*.glsl`) that replaces the creatures' sim pass: `sim.glsl` sums
-~1,000 kernel taps per cell, a cost that grows with R²; the FFT's does not. Without the parameter the
+~1,000 kernel taps per cell, a cost that grows with R²; the FFT's does not. With `?fft=0` the
 file does nothing; to remove it, delete it, its `<script>` tags and `shaders/fft*.glsl` (`glsim.js`
 keeps two small hooks, `internals.ext.step` / `.rule`, inert then).
 

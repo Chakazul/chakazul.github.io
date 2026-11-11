@@ -46,4 +46,4 @@ can instead erase or draw mass, for comparison.
 
 `?form=` (start pattern, e.g. `5N7KKM-limus`), `?R=` (kernel radius, default 18), `?dt=`,
 `?speed=`, `?zoom=`, `?radius=`, `?headup=vel|axis`, `?debug=1` (GPU ms per step),
-`?saddle=` `?thr=` `?area=` (detection), `?fft=1` (the convolution by FFT, for testing). Details in [README-MORE.md](README-MORE.md).
+`?saddle=` `?thr=` `?area=` (detection), `?fft=0` (the direct convolution instead of the FFT, the default). Details in [README-MORE.md](README-MORE.md).

@@ -255,6 +255,7 @@ button,select,input{transition:background .25s,border-color .25s}
 .thumb{flex:none;width:calc((100% - 21px) / 8);aspect-ratio:1;background:#000;border-radius:3px;overflow:hidden;box-sizing:border-box;border:1px solid #3c3a48;
   display:flex;align-items:center;justify-content:center}
 .thumb img{display:block;flex:none;width:170%;height:170%;object-fit:cover}
+.thumb.unknown{background:var(--raised)}   /* not discovered: the book's own colour (discovered, no picture yet: black) */
 .book-box.wide{width:min(1040px,94%)}   /* the bullet book: names with pictures need the room */
 .book-box h2{margin:0;font-size:calc(var(--ui-font) * 1.4);font-weight:650;letter-spacing:-.01em}
 .book-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:calc(var(--ui-h) * .25);width:100%}
@@ -416,14 +417,25 @@ button,select,input{transition:background .25s,border-color .25s}
 .game-page input[type=range]:focus::-webkit-slider-thumb{outline:none}
 
 /* Game, stacked layout (game.js: a portrait window, not fullscreen; core.js setLayout): one canvas
-   768 x 1632 px, the world view (768 x 512) at the top, a band of 96 px with the message in it, then
-   the ship view at twice its size (768 x 1024), the full width; the controls (Retry, Pause, Speed)
-   under it. The ship view's buttons get the larger sizes. */
-:root.stacked .canvas-box{aspect-ratio:768/1632}
-:root.stacked .layer-world{width:100%;height:calc(100% * 512 / 1632)}
-:root.stacked .layer-ship{left:0;top:calc(100% * 608 / 1632);width:100%;height:calc(100% * 1024 / 1632)}
-:root.stacked .canvas-box>.msg{position:absolute;left:0;top:calc(100% * 512 / 1632);width:100%;height:calc(100% * 96 / 1632);
-  z-index:2;margin:0;padding:0 12px;box-sizing:border-box;display:flex;align-items:center;background:var(--bg);--msg-base:18px}
+   768 x 1296 px, the world view (768 x 512) at the top, a 16 px gap, then the ship view at 1.5x
+   (576 x 768), centred; under the canvas the controls (Retry, Pause, Speed), then the message, two
+   lines high (game.js fitMsg sizes its font for two). Fire and < > move into the ship view's layer
+   (game.js), at its lower left above Upward / Zoom. The ship view's buttons get the larger sizes. */
+:root.stacked .canvas-box{aspect-ratio:768/1296}
+:root.stacked .layer-world{width:100%;height:calc(100% * 512 / 1296)}
+:root.stacked .layer-ship{left:12.5%;top:calc(100% * 528 / 1296);width:75%;height:calc(100% * 768 / 1296)}
 :root.stacked .game{--ui-h:34px;--ui-font:14px;--ui-padx:12px;--ui-slider:90px}
-:root.stacked .below{padding-left:0}
-:root.stacked .below .controls{width:100%;margin-top:8px}
+:root.stacked .below{flex-direction:column;align-items:stretch;padding-left:0}
+:root.stacked .below .controls{order:-1;width:100%;margin-top:8px}
+:root.stacked .game .msg{width:auto;--msg-base:20px;white-space:normal;overflow:hidden;
+  height:calc(2 * 1.35em + 6px);padding:6px 4px 0;margin-top:8px}
+:root.stacked .fire{left:10px;bottom:calc(11.72% + 6px);width:calc(var(--ui-h) * 2.2);height:calc(var(--ui-h) * 2.2) !important}
+:root.stacked .bullet-nav{left:10px;bottom:calc(11.72% + 12px + var(--ui-h) * 2.2);width:calc(var(--ui-h) * 2.2)}
+/* the chapter card fits a narrow window: smaller, the title's long words whole */
+:root.stacked .chapter-box{max-width:92%;box-sizing:border-box;padding:calc(var(--ui-h) * .6) min(calc(var(--ui-h) * 1.6), 5vw)}
+:root.stacked .chapter-title{font-size:min(calc(var(--ui-font) * 3.2), 8.5vw)}
+:root.stacked .chapter-no{font-size:min(calc(var(--ui-font) * 1.5), 4vw)}
+/* the books: nearly the full width, their slots at least 110 px wide, the list scrolling sideways */
+:root.stacked .book-box,:root.stacked .book-box.wide{width:96%}
+:root.stacked .book-grid{grid-template-columns:repeat(4,minmax(110px,1fr));overflow-x:auto;overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;min-width:0;padding-bottom:4px}
