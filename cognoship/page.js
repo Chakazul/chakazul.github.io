@@ -31,6 +31,14 @@ const Page = (function () {
                   'assets/music/arthur-vyncke-a-few-jumps-away.mp3',                     // "A Few Jumps Away" by Arthur Vyncke
                   'assets/music/chris-zabriskie-out-of-the-skies-under-the-earth.mp3',  // "Out of the Skies, Under the Earth" by Chris Zabriskie
                   'assets/music/stellardrone-billions-and-billions.mp3'];                // "Billions and Billions" by Stellardrone
+  // A phone (a coarse pointer: touch) gets the same tracks re-encoded small (assets/music/small:
+  // AAC 64 kbps, 8 MB for the four, against 19.5 MB), to spare its mobile data.
+  // ?phone=<device> or 1 (the phone test, phone.html): treated as a phone, and the music card asks every time
+  const PHONE_TEST = !!new URLSearchParams(location.search).get('phone') && new URLSearchParams(location.search).get('phone') !== '0';
+  const PHONE = PHONE_TEST || matchMedia('(pointer: coarse)').matches;
+  // (in the test frame no scrollbar takes width, as on a phone: style.css .phone-test)
+  if (PHONE_TEST) document.documentElement.classList.add('phone-test');
+  if (PHONE) TRACKS.forEach((t, i) => { TRACKS[i] = t.replace('assets/music/', 'assets/music/small/').replace(/\.mp3$/, '.m4a'); });
   const TRACK_GAP_MS = 10000;
   const music = new Audio();
   const VOLUME = 0.5, MUSIC_FADE_MS = 1500;   // a switch to another track fades the old one out first
@@ -50,10 +58,18 @@ const Page = (function () {
     gapTimer = setTimeout(() => { gapTimer = null; if (soundOn) play(); }, TRACK_GAP_MS);
   });
   // On or off as last chosen in this browser (localStorage, one key per page: the game's Music,
-  // the lab's Stars); never chosen: the button's data-default ("on"), else off (both pages now).
-  const SOUND_KEY = `cognoship-sound-${$('sound')?.dataset.label ? 'game' : 'lab'}`;
-  let soundOn = $('sound')?.dataset.default === 'on';
-  try { const v = localStorage.getItem(SOUND_KEY); if (v) soundOn = v === 'on'; } catch (e) {}
+  // the lab's Stars). Never chosen, the game: on (starting with the first press), except on a phone
+  // not known to be on Wi-Fi (navigator.connection, Chrome on Android; nothing on an iPhone) or
+  // with Data Saver on, which asks first (askMusic). The lab: off.
+  const GAME = !!$('sound')?.dataset.label;
+  const SOUND_KEY = `cognoship-sound-${GAME ? 'game' : 'lab'}`;
+  let soundOn = false, chosen = false;
+  try { const v = localStorage.getItem(SOUND_KEY); if (v) { soundOn = v === 'on'; chosen = true; } } catch (e) {}
+  const conn = navigator.connection;
+  const wifi = !!conn && !conn.saveData && (conn.type === 'wifi' || conn.type === 'ethernet');
+  let ask = false;
+  if (!chosen && GAME) { if (!PHONE || wifi) soundOn = true; else ask = true; }
+  if (PHONE_TEST && GAME) { soundOn = false; ask = true; }
   // The button: the game's Music (data-label, a note icon in the title row), else the lab's Stars.
   function syncSound() {
     if ($('sound')) {
@@ -95,6 +111,23 @@ const Page = (function () {
   // closed by Space or a click, stops the event there)
   for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, startMusic, { capture: true });
   syncSound();
+  // A phone, never chosen, not on Wi-Fi: a small card at the bottom asks once, saying the cost.
+  // Its answer is remembered as the Music button's (which changes it later); its Play is the
+  // press that lets the music start.
+  function setSound(on) {
+    soundOn = on; syncSound();
+    try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch (e) {}
+  }
+  if (ask) {
+    const card = document.createElement('div');
+    card.className = 'music-ask';
+    card.innerHTML = '<span>\u266a Play music? About 1\u20133 MB per track of mobile data.</span>' +
+      '<button class="music-yes">Play</button><button class="music-no">Not now</button>';
+    document.body.append(card);
+    const done = on => { card.remove(); setSound(on); };
+    card.querySelector('.music-yes').onclick = () => done(true);
+    card.querySelector('.music-no').onclick = () => done(false);
+  }
 
   // theme and fullscreen
   if ($('theme')) $('theme').onclick = () => {

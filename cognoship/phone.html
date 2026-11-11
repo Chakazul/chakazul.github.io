@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Cognoship phone test</title>
+<!-- ?phone=<device> (1: the first, pixel9): the game in a frame the size of a phone held upright (its
+     CSS viewport, chosen below or by the parameter), so its media queries and the stacked portrait layout apply as on that phone;
+     scaled down to fit a shorter window. The frame keeps the URL's parameters (phone makes it act
+     as a phone). The sizes are the whole screen; a browser's address and tool bars take some of it. -->
+<style>
+  html,body{margin:0;height:100%;background:#1b1a20;color:#a49cb3;font:13px system-ui,sans-serif}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;overflow:hidden}
+  .bar{display:flex;gap:8px;align-items:center;flex:none}
+  input{font:inherit;width:4.2em;color:#ece8f3;background:#110f18;border:1px solid #3a3548;border-radius:8px;padding:4px 6px}
+  select{font:inherit;color:#ece8f3;background:#110f18;border:1px solid #3a3548;border-radius:8px;padding:4px 8px}
+  .phone{border:10px solid #000;border-radius:36px;overflow:hidden;background:#000;
+    box-shadow:0 10px 40px rgba(0,0,0,.6);transform-origin:center;flex:none}
+  iframe{border:0;display:block}
+</style>
+</head>
+<body>
+<div class="bar">Phone test <select id="dev"></select> <input id="w" type="number" min="280" max="600"> × <input id="h" type="number" min="480" max="1200"> · the mouse stands in for touch</div>
+<div class="phone" id="phone"><iframe id="f" allow="fullscreen; autoplay"></iframe></div>
+<script>
+  // CSS viewport (the screen in CSS px), upright
+  const DEVICES = {
+    pixel9:      { name: 'Google Pixel 9',        w: 412, h: 923 },
+    iphone14:    { name: 'iPhone 14',             w: 390, h: 844 },
+    iphone15max: { name: 'iPhone 15 Pro Max',     w: 430, h: 932 },
+    iphonese:    { name: 'iPhone SE',             w: 375, h: 667 },
+    galaxys24:   { name: 'Samsung Galaxy S24',    w: 360, h: 780 },
+  };
+  const q = new URLSearchParams(location.search);
+  let dev = DEVICES[q.get('phone')] ? q.get('phone') : 'pixel9';
+  // a size of one's own (the boxes, or ?w= &h=): e.g. to match a phone set to a smaller display size;
+  // the game's ?dev=1 readout on the real phone shows its size (width x height @ pixel ratio)
+  let size = { w: +q.get('w') || DEVICES[dev].w, h: +q.get('h') || DEVICES[dev].h };
+  const sel = document.getElementById('dev');
+  for (const [k, d] of Object.entries(DEVICES)) sel.add(new Option(d.name, k, false, k === dev));
+  function fit() {
+    const d = size;
+    const k = Math.min(1, (innerHeight - 70) / (d.h + 20), (innerWidth - 20) / (d.w + 20));
+    document.getElementById('phone').style.transform = `scale(${k})`;
+  }
+  function load() {
+    const d = size, f = document.getElementById('f'), own = d.w !== DEVICES[dev].w || d.h !== DEVICES[dev].h;
+    f.style.width = d.w + 'px'; f.style.height = d.h + 'px';
+    document.getElementById('w').value = d.w; document.getElementById('h').value = d.h;
+    q.set('phone', dev); q.delete('device');
+    if (own) { q.set('w', d.w); q.set('h', d.h); } else { q.delete('w'); q.delete('h'); }
+    history.replaceState(null, '', '?' + q.toString());
+    const inner = new URLSearchParams(q); ['w', 'h'].forEach(k => inner.delete(k));   // (phone=<device> stays: the game acts as a phone)
+    f.src = 'index.html?' + inner.toString();
+    fit();
+  }
+  sel.onchange = () => { dev = sel.value; size = { w: DEVICES[dev].w, h: DEVICES[dev].h }; load(); };
+  for (const id of ['w', 'h']) document.getElementById(id).onchange = e => {
+    const v = Math.round(+e.target.value);
+    if (v >= +e.target.min && v <= +e.target.max) { size[id] = v; load(); }
+  };
+  addEventListener('resize', fit);
+  load();
+</script>
+</body>
+</html>

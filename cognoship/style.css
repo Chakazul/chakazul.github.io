@@ -442,11 +442,26 @@ button,select,input{transition:background .25s,border-color .25s}
 :root.stacked .chapter-no{font-size:min(calc(var(--ui-font) * 1.5), 4vw)}
 /* the books: nearly the full width, their slots at least 110 px wide, the list scrolling sideways */
 :root.stacked .book-box,:root.stacked .book-box.wide{width:96%}
-:root.stacked .book-grid{grid-template-columns:repeat(4,minmax(110px,1fr));overflow-x:auto;overscroll-behavior-x:contain;
+:root.stacked .book-grid{grid-template-columns:repeat(4,minmax(140px,1fr));overflow-x:auto;overscroll-behavior-x:contain;
   -webkit-overflow-scrolling:touch;min-width:0;padding-bottom:4px}
 :root.stacked .book-grid.bullets,:root.stacked .book-grid.species{grid-template-columns:repeat(4,minmax(170px,1fr))}   /* names on one line */
+:root.stacked .book-grid.bullets{grid-template-columns:repeat(4,minmax(200px,1fr))}   /* (a picture before each name: longer still) */
+:root.stacked .book-grid .label{white-space:nowrap}   /* every book: a name on one line */
 /* under the list, each on its own row: the species link, Hold to clear data, Close */
 :root.stacked .book-species,:root.stacked .book-clear{position:relative;left:auto;right:auto;bottom:auto}   /* (relative: the hold bar under it still sits under it) */
 :root.stacked .book-species{order:1}
 :root.stacked .book-clear{order:2}
 :root.stacked #book-close{order:3}
+
+/* A phone not on Wi-Fi, music never chosen: a card at the bottom asks once (page.js) */
+.music-ask{position:fixed;left:50%;bottom:max(12px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:20;
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 10px;width:max-content;max-width:calc(100vw - 24px);
+  box-sizing:border-box;padding:10px 14px;border-radius:12px;background:var(--raised);color:var(--ink);font-size:14px;
+  border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.45)}
+.music-ask span{flex:1 1 200px}
+.music-ask button{padding:6px 12px}
+.music-ask .music-yes{border-color:var(--accent);color:var(--accent)}
+
+/* ?phone=1 (the phone test's frame): no scrollbar taking width, as on a phone (overlay scrollbars) */
+html.phone-test{scrollbar-width:none}
+html.phone-test::-webkit-scrollbar{display:none}

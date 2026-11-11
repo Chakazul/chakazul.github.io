@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Cognoship ambient test</title>
+<style>
+  :root{--bg:#07060b;--raised:#110f18;--line:#262233;--ink:#ece8f3;--muted:#a49cb3;--accent:#9fe8f2}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:640px;margin:0 auto;padding:24px 16px}
+  h1{font-size:22px;margin:0 0 6px}
+  p{color:var(--muted);margin:0 0 18px}
+  .moods{display:grid;gap:10px}
+  button{font:inherit;color:var(--ink);background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:left;cursor:pointer}
+  button.on{border-color:var(--accent);color:var(--accent)}
+  .row{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+  .row button{text-align:center}
+  label{color:var(--muted);display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+<main>
+  <h1>Ambient music test</h1>
+  <p>Generated live in the browser (ambient.js), nothing downloaded. Each mood is set up from one of the
+    game's tracks: its key, mode, tempo and brightness, not its tune. Tap one to listen; tap another to
+    switch. "Another take" plays the same mood with a different random walk.</p>
+  <div class="moods" id="moods"></div>
+  <div class="row">
+    <button id="again">Another take</button>
+    <button id="stop">Stop</button>
+    <label>Volume <input id="vol" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+  </div>
+</main>
+<script src="ambient.js"></script>
+<script>
+  let cur = -1, seed = 1;
+  const box = document.getElementById('moods');
+  const mark = () => box.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === cur && Ambient.playing));
+  Ambient.MOODS.forEach((m, i) => {
+    const b = document.createElement('button');
+    b.textContent = `${i + 1}. like "${m.name}" · ${m.bpm} bpm`;
+    b.onclick = () => { cur = i; seed = 1; Ambient.start(i, seed); mark(); };
+    box.append(b);
+  });
+  document.getElementById('again').onclick = () => { if (cur < 0) cur = 0; Ambient.start(cur, ++seed); mark(); };
+  document.getElementById('stop').onclick = () => { Ambient.stop(); mark(); };
+  document.getElementById('vol').oninput = e => Ambient.volume(+e.target.value);
+</script>
+</body>
+</html>
