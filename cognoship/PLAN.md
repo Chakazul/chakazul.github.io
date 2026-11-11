@@ -155,7 +155,7 @@ boards) or many creatures at once. Neither is in scope.
   **R = 12**, with **dt = 0.2**.
 - **Result of the step 0 check.** No tuning was needed: it glides for 5,000 steps, does not
   replicate, and its mass holds at about 336. The details, the shader-vs-numpy match, and a coarse
-  numerical mask sweep that already shows strong steering are in README.md, "Fidelity checks".
+  numerical mask sweep that already shows strong steering are in README-MORE.md, "Fidelity checks".
   The original plan for the check follows.
 - **Step 0 is a fidelity check.** Run it free and confirm that it glides steadily, does not
   replicate, and keeps a stable mass. VT049W is known as "sometimes reproductive". If it

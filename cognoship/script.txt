@@ -1,4 +1,4 @@
-# script file for story mode, see README.md for syntax
+# script file for story mode, see README-MORE.md for syntax
 [next_msg:Click here or {:Space} to continue:≫:⧗]
 [speed:1][gun:off][new_bullet:off][clone:off][erase:off][morph_book:off]
 [morph_book_action:clear_put][retry_action:clear_put]
@@ -63,7 +63,7 @@ Now embark for the _Sirius A_ star system, 9 light years away.
 [clear_world][put_player:limus]
 [dot:5][min_morph:6:paragyrans,paratardus,lithos+gyrans:far]
 Other ships appear, and so do *energy* packets.
-Steer your ship to collect 50 energy.[need:energy:50]
+Steer your ship to collect 30 energy.[need:energy:30]
 
 # bullets
 [gun:on]
@@ -71,10 +71,10 @@ Enough energy for the *Lenium gun*!
 [bullet:Orbium:Orbium]
 {Fire:A} to fire _Lenium_ bullets.
 They mess with other ships' sensory fields.
-This _Orbium_ type bullet is weak. More types will come later.
-[new_bullet:50]
-From now on, for every 50 energy, you can create a new bullet type.
-Reach 100 energy. Then {Create:S} a new bullet type.[need:create_bullet]
+This _Orbium_ type bullet is relatively weak, though.
+[new_bullet:30]
+For every 30 energy collected, you can create a new bullet type.
+Reach 60 energy. Then {Create:S} a new bullet type.[need:create_bullet]
 Switch bullet type using {Bullets:S} or {◀:D} {▶:F}.
 Each bullet type has unique effects.
 Now we are leaving the _Orion Arm_.

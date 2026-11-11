@@ -110,8 +110,8 @@ void main() {
     vec2 s = vec2(gl_FragCoord.x, uCanvas.y - gl_FragCoord.y);   // top-left origin
     vec3 col = vec3(0.0);
 
-    float worldW = float(uSize.x) * uWorldScale;
-    if (s.x < worldW) {
+    float worldW = float(uSize.x) * uWorldScale, worldH = float(uSize.y) * uWorldScale;
+    if (s.x < worldW && s.y < worldH) {   // (a stacked canvas has the ship panel below the world)
         col = withStars(cellColor(s / uWorldScale), s / uWorldScale, uWorldScale);
     } else if (s.x >= uZoom.x && s.x < uZoom.x + uZoom.z && s.y >= uZoom.y && s.y < uZoom.y + uZoom.z) {
         if (uFocus.z > 0.5) {

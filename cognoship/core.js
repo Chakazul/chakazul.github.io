@@ -42,6 +42,13 @@ const Core = (function () {
   // Two rows of tool patches: top = channel (R G B), bottom = action (Mask Erase Draw); zoom view between.
   const PATCH = { top: 6, bottom: 452, h: 54, w: 104, gap: 16 };
   const ZOOM = { x: PX, y: 64, edge: PW };          // zoom view square
+  // Stacked layout (setLayout, the game in a portrait window): the same logical layout, drawn on a
+  // canvas of the world's width: the world view (PX x CH) at the top, a band of BAND px (the page puts
+  // its message there), then the ship panel (PW x CH) scaled by STACK_S to the full width below.
+  // Everything above is in logical px; only the canvas (render, drawOverlay, canvasPoint) maps them.
+  const STACK_S = PX / PW;   // 2
+  const layout = { stacked: false, band: 0, w: CW, h: CH };   // w, h: the canvas's own size, px
+  const panelY = () => CH + layout.band;   // the panel's top on a stacked canvas
   // Zoom slider: px per cell in the zoom view (7 slots); the default shows about 4 R across.
   const ZOOMS = [2, 3, 4, 6, 8, 12, 16];
   const nearestIdx = (list, v) => list.reduce((b, x, i) => Math.abs(x - v) < Math.abs(list[b] - v) ? i : b, 0);
@@ -163,6 +170,12 @@ const Core = (function () {
   // and on a device that cannot keep up.
   const STEPS_PER_S = 30;
   const MAX_STEPS_PER_FRAME = 4, MAX_FRAME_S = 0.1;
+  // And no more steps than fit in STEP_BUDGET_MS of the frame, by the measured time of a step
+  // (stepMs: the steps and their analysis, which waits for the GPU each step), at least one: a slow
+  // device (a step of ~37 ms on a phone) runs one step a frame, smoothly, rather than several in a
+  // long frame (the same steps per second, 3x the frames).
+  const STEP_BUDGET_MS = 28;
+  let stepMs = 0;   // a step's time, ms, smoothed
   let simSteps = 0;     // every step run since the page loaded (steps resets with the world; this never does)
   let driftSec = 0;     // game seconds the dots drift this frame (frame(): driftTick)
   let starSec = 0;      // real seconds the star field drifts this frame
@@ -655,11 +668,30 @@ const Core = (function () {
     return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: dir, starSpeed: star.speed, starBright: star.bright };
   }
 
+  // The ship view's square on the canvas, and its px per cell: (x0, y0, edge, px per cell)
+  function zoomRect() {
+    if (!layout.stacked) return [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX];
+    const S = STACK_S;
+    return [(ZOOM.x - PX) * S, panelY() + ZOOM.y * S, ZOOM.edge * S, CELL_PX * S];
+  }
+  // Landscape (stacked false): the canvas is the logical CW x CH. Stacked: PX wide, the world view,
+  // a band of `band` px, then the ship panel at STACK_S.
+  function setLayout(stacked, band = 0) {
+    layout.stacked = !!stacked; layout.band = stacked ? band : 0;
+    layout.w = stacked ? PX : CW; layout.h = stacked ? CH + band + CH * STACK_S : CH;
+    for (const c of [glCanvas, ui]) if (c.width !== layout.w || c.height !== layout.h) { c.width = layout.w; c.height = layout.h; }
+  }
+  // Logical canvas px per CSS px, in the world view or (panel) in the ship panel
+  function logicalPerCss(panel) {
+    const k = layout.w / (ui.getBoundingClientRect().width || layout.w);
+    return panel && layout.stacked ? k / STACK_S : k;
+  }
+
   function frame() {
     let n = 0;
     driftTick();
     if (!ruleLoaded) {   // started empty, no species yet (the game's script loads one)
-      SimGL.render({ canvasW: CW, canvasH: CH, worldScale: WS, zoom: [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX],
+      SimGL.render({ canvasW: layout.w, canvasH: layout.h, worldScale: WS, zoom: zoomRect(),
                      rot: [1, 0, 0, 1], focus: [0, 0, 0], ...starView() });
       drawOverlay(); hooks.frame(); requestAnimationFrame(frame);
       return;
@@ -667,13 +699,17 @@ const Core = (function () {
     if (running) {
       const sec = Math.min(MAX_FRAME_S, starSec), want = SPEEDS[speedIdx] * STEPS_PER_S * sec;
       stepAcc += want;
-      const capped = stepAcc >= MAX_STEPS_PER_FRAME + 1;
-      n = Math.min(MAX_STEPS_PER_FRAME, Math.floor(stepAcc));
+      const maxN = stepMs > 0 ? Math.max(1, Math.min(MAX_STEPS_PER_FRAME, Math.floor(STEP_BUDGET_MS / stepMs))) : MAX_STEPS_PER_FRAME;
+      const capped = stepAcc >= maxN + 1;
+      n = Math.min(maxN, Math.floor(stepAcc));
       stepAcc = capped ? 0 : stepAcc - n;   // what the cap held back is dropped, not owed
       driftSec = (capped ? n : want) / STEPS_PER_S;   // game seconds: the dots keep pace with the steps run
       // analyse after every step, not once per frame, so the stats get one sample per step
-      // (at most MAX_STEPS_PER_FRAME per frame)
-      for (let i = 0; i < n && running; i++) { advance(1); analyze(1); }
+      // (at most maxN per frame)
+      const t0 = performance.now();
+      let k = 0;
+      for (; k < n && running; k++) { advance(1); analyze(1); }
+      if (k > 0) { const ms = (performance.now() - t0) / k; stepMs = stepMs > 0 ? 0.85 * stepMs + 0.15 * ms : ms; }
     } else if (masking && focus && action !== 0) {
       // paused: erase / draw still act, at once (the mask has nothing to act on without a step)
       const off = toolOffset();
@@ -683,8 +719,8 @@ const Core = (function () {
     if (detectMode !== 'none' && (n > 0 || md.dirty || stats.long.len !== md.len)) detectMorphs();
     const p = focus ? viewAngle() : 0, c = Math.cos(p), s = Math.sin(p);
     SimGL.render({
-      canvasW: CW, canvasH: CH, worldScale: WS,
-      zoom: [ZOOM.x, ZOOM.y, ZOOM.edge, CELL_PX],
+      canvasW: layout.w, canvasH: layout.h, worldScale: WS,
+      zoom: zoomRect(),
       rot: [c, s, -s, c],
       focus: focus ? [focus.col, focus.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
       ...starView(),   // the star field (opt.stars: the lab's Stars button)
@@ -736,8 +772,17 @@ const Core = (function () {
   const patchRows = () => opt.actionPatches() ? [false, true] : [false];   // bottom = the action row
   const zoomCenter = () => [ZOOM.x + ZOOM.edge / 2, ZOOM.y + ZOOM.edge / 2];
 
+  // The overlay, drawn in logical px: once on a landscape canvas; on a stacked one, twice, clipped to
+  // the world view as it is, then to the ship panel, moved and scaled to its place.
   function drawOverlay() {
-    ctx.clearRect(0, 0, CW, CH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, layout.w, layout.h);
+    if (!layout.stacked) return drawScene();
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip(); drawScene(); ctx.restore();
+    ctx.save(); ctx.setTransform(STACK_S, 0, 0, STACK_S, -STACK_S * PX, panelY());
+    ctx.beginPath(); ctx.rect(PX, 0, PW, CH); ctx.clip(); drawScene(); ctx.restore();
+  }
+  function drawScene() {
     ctx.lineJoin = 'round';
 
     // the ship panel's background while the run is over (opt.overFill, e.g. grey), under the rest
@@ -778,7 +823,7 @@ const Core = (function () {
         }
         ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
         if (!bottom && opt.showKeys()) {   // its key (1-3), as the page's key badges (style.css .kbd: 10 CSS px)
-          const k = CW / (ui.getBoundingClientRect().width || CW);   // canvas px per CSS px
+          const k = logicalPerCss(true);   // canvas px per CSS px
           ctx.font = `700 ${10 * k}px system-ui, sans-serif`;
           const t = String(i + 1), w = ctx.measureText(t).width + 8 * k, h = 14 * k;
           const bx = r.x + r.w - w - 2 * k, by = r.y + 2 * k;
@@ -980,9 +1025,13 @@ const Core = (function () {
   }
 
   // ---- canvas input ---------------------------------------------------------------------
+  // A pointer's place in logical px (on a stacked canvas: the panel mapped back; the band, off both views)
   function canvasPoint(e) {
     const r = ui.getBoundingClientRect();
-    return [(e.clientX - r.left) * CW / r.width, (e.clientY - r.top) * CH / r.height];
+    const x = (e.clientX - r.left) * layout.w / r.width, y = (e.clientY - r.top) * layout.h / r.height;
+    if (!layout.stacked || y < CH) return [x, y];
+    if (y < panelY()) return [-1e4, -1e4];
+    return [PX + x / STACK_S, (y - panelY()) / STACK_S];
   }
   const inZoom = p => p[0] >= ZOOM.x && p[0] < ZOOM.x + ZOOM.edge && p[1] >= ZOOM.y && p[1] < ZOOM.y + ZOOM.edge;
   function viewOffset(p) {
@@ -993,6 +1042,7 @@ const Core = (function () {
 
   ui.addEventListener('pointerdown', e => {
     const p = canvasPoint(e);
+    if (p[0] < 0) return;   // (the stacked canvas's band)
     if (p[0] < PX) {
       // world view: focus the creature under (or near) the click
       if (!opt.clickFocus()) return;
@@ -1048,7 +1098,7 @@ const Core = (function () {
     if (masking && e.pointerId === masking.id) masking.view = viewOffset(p);
     if (pageDrag === e.pointerId) opt.zoomDrag(rot(viewOffset(p)), e);
     hover = e.pointerType === 'mouse' && inZoom(p) ? viewOffset(p) : null;
-    worldHover = e.pointerType === 'mouse' && p[0] < PX ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
+    worldHover = e.pointerType === 'mouse' && p[0] >= 0 && p[0] < PX ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
   });
   // (opt.keepHover(el): keep the ship-view hover point when the pointer moves onto el, e.g. a
   // button over the view)
@@ -1102,7 +1152,7 @@ const Core = (function () {
     deg, wrapD, viewAngle, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass,
     // actions
     start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt,
-    pickChannel,
+    pickChannel, setLayout, logicalPerCss,
     setDetectMode, setEveryObject, setRunning, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
     setZoom, setMaskR, setStars, starDrift,
   };
@@ -1113,7 +1163,7 @@ const Core = (function () {
                found: () => found, masking: () => masking, tracks: () => tracks, speedIdx: () => speedIdx,
                maskR: () => maskR, viewMode: () => viewMode, zoomIdx: () => zoomIdx, CELL_PX: () => CELL_PX,
                ZOOM_CELLS: () => ZOOM_CELLS, detectMode: () => detectMode, everyObject: () => everyObject,
-               msPerStep: () => msPerStep, simSteps: () => simSteps, driftSec: () => driftSec };
+               msPerStep: () => msPerStep, simSteps: () => simSteps, driftSec: () => driftSec, stepMs: () => stepMs };
   for (const [k, [get, set]] of Object.entries(rw)) Object.defineProperty(core, k, { get, set, enumerable: true });
   for (const [k, get] of Object.entries(ro)) Object.defineProperty(core, k, { get, enumerable: true });
   return core;

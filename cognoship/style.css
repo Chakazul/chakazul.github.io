@@ -27,15 +27,22 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple
 h1{font-size:clamp(20px,3vw,28px);margin:0;letter-spacing:-.01em;font-weight:650}
 h1 small{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.04em;margin-left:8px}
 .icons{display:flex;gap:6px}
+/* Game: the overlays of each view in a layer over that view (index.html), placed relative to it:
+   side by side (the world the left 2/3 of the canvas, the ship view the right 1/3), or stacked (see
+   :root.stacked below). The layers take no clicks; what is in them does (unless it says otherwise). */
+.layer{position:absolute;pointer-events:none}
+.layer>*{pointer-events:auto}
+.layer-world{left:0;top:0;width:66.6667%;height:100%}
+.layer-ship{left:66.6667%;top:0;width:33.3333%;height:100%}
 /* the game's score: at the top of the world view (the left 2/3 of the canvas), centred; in fullscreen too */
-.score{position:absolute;top:8px;left:calc(100% / 3);transform:translateX(-50%);z-index:3;pointer-events:none;
+.score{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:none;
   font-size:clamp(22px,3.6vw,38px);font-weight:700;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;
   text-shadow:0 0 4px #000,0 0 2px #000}
 .score[hidden]{display:none}
 /* ?dev=1: the test buttons, at the top left of the world view; the frame rate at its top right */
 .dev{position:absolute;left:10px;top:10px;z-index:3;display:flex;gap:6px}
 .dev[hidden],.dev-fps[hidden]{display:none}
-.dev-fps{position:absolute;top:10px;right:calc(100% / 3 + 10px);z-index:3;pointer-events:none;white-space:nowrap;
+.dev-fps{position:absolute;top:10px;right:10px;z-index:3;pointer-events:none;white-space:nowrap;
   font:12px/1.3 ui-monospace,Menlo,Consolas,monospace;color:#fff;text-shadow:0 0 3px #000,0 0 2px #000}
 .game .dev button{height:calc(var(--ui-h) * .8);padding:0 calc(var(--ui-padx) * .6);font-size:calc(var(--ui-font) * .9);
   background:rgba(0,0,0,.45);color:#fff;border-color:rgba(255,255,255,.4)}
@@ -62,7 +69,7 @@ button,select,input{transition:background .25s,border-color .25s}
 #c-move[hidden]{display:none}
 /* Game: controls inside the ship view, in the strip along its bottom edge (canvas y 452-506 of 512,
    where the lab has the action patches). On black whatever the page theme. */
-.ship-ctl{position:absolute;left:66.6667%;width:33.3333%;top:88.28%;height:10.55%;z-index:3;
+.ship-ctl{position:absolute;left:0;width:100%;top:88.28%;height:10.55%;z-index:3;
   display:flex;align-items:center;justify-content:center;gap:14px;pointer-events:none}
 .ship-ctl>*{pointer-events:auto}
 .error{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
@@ -169,7 +176,7 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game: when the ship is lost, Respawn and Morphs (#reset, #morphs-dead), one above the other in the
    ship view, centred in the gap between the "Dissolved" box (centred, ending ~40 canvas px below
    the middle: y ~296 of 512) and the controls strip (from y 452): 58% to 88% down */
-.ship-dead{position:absolute;left:66.6667%;width:33.3333%;top:58%;height:30%;z-index:3;
+.ship-dead{position:absolute;left:0;width:100%;top:58%;height:30%;z-index:3;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:calc(var(--ui-h) * .3);pointer-events:none}
 .ship-dead>*{pointer-events:auto}
 /* larger, in the Fire button's "Fire" font */
@@ -210,9 +217,9 @@ button,select,input{transition:background .25s,border-color .25s}
   border:2px solid var(--clone)}
 .ship-morphs{position:absolute;right:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
 /* Game (sandbox mode): the Species button, centred in the ship view, level with Bullets and Morphs */
-.ship-species{position:absolute;left:83.3333%;top:calc(18.95% - 2px);transform:translate(-50%,-50%);z-index:3}
+.ship-species{position:absolute;left:50%;top:calc(18.95% - 2px);transform:translate(-50%,-50%);z-index:3}
 /* Game: the Bullets button, mirroring Morphs at the left */
-.ship-bullets{position:absolute;left:calc(66.6667% + 12px);top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
+.ship-bullets{position:absolute;left:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
 /* Game: the morph book, centred over the whole game window; the dimmed rest closes it on a click */
 .book{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
 .book[hidden]{display:none}
@@ -305,12 +312,21 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game: major actions (Respawn, Choose, a pickable morph in the book): a thick light cyan border */
 :root{--major:#a8f4ff}
 :root[data-theme="light"]{--major:#3cc6d8}
-.game .major,.game .major:hover,.book-slot.pick,.book-slot.pick:hover{border:3px solid var(--major)}
-.game .major:hover,.book-slot.pick:hover{background:color-mix(in srgb,var(--major) 14%,var(--raised))}
+/* the books' pickable slots: a darker cyan (--pick) */
+:root{--pick:#3fa9b8}
+:root[data-theme="light"]{--pick:#1d8c9c}
+.game .major,.game .major:hover{border:3px solid var(--major)}
+.book-slot.pick,.book-slot.pick:hover{border:3px solid var(--pick)}
+.game .major:hover{background:color-mix(in srgb,var(--major) 14%,var(--raised))}
+.book-slot.pick:hover{background:color-mix(in srgb,var(--pick) 18%,var(--raised))}
 .book-slot.pick.clone,.book-slot.pick.clone:hover{border:3px solid var(--clone)}   /* a morph to clone ([clone:on]): pink */
-.book-slot.pick.current,.book-slot.pick.current:hover{border:3px solid var(--current)}   /* the bullet in use: yellow */
-#book-grid.bullets .book-slot.pick.new:not(.current),#book-grid.bullets .book-slot.pick.new:not(.current):hover{border:3px solid var(--new)}   /* a pattern [new_bullet] added: green, until the book is closed */
-.book-slot.pick.create{color:var(--major)}   /* a "?" that creates that bullet ([new_bullet]): cyan, as the other picks */
+.book-slot.pick.current,.book-slot.pick.current:hover{background:color-mix(in srgb,var(--pick) 34%,var(--raised))}   /* the bullet in use, the current species: a lighter background */
+.book-slot.pick.create,.book-slot.pick.create:hover{border-color:var(--new);color:var(--new)}   /* a "?" that creates that bullet ([new_bullet]): green */
+.book-slot.pick.create:hover{background:color-mix(in srgb,var(--new) 14%,var(--raised))}
+/* a book title's verbs, in the colour of the slots that do it (game.js setTitle) */
+.verb-choose{color:var(--pick)}
+.verb-create{color:var(--new)}
+.verb-clone{color:var(--clone)}
 :root{--current:#ffd23f}
 :root[data-theme="light"]{--current:#c99a00}
 :root{--clone:#ff7ad9}
@@ -352,10 +368,10 @@ button,select,input{transition:background .25s,border-color .25s}
 /* One line, of a fixed height, so the layout never moves: no wrapping, and a font of --msg-base
    (22 px, 18 on a phone) or less, as game.js fitMsg sets --msg-font: small enough for the
    script's widest message to fit the bar's width. Centred on the buttons. */
-.below .msg{flex:none;width:calc((100% - 11px) * 2 / 3);padding-right:12px;--msg-base:22px;font-size:var(--msg-font,var(--msg-base));
+.game .msg{flex:none;width:calc((100% - 11px) * 2 / 3);padding-right:12px;--msg-base:22px;font-size:var(--msg-font,var(--msg-base));
   line-height:1.35;color:var(--ink);white-space:nowrap;overflow-x:clip;box-sizing:border-box;
   height:max(var(--ui-h),1.35em);padding-top:max(0px,calc((var(--ui-h) - 1.35em) / 2))}
-.below .msg .hint{color:var(--faint)}
+.game .msg .hint{color:var(--faint)}
 /* {<button>:<key>} in a message (game.js styled): the button's text in a round-cornered box, then the
    key as a keycap (a smaller box, a heavier bottom edge). The boxes and the key's letter in a dimmer
    shade of the text's colour (--msg-dim: mixed towards the page: grey in a plain message, dark cyan in
@@ -369,21 +385,25 @@ button,select,input{transition:background .25s,border-color .25s}
 /* a message waiting on a condition (Space does not move it on): cyan, darker on the light page */
 :root{--wait:#4fe3f0}
 :root[data-theme="light"]{--wait:#0b8494}
-.below .msg.wait{color:var(--wait)}
+.game .msg.wait{color:var(--wait)}
 /* a message change fades out, then in (game.js say, MSG_FADE_MS) */
-.below .msg{transition:opacity .3s ease}
-.below .msg.fade{opacity:0}
-.below .msg.next{cursor:pointer;user-select:none;-webkit-user-select:none}   /* a click moves on */
-.below .controls{flex:none;width:calc((100% - 11px) / 3);min-height:var(--ui-h);margin-top:0;justify-content:center;gap:8px 14px}
+.game .msg{transition:opacity .3s ease}
+.game .msg.fade{opacity:0}
+.game .msg.next{cursor:pointer;user-select:none;-webkit-user-select:none}   /* a click moves on */
+.below .controls{flex:none;width:calc((100% - 11px) / 3);min-height:var(--ui-h);margin-top:0;justify-content:center;gap:8px 14px;
+  flex-wrap:nowrap}   /* Retry, Pause and Speed on one row: the slider gives way first */
+.below .controls>button{flex:none}
+.below .controls label{min-width:0;flex:0 1 auto;white-space:nowrap}
+.below .controls input[type=range]{min-width:40px;flex:0 1 auto}
 /* fullscreen: --cw is the canvas width (as :root.fs .canvas-box), centred in the window */
 :root.fs .wrap.game{flex-direction:column;--cw:min(calc(100vw - 16px),max(160px,calc((100dvh - var(--rows,120px)) * 9 / 4)))}
 :root.fs .game .below{align-self:center;width:var(--cw);margin-top:0;padding:0 0 8px}
-:root.fs .game .below .msg{width:calc(var(--cw) * 2 / 3)}
+:root.fs .game .msg{width:calc(var(--cw) * 2 / 3)}
 :root.fs .game .below .controls{width:calc(var(--cw) / 3)}
 @media (max-width:560px){   /* a phone: the message above the controls, both full width */
   .below{flex-direction:column;align-items:stretch;padding-left:0}
-  .below .msg,.below .controls{width:auto}
-  .below .msg{--msg-base:18px}
+  .game .msg,.below .controls{width:auto}
+  .game .msg{--msg-base:18px}
   .below .controls{margin-top:6px}
 }
 /* the game area (both views, the controls, the message box): no text selection (a drag or a long
@@ -394,3 +414,16 @@ button,select,input{transition:background .25s,border-color .25s}
 /* nor the blue flash a tap leaves on a phone (the message bar, buttons) */
 .game-page,.game-page *{-webkit-tap-highlight-color:transparent}
 .game-page input[type=range]:focus::-webkit-slider-thumb{outline:none}
+
+/* Game, stacked layout (game.js: a portrait window, not fullscreen; core.js setLayout): one canvas
+   768 x 1632 px, the world view (768 x 512) at the top, a band of 96 px with the message in it, then
+   the ship view at twice its size (768 x 1024), the full width; the controls (Retry, Pause, Speed)
+   under it. The ship view's buttons get the larger sizes. */
+:root.stacked .canvas-box{aspect-ratio:768/1632}
+:root.stacked .layer-world{width:100%;height:calc(100% * 512 / 1632)}
+:root.stacked .layer-ship{left:0;top:calc(100% * 608 / 1632);width:100%;height:calc(100% * 1024 / 1632)}
+:root.stacked .canvas-box>.msg{position:absolute;left:0;top:calc(100% * 512 / 1632);width:100%;height:calc(100% * 96 / 1632);
+  z-index:2;margin:0;padding:0 12px;box-sizing:border-box;display:flex;align-items:center;background:var(--bg);--msg-base:18px}
+:root.stacked .game{--ui-h:34px;--ui-font:14px;--ui-padx:12px;--ui-slider:90px}
+:root.stacked .below{padding-left:0}
+:root.stacked .below .controls{width:100%;margin-top:8px}

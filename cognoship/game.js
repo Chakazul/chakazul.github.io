@@ -56,8 +56,8 @@
   // "Dissolved" alone, centred in the ship view (the Respawn button below it), at 1.8 x the message
   // area's former text size (18 CSS px, 15 on a phone), at least 44 canvas px.
   C.opt.banner = () => {
-    const css = matchMedia('(max-width:560px)').matches ? 15 : 18;
-    const s = css * 1152 / ($('ui').getBoundingClientRect().width || 1152);
+    const css = matchMedia('(max-width:560px)').matches && !stacked ? 15 : 18;
+    const s = css * C.logicalPerCss(true);
     return { title: Math.max(44, 1.8 * s), line: 0, inShip: true, dy: -40 };   // a little above the middle
   };
 
@@ -159,6 +159,27 @@
     if (widest > 0 && widest * base / 100 > avail) el.style.setProperty('--msg-font', `${Math.floor(10 * avail * 100 / widest) / 10}px`);
   }
   window.addEventListener('resize', fitMsg);
+
+  // ---- layout ---------------------------------------------------------------------------------
+  // A portrait window, not fullscreen (a phone held upright): the stacked layout (core setLayout,
+  // style.css :root.stacked): the world view at the top, the message under it (moved into the
+  // canvas's band), the ship view at the full width below, then the controls. Otherwise side by
+  // side, the message back under the world view. Checked on every resize and fullscreen change.
+  const BAND = 96;   // canvas px between the world view and the ship view, for the message
+  let stacked = false;
+  function applyLayout() {
+    const want = innerHeight > innerWidth && !document.documentElement.classList.contains('fs');
+    if (want === stacked) return;
+    stacked = want;
+    document.documentElement.classList.toggle('stacked', stacked);
+    C.setLayout(stacked, BAND);
+    const msg = $('msg');
+    if (stacked) document.querySelector('.canvas-box').append(msg);
+    else document.querySelector('.below').prepend(msg);
+    fitMsg();
+  }
+  window.addEventListener('resize', applyLayout);
+  new MutationObserver(applyLayout).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });   // (the first call: at the start, below)
 
   function showMsg() {
     msgTimer = null;
@@ -264,8 +285,8 @@
     allDiscovered();
     const canPick = book.action !== 'none' && shipLost();   // a click on a discovered morph does something
     const canClone = clone.on && !shipLost() && !book.fromDiscovery;   // [clone:on]: pick one to clone (not in the discovery's book)
-    $('book-title').textContent = book.fromDiscovery ? 'New morph discovered!' : canPick ? 'Choose morph to respawn'
-      : canClone ? 'Choose morph to clone' : 'Dissolve to respawn';   // read-only: how to get a pick
+    setTitle(book.fromDiscovery ? ['New morph discovered!'] : canPick ? ['Choose a morph to ', ['respawn', 'choose']]
+      : canClone ? ['Choose a morph to ', ['clone', 'clone']] : ['Dissolve to respawn']);   // read-only: how to get a pick
     const grid = $('book-grid');
     grid.replaceChildren(...visibleList().map((name, slot) => {
       const d = discovered.find(x => x.name === name), el = document.createElement('div');
@@ -296,6 +317,7 @@
         if (canPick || canClone) {
           el.classList.add('pick');
           if (canPick) {
+            if (d.name === playerMorph) el.classList.add('current');   // what Respawn would put back: a lighter background
             el.title = book.action === 'clear_put' ? `Start again with ${d.name}` : `Put a ${d.name} into the world`;
             el.onclick = () => pickMorph(d.name);
           } else {   // clone mode: pink, and the morph follows the pointer to be pasted
@@ -459,12 +481,15 @@
   // [new_bullet:<n>]: one pattern for every n energy (the score, from 0), less those listed: how
   // many more can be created now
   let bulletsCreated = 0;   // patterns created this run ([need:create_bullet], bulletCredits)
-  // One creation per <every> energy gathered this run (the score), less those created this run: the
-  // patterns the run started with (the sandbox's inventory) or that the script gave do not count
+  // One pattern per <every> energy gathered this run (the score, from 0 at the run's start), less
+  // those gained this run, scripted ([bullet]) or created: the ones the run started with (the
+  // sandbox's inventory, ?all=1) do not count. (Story: 30 energy, Orbium given, [new_bullet:30]:
+  // the next one at 60.)
+  let bulletsAtStart = 0;   // the list's length when the script started
   function bulletCredits() {
     if (!newBullet || !Bullets.on) return 0;
     const have = Bullets.list.length, all = Object.keys(Bullets.KINDS).length;
-    return Math.max(0, Math.min(all - have, Math.floor(Dots.score / newBullet.every) - bulletsCreated));
+    return Math.max(0, Math.min(all - have, Math.floor(Dots.score / newBullet.every) - (have - bulletsAtStart)));
   }
   // The Bullets button reads "Create" (green) while one can be created; turning so, with a glint
   function syncNew() {
@@ -508,13 +533,13 @@
   }
   function renderBullets() {
     const create = bulletCredits() > 0;
-    $('book-title').textContent = create ? 'Create or choose bullet' : 'Choose bullet';
+    setTitle(create ? [['Create', 'create'], ' or ', ['use', 'choose'], ' a bullet type'] : [['Use', 'choose'], ' a bullet type']);
     const have = Bullets.list;
     let nNew = 0;
     $('book-grid').replaceChildren(...Object.keys(Bullets.KINDS).map((name, slot) => {
       const el = document.createElement('div'), ok = have.includes(name);
       const current = name === Bullets.kind && !revealing.has(name);   // (yellow once revealed)
-      el.className = 'book-slot' + (ok ? ' pick' : ' empty') + (current ? ' current' : '') + (newBullets.has(name) ? ' new' : '');
+      el.className = 'book-slot' + (ok ? ' pick' : ' empty') + (current ? ' current' : '');   // (a new one: revealed, no colour of its own)
       if (newBullets.has(name) && book.reveal) revealSlot(el, nNew++);
       if (name === revealName) revealSlot(el, 0, 0);   // just created: at once
       const label = document.createElement('span');
@@ -561,6 +586,14 @@
   // A species' visible morphs: its [add_allow_species] list, or for all, every morph of it (its patterns)
   const speciesMorphs = e => !e.morphs.includes('all') ? e.morphs
     : [...new Set(PATTERNS.filter(p => C.speciesOf(p) === e.id && !p.hidden).map(p => C.morphName(p).replace(C.BOOM, '')))];
+  // A book's title: plain text, and its verbs ([text, kind]) in the colour of the slots that do
+  // that (style.css .verb-*): choose, cyan; create, green; clone, pink
+  function setTitle(parts) {
+    $('book-title').replaceChildren(...parts.map(p => {
+      if (typeof p === 'string') return p;
+      const s = document.createElement('span'); s.className = 'verb-' + p[1]; s.textContent = p[0]; return s;
+    }));
+  }
   function openSpeciesBook() {
     if (MODE !== 'sandbox') return;
     if (book.open && book.mode !== 'species') closeBook();
@@ -568,7 +601,7 @@
     showBook();
   }
   function renderSpecies() {
-    $('book-title').textContent = 'Choose species';
+    setTitle([['Choose', 'choose'], ' a species']);
     const cur = C.pattern && C.speciesOf(C.pattern);
     $('book-grid').replaceChildren(...visSpecies.map((e, slot) => {
       const found = discoveredBy.get(e.id) || [];
@@ -1338,7 +1371,7 @@
     fps.frames++;
     if (now - fps.t < 500) return;
     const s = (now - fps.t) / 1000;
-    $('dev-fps').textContent = `${Math.round(fps.frames / s)} fps · ${Math.round((C.simSteps - fps.steps) / s)} steps/s`;
+    $('dev-fps').textContent = `${Math.round(fps.frames / s)} fps · ${Math.round((C.simSteps - fps.steps) / s)} steps/s · ${C.stepMs.toFixed(1)} ms/step`;
     Object.assign(fps, { t: now, frames: 0, steps: C.simSteps });
   }
   // "SUCCESS" over the game window when a waiting line's [need] conditions are met: fades in, holds,
@@ -1526,7 +1559,7 @@
 
   // ---- controls ---------------------------------------------------------------------------
   function syncButtons() {
-    $('play').setAttribute('aria-pressed', C.running);   // "Play", highlighted while playing
+    $('play').setAttribute('aria-pressed', !C.running);   // "Pause", highlighted while paused
     $('reset').hidden = !lostShown();
     $('morphs-dead').hidden = !lostShown() || !book.on;
     $('morphs').hidden = !book.on || shipLost();   // while the ship is lost, Choose takes its place
@@ -1627,11 +1660,13 @@
   // ---- start ------------------------------------------------------------------------------
   // The world starts empty with no species; the script, run once the simulation has started,
   // loads the species and puts the creatures in.
+  applyLayout();
   const scriptText = fetch(SCRIPT_FILE, { cache: 'no-cache' })
     .then(r => { if (!r.ok) throw new Error(`${SCRIPT_FILE}: HTTP ${r.status}`); return r.text(); });
   C.start({ empty: true }).then(() => scriptText.then(txt => {
     if (ALL) Bullets.setList('all');
     else if (MODE === 'sandbox') loadCentralInventory();
+    bulletsAtStart = Bullets.list.length;
     SCRIPT = parseScript(txt);
     fitMsg();
     // [jump_here] (for writing the script): start at the first line that has it. Every action on

@@ -43,33 +43,51 @@
     <div class="canvas-box">
       <canvas id="gl" width="1152" height="512"></canvas>
       <canvas id="ui" width="1152" height="512"></canvas>
-      <!-- the score (energy), at the top of the world view, centred, while the dots are on ([dot:<n>]) -->
-      <div id="score" class="score" hidden><span id="score-v">0</span></div>
-      <!-- ?dev=1: test buttons at the top left of the world view (I, O, P), the frame rate at its top right -->
-      <div id="dev-fps" class="dev-fps" hidden></div>
-      <div id="dev" class="dev" hidden>
-        <button id="dev-ch" title="Go to the next chapter (I)">Ch</button>
-        <button id="dev-ok" title="Complete the waiting line's conditions (O)">Ok</button>
-        <button id="dev-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
+      <!-- the overlays of each view, in a layer over it (style.css .layer: beside each other, or the
+           world above the ship view in the stacked layout); their places are relative to their layer -->
+      <div class="layer layer-world">
+        <!-- the score (energy), at the top of the world view, centred, while the dots are on ([dot:<n>]) -->
+        <div id="score" class="score" hidden><span id="score-v">0</span></div>
+        <!-- ?dev=1: test buttons at the top left of the world view (I, O, P), the frame rate at its top right -->
+        <div id="dev-fps" class="dev-fps" hidden></div>
+        <div id="dev" class="dev" hidden>
+          <button id="dev-ch" title="Go to the next chapter (I)">Ch</button>
+          <button id="dev-ok" title="Complete the waiting line's conditions (O)">Ok</button>
+          <button id="dev-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
+        </div>
+        <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X -->
+        <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (D / F) -->
+        <div id="bullet-nav" class="bullet-nav" hidden>
+          <button id="bullet-prev" title="The previous bullet pattern (D)">&#9664;</button>
+          <button id="bullet-next" title="The next bullet pattern (F)">&#9654;</button>
+        </div>
+        <button id="fire" class="fire" hidden title="Fire a bullet the way the ship moves (A)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
       </div>
-      <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
-      <div class="ship-ctl">
-        <button id="headup" aria-pressed="false" title="Upward: rotate the ship view so the creature's heading points up (E toggles)">Upward</button>
-        <label title="Zoom of the ship view, in screen px per cell (R out, T in)">Zoom <input id="zoom" type="range" min="2" max="6" step="1"></label>
-      </div>
-      <!-- in the ship view, right of the name box ([morph_book:on]): opens the morph book -->
-      <!-- in the ship view, left of the name box, mirroring Morphs ([gun] on): opens the bullet book -->
-      <button id="bullets" class="ship-bullets" hidden title="The bullet book: choose the bullet to fire (S)">Bullets</button>
-      <button id="morphs" class="ship-morphs" hidden title="The morph book: the morphs you have discovered (X)">Morphs</button>
-      <!-- in the ship view, between Bullets and Morphs, in sandbox mode only: opens the species book -->
-      <button id="species" class="ship-species" hidden title="The species book: choose a species (C)">Species</button>
-      <!-- below Morphs while a clone is held ([clone:on]): turn it 45 degrees clockwise, flip it; paste it
-           where a touch placed it (only then), cancel it -->
-      <div id="clone-tools" class="clone-tools" hidden>
-        <button id="clone-rot" title="Turn the clone 45 degrees clockwise">&#8635;</button>
-        <button id="clone-flip" title="Flip the clone left to right">&#8596;</button>
-        <button id="clone-ok" title="Paste the clone where it is placed" hidden>&#10004;</button>
-        <button id="clone-cancel" title="Cancel the clone">&#x1F5D9;</button>
+      <div class="layer layer-ship">
+        <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
+        <div class="ship-ctl">
+          <button id="headup" aria-pressed="false" title="Upward: rotate the ship view so the creature's heading points up (E toggles)">Upward</button>
+          <label title="Zoom of the ship view, in screen px per cell (R out, T in)">Zoom <input id="zoom" type="range" min="2" max="6" step="1"></label>
+        </div>
+        <!-- in the ship view, right of the name box ([morph_book:on]): opens the morph book -->
+        <!-- in the ship view, left of the name box, mirroring Morphs ([gun] on): opens the bullet book -->
+        <button id="bullets" class="ship-bullets" hidden title="The bullet book: choose the bullet to fire (S)">Bullets</button>
+        <button id="morphs" class="ship-morphs" hidden title="The morph book: the morphs you have discovered (X)">Morphs</button>
+        <!-- in the ship view, between Bullets and Morphs, in sandbox mode only: opens the species book -->
+        <button id="species" class="ship-species" hidden title="The species book: choose a species (C)">Species</button>
+        <!-- below Morphs while a clone is held ([clone:on]): turn it 45 degrees clockwise, flip it; paste it
+             where a touch placed it (only then), cancel it -->
+        <div id="clone-tools" class="clone-tools" hidden>
+          <button id="clone-rot" title="Turn the clone 45 degrees clockwise">&#8635;</button>
+          <button id="clone-flip" title="Flip the clone left to right">&#8596;</button>
+          <button id="clone-ok" title="Paste the clone where it is placed" hidden>&#10004;</button>
+          <button id="clone-cancel" title="Cancel the clone">&#x1F5D9;</button>
+        </div>
+        <!-- in the ship view, between "Dissolved" and Upward / Zoom, when the world needs a reset (everything dissolved) -->
+        <div class="ship-dead">
+          <button id="reset" class="major" hidden title="Start again with your morph (Z)"><span class="kt">Respawn</span></button>
+          <button id="morphs-dead" class="major" hidden title="Choose a morph to start again with (X)"><span class="kt">Choose</span></button>
+        </div>
       </div>
       <!-- the morph book, over the whole game window; a click outside the box closes it -->
       <div id="book" class="book" hidden>
@@ -88,18 +106,6 @@
       <div id="chapter" class="chapter" hidden>
         <div class="chapter-box"><div class="chapter-no" id="chapter-no"></div><div class="chapter-title" id="chapter-title"></div></div>
       </div>
-      <!-- in the ship view, between "Dissolved" and Upward / Zoom, when the world needs a reset (everything dissolved) -->
-      <div class="ship-dead">
-        <button id="reset" class="major" hidden title="Start again with your morph (Z)"><span class="kt">Respawn</span></button>
-        <button id="morphs-dead" class="major" hidden title="Choose a morph to start again with (X)"><span class="kt">Choose</span></button>
-      </div>
-      <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X -->
-      <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (D / F) -->
-      <div id="bullet-nav" class="bullet-nav" hidden>
-        <button id="bullet-prev" title="The previous bullet pattern (D)">&#9664;</button>
-        <button id="bullet-next" title="The next bullet pattern (F)">&#9654;</button>
-      </div>
-      <button id="fire" class="fire" hidden title="Fire a bullet the way the ship moves (A)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
       <div id="error" class="error" hidden></div>
     </div>
   </div>
@@ -108,7 +114,7 @@
     <div class="msg" id="msg" aria-live="polite"></div>
     <div class="controls">
       <button id="restart" title="Retry the scene: redo the script from its last checkpoint ([chapter] or [new_scene]) to here (Backspace)">Retry</button>
-      <button id="play" aria-pressed="false" title="Play / pause (Enter)">Play</button>
+      <button id="play" aria-pressed="false" title="Pause / play (Enter)">Pause</button>
       <label title="Simulation speed (Q slower, W faster)">Speed <input id="speed" type="range" min="1" max="7" step="1"></label>
     </div>
   </div>

@@ -1,5 +1,5 @@
-# script file for sandbox mode, see README.md for syntax
-[speed:1][gun:on][new_bullet:50][clone:on][erase:off][morph_book:on]
+# script file for sandbox mode, see README-MORE.md for syntax
+[speed:1][gun:on][new_bullet:30][clone:on][erase:off][morph_book:on]
 [morph_book_action:put][retry_action:put]
 [music:1,2,3,4:3]
 
