@@ -52,7 +52,9 @@ Mode, **Hold to clear data** in any book (held for 3 seconds) erases it.
   own ship if you fly into them. ◀ ▶ (`D` `F`) or the **Bullets** button (`S`) switch types; when
   it reads **Create**, you have enough energy for a new type: open it and pick a **?**.
 - **Clone:** when the Morphs button reads **Clone**, pick a discovered morph and place a copy of
-  it near your ship (↻ turns it, ↔ flips it). Two morphs together can become a new one.
+  it (↻ turns it, ↔ flips it). You board the copy: it becomes your ship, and the old one drifts
+  on. Paste it away from your ship to switch morph; paste another next to you, and the two may
+  become a new twin morph.
 - **Species** (`C`, Sandbox Mode): switch to another species you have reached.
 
 ## Controls

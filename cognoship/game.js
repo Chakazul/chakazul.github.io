@@ -464,10 +464,16 @@
     pasteClone(at);
     return true;
   };
+  // The player boards the clone: the game follows it from now on (the old ship goes on as another
+  // creature; pasted onto it, the two are one object, followed as before), and its morph is what
+  // Respawn puts back. So a morph can be changed without dissolving, and a twin engineered by
+  // becoming one half and pasting the other next to it.
   function pasteClone(at) {
     const H = clone.held;
     SimGL.add(H.form, Math.round(at[1] - H.form.h / 2), Math.round(at[0] - H.form.w / 2));
     C.analyze(0);
+    const i = C.found ? Creatures.pick(C.found, at[0], at[1], 2 * C.R, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
+    if (i >= 0) { C.setFocus(i); playerMorph = H.name; retake = true; cand = null; }
     clonesPlaced++;   // [need:first_clone]
     endClone();
   }
