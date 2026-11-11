@@ -44,7 +44,7 @@ const Core = (function () {
   const ZOOM = { x: PX, y: 64, edge: PW };          // zoom view square
   // Stacked layout (setLayout, the game in a portrait window): the same logical layout, drawn on a
   // canvas of the world's width: the world view (PX x CH) at the top, a band of `band` px, then the
-  // ship panel (PW x CH) scaled by layout.s, centred (layout.ox from the left) below.
+  // ship panel (PW x CH) scaled by layout.s, layout.ox from the left, below.
   // Everything above is in logical px; only the canvas (render, drawOverlay, canvasPoint) maps them.
   const layout = { stacked: false, band: 0, s: 1, ox: 0, w: CW, h: CH };   // w, h: the canvas's own size, px
   const panelY = () => CH + layout.band;   // the panel's top on a stacked canvas
@@ -674,10 +674,11 @@ const Core = (function () {
     return [layout.ox + (ZOOM.x - PX) * S, panelY() + ZOOM.y * S, ZOOM.edge * S, CELL_PX * S];
   }
   // Landscape (stacked false): the canvas is the logical CW x CH. Stacked: PX wide, the world view,
-  // a band of `band` px, then the ship panel at scale s (at most PX / PW: the full width), centred.
-  function setLayout(stacked, band = 0, s = PX / PW) {
+  // a band of `band` px, then the ship panel at scale s (at most PX / PW: the full width), its left
+  // edge at `align` (0 left .. 0.5 centred .. 1 right) of the room beside it.
+  function setLayout(stacked, band = 0, s = PX / PW, align = 0.5) {
     layout.stacked = !!stacked; layout.band = stacked ? band : 0;
-    layout.s = stacked ? Math.min(s, PX / PW) : 1; layout.ox = stacked ? (PX - PW * layout.s) / 2 : 0;
+    layout.s = stacked ? Math.min(s, PX / PW) : 1; layout.ox = stacked ? (PX - PW * layout.s) * align : 0;
     layout.w = stacked ? PX : CW; layout.h = stacked ? Math.round(CH + layout.band + CH * layout.s) : CH;
     for (const c of [glCanvas, ui]) if (c.width !== layout.w || c.height !== layout.h) { c.width = layout.w; c.height = layout.h; }
   }

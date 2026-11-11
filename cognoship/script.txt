@@ -24,7 +24,7 @@ Thankfully, _Lenium_ actively senses and reacts to its surroundings.
 So we can steer the ship by blocking parts of its sensory field.
 In the right panel, try clicking on the ship to block its senses.[need:first_touch]
 Nice! You can now steer the ship, and even change its shape.
-At the top, choose which of {R}{G}{B} you want to interfere with.
+At the top, choose which of the {R}{G}{B} colors you want to interfere.
 
 # morphs
 [new_scene]
@@ -38,8 +38,9 @@ A *morph* is a specific shape and behavior of your ship.
 This morph is called _limus_.
 Try to change it into another morph. (Hint: gently pat its side)[need:discover_morph:gyrans]
 Congrats! You discovered a new morph.
-Remember, only when the ship dissolves, ...
-use {Respawn:Z}, or {Choose:X} a morph to respawn.
+Remember, only if the ship dissolves, it can be respawn in another morph.
+Dissolve the ship violently. Then bring it back.[need:respawn]
+_Lenium_ recyled. Ship restored.
 
 [new_scene]
 [upward:off]

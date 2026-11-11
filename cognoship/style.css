@@ -197,7 +197,7 @@ button,select,input{transition:background .25s,border-color .25s}
 .bullet-nav{position:absolute;left:14px;bottom:calc(14px + var(--ui-h) * 2.6 + 8px);z-index:3;width:calc(var(--ui-h) * 2.6);
   display:flex;gap:6px}
 .bullet-nav[hidden]{display:none}
-.game .bullet-nav button{flex:1;padding:0;font-weight:700;background:rgba(0,0,0,.45);color:#fff;border:none;
+.game .bullet-nav button{flex:1;padding:0;font-weight:700;font-size:calc(var(--ui-font) * 1.5);background:rgba(0,0,0,.45);color:#fff;border:none;
   border-radius:999px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .game .bullet-nav button.flash{background:color-mix(in srgb,var(--fire,#fff) 70%,transparent)!important;border:none!important;outline:none}   /* switched: in the bullets' colour */
 .fire{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1}
@@ -390,6 +390,10 @@ button,select,input{transition:background .25s,border-color .25s}
 /* a message change fades out, then in (game.js say, MSG_FADE_MS) */
 .game .msg{transition:opacity .3s ease}
 .game .msg.fade{opacity:0}
+/* at the game's start, until the player first moves a message on: a slow glow behind the bar */
+.game .msg.attract{border-radius:8px;animation:msg-attract 2.4s ease-in-out infinite}
+@keyframes msg-attract{0%,100%{background:transparent}50%{background:color-mix(in srgb,var(--wait) 22%,transparent)}}
+@media (prefers-reduced-motion:reduce){.game .msg.attract{animation:none;background:color-mix(in srgb,var(--wait) 14%,transparent)}}
 .game .msg.next{cursor:pointer;user-select:none;-webkit-user-select:none}   /* a click moves on */
 .below .controls{flex:none;width:calc((100% - 11px) / 3);min-height:var(--ui-h);margin-top:0;justify-content:center;gap:8px 14px;
   flex-wrap:nowrap}   /* Retry, Pause and Speed on one row: the slider gives way first */
@@ -418,19 +422,20 @@ button,select,input{transition:background .25s,border-color .25s}
 
 /* Game, stacked layout (game.js: a portrait window, not fullscreen; core.js setLayout): one canvas
    768 x 1296 px, the world view (768 x 512) at the top, a 16 px gap, then the ship view at 1.5x
-   (576 x 768), centred; under the canvas the controls (Retry, Pause, Speed), then the message, two
-   lines high (game.js fitMsg sizes its font for two). Fire and < > move into the ship view's layer
-   (game.js), at its lower left above Upward / Zoom. The ship view's buttons get the larger sizes. */
+   (576 x 768), at the right edge; under the canvas the controls (Retry, Pause, Speed), then the
+   message, two lines high (game.js fitMsg sizes its font for two). Fire and < > move into the ship
+   view's layer (game.js), placed left of it, at the screen's left edge, level with the bottom of the
+   ship view above Upward / Zoom. The ship view's buttons get the larger sizes. */
 :root.stacked .canvas-box{aspect-ratio:768/1296}
 :root.stacked .layer-world{width:100%;height:calc(100% * 512 / 1296)}
-:root.stacked .layer-ship{left:12.5%;top:calc(100% * 528 / 1296);width:75%;height:calc(100% * 768 / 1296)}
+:root.stacked .layer-ship{left:25%;top:calc(100% * 528 / 1296);width:75%;height:calc(100% * 768 / 1296)}
 :root.stacked .game{--ui-h:34px;--ui-font:14px;--ui-padx:12px;--ui-slider:90px}
 :root.stacked .below{flex-direction:column;align-items:stretch;padding-left:0}
 :root.stacked .below .controls{order:-1;width:100%;margin-top:8px}
 :root.stacked .game .msg{width:auto;--msg-base:20px;white-space:normal;overflow:hidden;
   height:calc(2 * 1.35em + 6px);padding:6px 4px 0;margin-top:8px}
-:root.stacked .fire{left:10px;bottom:calc(11.72% + 6px);width:calc(var(--ui-h) * 2.2);height:calc(var(--ui-h) * 2.2) !important}
-:root.stacked .bullet-nav{left:10px;bottom:calc(11.72% + 12px + var(--ui-h) * 2.2);width:calc(var(--ui-h) * 2.2)}
+:root.stacked .fire{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 6px);width:calc(var(--ui-h) * 2.2);height:calc(var(--ui-h) * 2.2) !important}
+:root.stacked .bullet-nav{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 12px + var(--ui-h) * 2.2);width:calc(var(--ui-h) * 2.2)}
 /* the chapter card fits a narrow window: smaller, the title's long words whole */
 :root.stacked .chapter-box{max-width:92%;box-sizing:border-box;padding:calc(var(--ui-h) * .6) min(calc(var(--ui-h) * 1.6), 5vw)}
 :root.stacked .chapter-title{font-size:min(calc(var(--ui-font) * 3.2), 8.5vw)}
@@ -439,3 +444,9 @@ button,select,input{transition:background .25s,border-color .25s}
 :root.stacked .book-box,:root.stacked .book-box.wide{width:96%}
 :root.stacked .book-grid{grid-template-columns:repeat(4,minmax(110px,1fr));overflow-x:auto;overscroll-behavior-x:contain;
   -webkit-overflow-scrolling:touch;min-width:0;padding-bottom:4px}
+:root.stacked .book-grid.bullets,:root.stacked .book-grid.species{grid-template-columns:repeat(4,minmax(170px,1fr))}   /* names on one line */
+/* under the list, each on its own row: the species link, Hold to clear data, Close */
+:root.stacked .book-species,:root.stacked .book-clear{position:relative;left:auto;right:auto;bottom:auto}   /* (relative: the hold bar under it still sits under it) */
+:root.stacked .book-species{order:1}
+:root.stacked .book-clear{order:2}
+:root.stacked #book-close{order:3}

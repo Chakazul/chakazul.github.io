@@ -164,9 +164,10 @@
 
   // ---- layout ---------------------------------------------------------------------------------
   // A portrait window, not fullscreen (a phone held upright): the stacked layout (core setLayout,
-  // style.css :root.stacked): the world view at the top, the ship view at 1.5x below it, centred,
-  // with Fire and < > at its lower left (moved into its layer), then the controls, then the message
-  // (two lines). Otherwise side by side. Checked on every resize and fullscreen change.
+  // style.css :root.stacked): the world view at the top, the ship view at 1.5x below it, at the right
+  // edge, with Fire and < > left of it at the screen's left edge (moved into its layer, placed
+  // outside it), then the controls, then the message (two lines). Otherwise side by side. Checked
+  // on every resize and fullscreen change.
   const BAND = 16, SHIP_SCALE = 1.5;   // (style.css :root.stacked has the same numbers: 768 x 1296)
   let stacked = false;
   function applyLayout() {
@@ -174,7 +175,7 @@
     if (want === stacked) return;
     stacked = want;
     document.documentElement.classList.toggle('stacked', stacked);
-    C.setLayout(stacked, BAND, SHIP_SCALE);
+    C.setLayout(stacked, BAND, SHIP_SCALE, 1);   // the ship view at the right edge
     const layer = document.querySelector(stacked ? '.layer-ship' : '.layer-world');
     layer.append($('bullet-nav'), $('fire'));
     fitMsg();
@@ -268,6 +269,7 @@
   // Title: "New morph discovered!" when a discovery opened the book.
   function renderBook() {
     $('book-grid').classList.toggle('bullets', book.mode === 'bullet');
+    $('book-grid').classList.toggle('species', book.mode === 'species');
     document.querySelector('.book-box').classList.toggle('wide', book.mode !== 'morph');   // the bullet and species books: wider
     $('book-close').dataset.key = 'Esc';   // only Escape closes a book (its letters pick slots)   // its key badge: the key that closes this book
     // the morph book's species, at its lower right (a morph is only a morph of its species)
@@ -348,12 +350,13 @@
   }
   // A click on a discovered morph in the book: close it, do the morph_book_action, and play (even
   // if the game was paused before the book opened).
+  let respawns = 0;   // ships put back after dissolving, by Respawn or Choose ([need:respawn])
   function pickMorph(name) {
     closeBook();
     // either way the new creature is followed
     if (book.action === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); }   // (not the script's [clear_world]: background and [min_morph] kept)
     else if (book.action === 'put') ACTIONS.put_player(name, 'random');
-    if (book.action !== 'none') { retake = true; cand = null; }   // its picture may be retaken
+    if (book.action !== 'none') { retake = true; cand = null; respawns++; }   // its picture may be retaken; [need:respawn]
     C.setRunning(true);
   }
   // ---- clone mode ([clone:on]) ------------------------------------------------------------
@@ -1135,6 +1138,9 @@
     // first_clone: the player has placed a clone (picked in the morph book while clone mode is
     // allowed, then pasted on the ship view) since the line was reached
     first_clone: () => { const n0 = clonesPlaced; return () => clonesPlaced > n0; },
+    // respawn: the ship has dissolved and the player has put it back, by Respawn (Z) or Choose (a
+    // pick in the morph book), since the line was reached
+    respawn: () => { const n0 = respawns; return () => respawns > n0; },
     // create_bullet: the player has created a bullet type (Create, then a "?" in the bullet book)
     // since the line was reached ([new_bullet] must allow one)
     create_bullet: () => { const n0 = bulletsCreated; return () => bulletsCreated > n0; },
@@ -1406,7 +1412,10 @@
     if (ok.every(Boolean)) { if (SCRIPT[line].conds.length) showSuccess(); next(); }
   }
   // a click on the message bar (a hand cursor over it while that moves on)
-  $('msg').addEventListener('pointerdown', () => { if (byContinue()) next(); });
+  // At the start of story mode the message bar blinks slowly (style.css .msg.attract), until the player first
+  // moves a message on
+  const playerNext = () => { if (!byContinue()) return; $('msg').classList.remove('attract'); next(); };
+  $('msg').addEventListener('pointerdown', playerNext);
 
   // ---- background ([clear_world:<bg>]) --------------------------------------------------------
   // black (the default), or radiation: a dark orange behind the board, slowly darkening and
@@ -1609,7 +1618,7 @@
     if (type === 'book') openBook();
     else if (type === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); C.setRunning(true); }
     else if (type === 'put') { ACTIONS.put_player(name, 'random'); C.setRunning(true); }
-    if (type === 'clear_put' || type === 'put') { retake = true; cand = null; }   // its picture may be retaken
+    if (type === 'clear_put' || type === 'put') { retake = true; cand = null; respawns++; }   // its picture may be retaken; [need:respawn]
   }
   const doView = () => { flash('headup'); C.toggleHeadUp(); };
   const doSpeed = d => { flash('speed'); C.changeSpeed(d); };
@@ -1640,7 +1649,7 @@
       else if (e.code === 'Space') e.preventDefault();   // not even the focused Close button
       return;
     }
-    if (e.code === 'Space') { e.preventDefault(); if (byContinue()) next(); }
+    if (e.code === 'Space') { e.preventDefault(); playerNext(); }
     else if (k === 'o') { if (DEV) flash('dev-ok'); devSkip(); }
     else if (k === 'p') { if (DEV) { flash('dev-do'); Dots.eat(); } }
     else if (k === 'i') { if (DEV) flash('dev-ch'); devChapter(); }
@@ -1673,6 +1682,7 @@
   // The world starts empty with no species; the script, run once the simulation has started,
   // loads the species and puts the creatures in.
   applyLayout();
+  if (MODE === 'story') $('msg').classList.add('attract');   // (story mode only)
   const scriptText = fetch(SCRIPT_FILE, { cache: 'no-cache' })
     .then(r => { if (!r.ok) throw new Error(`${SCRIPT_FILE}: HTTP ${r.status}`); return r.text(); });
   C.start({ empty: true }).then(() => scriptText.then(txt => {

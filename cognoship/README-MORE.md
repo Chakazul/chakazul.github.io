@@ -153,13 +153,14 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
 Side by side (a landscape window, and fullscreen): the world view on the left 2/3 of the canvas, the
 ship view on the right 1/3, the message under the world view and Retry / Pause / Speed (one row)
 under the ship view. Stacked (a portrait window, not fullscreen, e.g. a phone held upright): the
-world view across the full width at the top, the ship view at 1.5x below it, centred, with Fire and
-◀ ▶ at its lower left (above Upward / Zoom), then Retry / Pause / Speed, then the message, two lines
+world view across the full width at the top, the ship view at 1.5x below it, at the right edge, with Fire
+and ◀ ▶ left of it at the screen's left edge (level with the ship view's bottom, above Upward / Zoom), then Retry / Pause / Speed, then the message, two lines
 high, in a larger font (sized so the script's widest message fits two lines). The chapter card
 shrinks to the window, and the books take nearly its full width, their list scrolling sideways when
-the slots don't fit. The layout follows the window as it turns or resizes. Underneath, one canvas
+the slots don't fit (the bullet and species books' slots wide enough for a name on one line), with the
+species link, Hold to clear data and Close each on its own row under it. The layout follows the window as it turns or resizes. Underneath, one canvas
 either way (`core.js` `setLayout`): stacked, it is 768 × 1296 px, the world view (768 × 512), a
-16 px gap, and the ship panel drawn at 1.5× (576 × 768), centred; the overlay is drawn in the same
+16 px gap, and the ship panel drawn at 1.5× (576 × 768), at the right edge; the overlay is drawn in the same
 logical coordinates as side by side, mapped to each part, and the page's buttons sit in a layer
 over each view (`.layer-world`, `.layer-ship`), placed relative to it.
 
@@ -321,6 +322,7 @@ When a waiting line's conditions are all met, a green **SUCCESS** box fades in i
 | `[need:first_touch]` | The player has pressed on the ship, and its detected morph is now not *limus*. The press is required, since a fresh ship can read as unknown at first. |
 | `[need:discover_morph[:<ids>[:any\|all]]]` | One of `<ids>` (`any`, the default), or every one of them (`all`), is in the morph book: discovered earlier (also put in by `[discover_morph:<ids>]`), or discovered now and the book that opened for it closed. With no ids: the player discovers a new morph, any, after the line is reached, and closes the book that opened for it. |
 | `[need:create_bullet]` | The player has created a bullet type since the line was reached: clicked **Create** (the Bullets button) and a "?" in the bullet book. `[new_bullet]` must allow one (enough energy), or the line waits until it does. |
+| `[need:respawn]` | The ship has dissolved and the player has put it back since the line was reached: by **Respawn** (`Z`), or **Choose** (`X`) and a pick in the morph book. |
 | `[need:first_clone]` | The player has placed a clone since the line was reached: picked a morph in the morph book while clone mode is allowed (`[clone:on]`) and pasted it on the ship view (a click, or ✓ after a touch). Cancelling doesn't count. |
 | `[need:recycle]` | The player has turned erase (recycle) on, in any channel, and erased some mass on the ship view since the line was reached, and the ship has then dissolved. |
 | `[need:object:<n>[:exact\|min\|max]]` | The world holds exactly `n` objects (`exact`, the default), at least `n` (`min`) or at most `n` (`max`): all the creatures detected in it, the ship included. The count is smoothed, the median over the last game second (one sample per step), so a creature flickering between one and two objects doesn't make it jump. The ⧗ mark is followed by the progress in grey, "⧗ morph: 20/60". |
