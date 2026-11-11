@@ -48,7 +48,7 @@ const Dots = (function () {
   // with the ship at any speed and on any device; while paused, the speed-1 rate in real time),
   // while the stars go by real time. Sites are kept in the field's own frame; a site at (col, row) is at board
   // (col - offset[0], row - offset[1]).
-  const DRIFT = 3;     // cells per game second
+  const DRIFT = 6;     // cells per game second (30 steps: 1 cell per 5 steps)
   let offset = [0, 0];
 
   let ready = false, dotR = 9, form = null, rad = 9;
@@ -157,7 +157,7 @@ const Dots = (function () {
   // Empty the field and put the dots in afresh (the score kept): the game's Reset.
   function clear() { if (!on) return; sites = []; SimGL.setDots(true); }
 
-  // As if the player's ship ate a dot (?god=1's P key): the score goes up by POINTS
+  // As if the player's ship ate a dot (?dev=1's P key): the score goes up by POINTS
   function eat() { score += POINTS; hooks.score(); }
   return { set, clear, frame, eat, hooks, hsl, get on() { return on; }, get score() { return score; }, get count() { return sites.length; } };
 })();

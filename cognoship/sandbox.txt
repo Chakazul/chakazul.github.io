@@ -1,0 +1,24 @@
+# script file for sandbox mode, see README.md for syntax
+[speed:1][gun:on][new_bullet:50][clone:on][erase:off][morph_book:on]
+[morph_book_action:put][retry_action:put]
+[music:1,2,3,4:3]
+
+[add_allow_species:Aquarium originale:5N7KKM:limus,gyrans,tardus,lithos,paragyrans,paratardus]
+[add_allow_species:A. novus:GDNQYX:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,paratardus,sequetardus]
+[add_allow_species:A. vorticosus:Z18A9R:gyrans,tardus,lithos,paragyrans,antigyrans,trias]
+[add_allow_species:A. multiplicans:PJ1EF7:rectus,tachus,lithos]
+[add_allow_species:A. explodens:XEH4YR:rectus,tachus,cor]
+[add_allow_species:A. virgatus:KZ2BLD:rectus,virgatus,gyrans]
+[add_allow_species:A. sinuosus:HAESRE:zigzag,lithos,antigyrans,paragyrans]
+[add_allow_species:A. metamorpha:HGMLH8:metamorpha,tardus,tachus]
+[add_allow_species:A. replicans:VT049W:gyrans,rectus,tachus,lithos,paralimus,paragyrans]
+[add_allow_species:Cilium immunitatis:G6G6CR:rectus,limus,tardus,lithos,munitus]
+
+# run each time a species is chosen (after its [species] and [allow_morph])
+[on_choose_species]
+[clear_world][put_player:first]
+[dot:5][min_morph:5:all:far]
+[end]
+
+# starting species
+[choose_species:5N7KKM]

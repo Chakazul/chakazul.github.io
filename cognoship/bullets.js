@@ -34,7 +34,8 @@ const Bullets = (function () {
   const kindOf = s => BY_NAME.get(norm(s));
   const betasOf = b => String(b).split(',').map(x => { const [n, d] = x.split('/'); return d ? n / d : +n; });
   const num = (k, d) => { const v = parseFloat(C.q.get(k)); return Number.isFinite(v) && v >= 0 ? v : d; };
-  const HIT = num('bhit', 0.2), WEAR = num('bwear', 0.03), SUB = Math.max(1, Math.round(num('bsub', 5)));
+  const IDLE = 0.01;   // the field counts as empty below this many bullets' worth of mass
+  const HIT = num('bhit', 0.2), WEAR = num('bwear', 0.03), SUB = Math.max(1, Math.round(num('bsub', 3)));
   const FIRE_STEPS = num('bcool', 0.7) * C.STEPS_PER_S;   // the least time between shots, in steps: ?bcool= game seconds
   let maxBullets = 8;      // more mass than this many bullets in the field: it is emptied ([bullet_limit:<x>])
   const GAP = 8;            // cells between the ship's edge and a new bullet's back edge (as most patterns had when placed by their box)
@@ -219,13 +220,17 @@ const Bullets = (function () {
     SimGL.setBulletColor(COLORS[c]);
   }
 
+  // Once the field has (almost) emptied, the last of it is wiped and the field goes idle (glsim:
+  // no bullet steps, no bullet path in the creatures' step, no readback) until the next shot.
   function frame() {
     if (!on || !kind) return;
     applyChannel();
+    if (SimGL.bulletsIdle) return;
     const blk = SimGL.readBulletBlocks();
     let total = 0;
     for (let i = 0; i < blk.length; i++) total += blk[i];
-    if (total > maxBullets * srcMass * scale * scale) SimGL.clearBullets();
+    const one = srcMass * scale * scale;   // one bullet's mass
+    if (total > maxBullets * one || total < IDLE * one) SimGL.clearBullets();
   }
 
   // [bullet_limit:<x>]: the field's mass limit, in bullets' worth (default 8)
@@ -233,7 +238,7 @@ const Bullets = (function () {
   // Empty the bullets channel (the game's Reset, [clear_world]).
   function clear() { SimGL.clearBullets(); }   // (also with the gun off: nothing left to come back)
 
-  return { setGun, setList, addRandom, setLimit, clear, fire, canFire, cycle, select, frame, hooks, KINDS, get on() { return on; }, get kind() { return kind; },
+  return { setGun, setList, addRandom, kindOf, setLimit, clear, fire, canFire, cycle, select, frame, hooks, KINDS, get on() { return on; }, get kind() { return kind; },
            get list() { return list.slice(); },
            get color() { return COLORS[chNow] || COLORS.rgb; } };   // the bullets' colour now, rgb 0..1
 })();

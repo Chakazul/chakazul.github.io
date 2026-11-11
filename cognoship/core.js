@@ -116,6 +116,9 @@ const Core = (function () {
                 showKeys: () => false,
                 // nameDot: a colour dot (the morph's hue) before the name in the name box
                 nameDot: () => false,
+                // nameBoxLow: the name box at the bottom of the ship view, just above the strip of
+                // controls (the game's Upward / Zoom); else at the top, under the channel patches (the lab)
+                nameBoxLow: () => false,
                 // zoomPress(off, e): a press on the ship view at board offset off (from the focus CoM);
                 // true = taken by the page (no tool). drawGhost(ctx, at, centre, cellPx, phi, focus):
                 // draw the page's own thing in the ship view (at: the hovering pointer, canvas px, or
@@ -148,13 +151,18 @@ const Core = (function () {
   const hooks = { change() {}, record() {}, pattern() {}, species() {}, statsLoaded() {}, frame() {} };
 
   // ---- state ----------------------------------------------------------------------------
-  // Speed: 7 slots. Each slot runs SPEEDS[i] * STEPS_PER_SPEED steps per frame, so
-  // speed 1 is one step every 4 frames (under LeniaF's rule the glider moves ~0.65 cells a step).
-  const SPEEDS = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8], STEPS_PER_SPEED = 1 / 4;
-  // A "game second": the steps speed 1 runs in a second at 60 frames per second. The game counts
-  // its times (survive time, discovery, fire cooldown, ...) in steps, so they are the same against
-  // the creatures on any device and at any speed; given in seconds, as at speed 1 on a 60 Hz screen.
-  const STEPS_PER_S = 60 * STEPS_PER_SPEED;   // 15
+  // Speed: 7 slots. Slot i runs SPEEDS[i] * STEPS_PER_S steps per real second, by the clock, not per
+  // frame, so the pace is the same at any refresh or frame rate: speed 1 is 30 steps a second (one
+  // every 2 frames at 60 Hz, every 4 at 120 Hz, every frame at 30 fps; under LeniaF's rule the glider
+  // moves ~0.65 cells a step). A frame runs at most MAX_STEPS_PER_FRAME steps, and counts at most
+  // MAX_FRAME_S of clock time (a hiccup, a hidden tab): a device that cannot keep up plays slower,
+  // smoothly, rather than piling up steps that make each frame slower still.
+  const SPEEDS = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8];
+  // A "game second": the steps speed 1 runs in a real second. The game counts its times (survive
+  // time, discovery, fire cooldown, ...) in steps, so they stay matched to the creatures at any speed
+  // and on a device that cannot keep up.
+  const STEPS_PER_S = 30;
+  const MAX_STEPS_PER_FRAME = 4, MAX_FRAME_S = 0.1;
   let simSteps = 0;     // every step run since the page loaded (steps resets with the world; this never does)
   let driftSec = 0;     // game seconds the dots drift this frame (frame(): driftTick)
   let starSec = 0;      // real seconds the star field drifts this frame
@@ -624,16 +632,17 @@ const Core = (function () {
   // angle moves the stars on smoothly from where they are. off wraps every 10 boards: the layers'
   // speeds (draw.glsl, 0.6 / 1.5 / 3.5) times 10 are whole numbers, so the wrap is invisible.
   // The stars go by real time (starSec), whatever the speed or pause. The dots (dots.js) go by
-  // game time (driftSec): while playing, the simulation's own rate (the speed's steps per frame,
-  // in game seconds: smooth, not step by step), so they keep pace with the creatures; while paused
-  // (or no species yet), at the speed-1 rate in real time, so they still drift.
+  // game time (driftSec): while playing, the simulation's own rate (the speed times the frame's
+  // clock time, smooth, not step by step; slowed with the steps when a frame hits its cap), so they
+  // keep pace with the creatures; while paused (or no species yet), at the speed-1 rate in real time,
+  // so they still drift.
   const star = { angle: 0, speed: 1, bright: 1, off: [0, 0], t: 0, last: null };
   const SWAY_PERIOD = 2 * Math.PI / 0.3;   // s (draw.glsl STAR_SWAY_W)
   function driftTick() {
     const now = performance.now() / 1000, real = star.last === null ? 0 : Math.min(0.25, now - star.last);
     star.last = now;
     starSec = real;
-    driftSec = running && ruleLoaded ? SPEEDS[speedIdx] * STEPS_PER_SPEED / STEPS_PER_S : real;
+    driftSec = real;   // while playing, frame() sets it from the steps' rate
     star.t = (star.t + starSec) % (100 * SWAY_PERIOD);
   }
   function setStars(angle = 0, speed = 1, bright = 1) { Object.assign(star, { angle, speed, bright }); }
@@ -656,11 +665,14 @@ const Core = (function () {
       return;
     }
     if (running) {
-      stepAcc += SPEEDS[speedIdx] * STEPS_PER_SPEED;
-      n = Math.floor(stepAcc);
-      stepAcc -= n;
+      const sec = Math.min(MAX_FRAME_S, starSec), want = SPEEDS[speedIdx] * STEPS_PER_S * sec;
+      stepAcc += want;
+      const capped = stepAcc >= MAX_STEPS_PER_FRAME + 1;
+      n = Math.min(MAX_STEPS_PER_FRAME, Math.floor(stepAcc));
+      stepAcc = capped ? 0 : stepAcc - n;   // what the cap held back is dropped, not owed
+      driftSec = (capped ? n : want) / STEPS_PER_S;   // game seconds: the dots keep pace with the steps run
       // analyse after every step, not once per frame, so the stats get one sample per step
-      // (at most 2 steps per frame, at the top speed)
+      // (at most MAX_STEPS_PER_FRAME per frame)
       for (let i = 0; i < n && running; i++) { advance(1); analyze(1); }
     } else if (masking && focus && action !== 0) {
       // paused: erase / draw still act, at once (the mask has nothing to act on without a step)
@@ -895,13 +907,14 @@ const Core = (function () {
       ctx.fillText(`${ZOOM_CELLS}×${ZOOM_CELLS} cells`, ZOOM.x + ZOOM.edge - 8, ZOOM.y + 6);
     }
 
-    // Detect: the focus's morph in a box at the top of the ship view, under the channel patches
+    // Detect: the focus's morph in a box at the top of the ship view, under the channel patches (or
+    // at its bottom, above the controls' strip: opt.nameBoxLow)
     if (detectMode !== 'none' && focus && opt.nameBox()) {
       const lab = shownLabel(stats.short.det), txt = lab || '???';
       ctx.font = (lab ? ital() : '') + '600 22px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       // a known morph's colour dot before its name (opt.nameDot; as the game's morph book)
       const det = stats.short.det, dot = lab && opt.nameDot(), D = 13, G = 10;
-      const tw = ctx.measureText(txt).width, w = tw + 24 + (dot ? D + G : 0), bx = cx - w / 2, by = ZOOM.y + 16;
+      const tw = ctx.measureText(txt).width, w = tw + 24 + (dot ? D + G : 0), bx = cx - w / 2, by = opt.nameBoxLow() ? PATCH.bottom - 34 - 10 : ZOOM.y + 16;
       ctx.fillStyle = 'rgba(40,40,46,.75)';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(bx, by, w, 34, 7); else ctx.rect(bx, by, w, 34);

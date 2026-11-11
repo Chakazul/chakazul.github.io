@@ -49,6 +49,9 @@ const SimGL = (function () {
   const BUL_BLOCK = 8;   // readBulletBlocks block edge
   let bulTex = [], bulFbo = [], bcur = 0, bulletsOn = false, bulRGB = [1, 0.42, 0.24];
   let bulTapTex = null, bulTapCount = 0, bulRule = null;
+  // idle: the field is empty (cleared, or nothing fired since): its steps and its effect on the
+  // creatures' step (sim.glsl's bullet path) are skipped until putBullets puts some in.
+  let bulletsIdle = true;
   let bul = { mode: 1, ch: [1, 1, 1], wearCh: [1, 1, 1], hit: 0.2, wear: 0.05, sub: 2 };
   let bblkTex = null, bblkFbo = null, BBW = 0, BBH = 0, bblkBuf = null;
 
@@ -191,6 +194,7 @@ const SimGL = (function () {
 
   // ---- board ----------------------------------------------------------------------------
   function clear() {
+    bulletsIdle = true;
     for (const f of stateFbo.concat(dotFbo, bulFbo)) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, f);
       gl.clearColor(0, 0, 0, 0);
@@ -292,10 +296,10 @@ const SimGL = (function () {
     const was = bulletsOn;
     bulletsOn = !!opts;
     if (opts) bul = { ...bul, ...opts };
-    if (was !== bulletsOn) clearFbos(bulFbo);
+    if (was !== bulletsOn) { clearFbos(bulFbo); bulletsIdle = true; }
   }
-  function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); }
-  function clearBullets() { clearFbos(bulFbo); }
+  function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); bulletsIdle = false; }
+  function clearBullets() { clearFbos(bulFbo); bulletsIdle = true; }
   function stepBullets() {
     const p = prog.bulletsim;
     gl.useProgram(p);
@@ -433,13 +437,13 @@ const SimGL = (function () {
     gl.uniform3f(loc(p, 'uMaskCh'), tool && tool.ch === 0 ? 1 : 0, tool && tool.ch === 1 ? 1 : 0, tool && tool.ch === 2 ? 1 : 0);
     gl.uniform1f(loc(p, 'uReach'), reach);
     bindTex(2, bulTex[bcur], p, 'uBullets');
-    gl.uniform1i(loc(p, 'uBulletMode'), bulletsOn && bulTapTex ? bul.mode : 0);
+    gl.uniform1i(loc(p, 'uBulletMode'), bulletsOn && bulTapTex && !bulletsIdle ? bul.mode : 0);
     gl.uniform3fv(loc(p, 'uBulletCh'), bul.ch);
     gl.uniform1f(loc(p, 'uBulletHit'), bul.hit);
     draw4();
     cur = 1 - cur;
     if (dotsOn && dotTapTex) stepDots();
-    if (bulletsOn && bulTapTex) stepBullets();
+    if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
   }
 
   // Coarse map: BW x BH texels of (mass, sum m*dx, sum m*dy, potential) per BLOCK x BLOCK
@@ -527,7 +531,7 @@ const SimGL = (function () {
   return { init, setRule, setUpdate, seed, add, paint, step, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
-           get BBW() { return BBW; }, get BBH() { return BBH; },
+           get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },
            get blockChannels() { return blkChanBuf; },
            get tapCount() { return tapCount; } };

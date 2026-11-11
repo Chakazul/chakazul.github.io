@@ -22,6 +22,10 @@
 <div class="wrap game">
   <div class="title-row">
     <h1>Cognoship</h1>
+    <nav class="modes" aria-label="Game mode">
+      <a id="mode-story" href="./">Story Mode</a>
+      <a id="mode-sandbox" href="?mode=sandbox">Sandbox Mode</a>
+    </nav>
     <div class="icons">
       <button id="sound" class="icon" data-label="Music" aria-pressed="false" title="Background music on / off (M)" aria-label="Music">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -41,11 +45,12 @@
       <canvas id="ui" width="1152" height="512"></canvas>
       <!-- the score (energy), at the top of the world view, centred, while the dots are on ([dot:<n>]) -->
       <div id="score" class="score" hidden><span id="score-v">0</span></div>
-      <!-- ?god=1: test buttons at the top left of the world view (I, O, P) -->
-      <div id="god" class="god" hidden>
-        <button id="god-ch" title="Go to the next chapter (I)">Ch</button>
-        <button id="god-ok" title="Complete the waiting line's conditions (O)">Ok</button>
-        <button id="god-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
+      <!-- ?dev=1: test buttons at the top left of the world view (I, O, P), the frame rate at its top right -->
+      <div id="dev-fps" class="dev-fps" hidden></div>
+      <div id="dev" class="dev" hidden>
+        <button id="dev-ch" title="Go to the next chapter (I)">Ch</button>
+        <button id="dev-ok" title="Complete the waiting line's conditions (O)">Ok</button>
+        <button id="dev-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
       </div>
       <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
       <div class="ship-ctl">
@@ -56,6 +61,8 @@
       <!-- in the ship view, left of the name box, mirroring Morphs ([gun] on): opens the bullet book -->
       <button id="bullets" class="ship-bullets" hidden title="The bullet book: choose the bullet to fire (S)">Bullets</button>
       <button id="morphs" class="ship-morphs" hidden title="The morph book: the morphs you have discovered (X)">Morphs</button>
+      <!-- in the ship view, between Bullets and Morphs, in sandbox mode only: opens the species book -->
+      <button id="species" class="ship-species" hidden title="The species book: choose a species (C)">Species</button>
       <!-- below Morphs while a clone is held ([clone:on]): turn it 45 degrees clockwise, flip it; paste it
            where a touch placed it (only then), cancel it -->
       <div id="clone-tools" class="clone-tools" hidden>
@@ -71,6 +78,8 @@
           <div class="book-grid" id="book-grid"></div>
           <button id="book-close">Close</button>
           <div id="book-species" class="book-species" hidden></div>
+          <!-- sandbox mode: held for 3 s, clears the central inventory -->
+          <div id="book-clear" class="book-clear" hidden title="Hold for 3 seconds to clear every discovered morph and bullet, from every run">Hold to clear data</div>
         </div>
       </div>
       <!-- "SUCCESS", centred over the game window when a line's [need] conditions are met, fading out -->
@@ -98,7 +107,7 @@
   <div class="below">
     <div class="msg" id="msg" aria-live="polite"></div>
     <div class="controls">
-      <button id="restart" title="Reset the scene: redo the script from its last checkpoint ([chapter] or [new_scene]) to here (Backspace)">Reset</button>
+      <button id="restart" title="Retry the scene: redo the script from its last checkpoint ([chapter] or [new_scene]) to here (Backspace)">Retry</button>
       <button id="play" aria-pressed="false" title="Play / pause (Enter)">Play</button>
       <label title="Simulation speed (Q slower, W faster)">Speed <input id="speed" type="range" min="1" max="7" step="1"></label>
     </div>

@@ -23,10 +23,30 @@
   C.setDetectMode('focus');   // Detect: Focused, the focus's morph at the top of the ship view
   C.opt.nameBox = () => book.on;   // the name box only with the morph book on ([morph_book])
   C.opt.nameDot = () => true;
-  // ?showall=1: a grey circle around every other detected object in the world view too (the core's
-  // circles, as the lab's: the ship's yellow, the one under the pointer brighter)
-  const SHOW_ALL = new URLSearchParams(location.search).get('showall') === '1';
-  C.opt.circlesAll = () => SHOW_ALL;
+  C.opt.nameBoxLow = () => true;   // the name box at the bottom of the ship view, above Upward / Zoom
+  // ?dev=1: dev mode: test keys and buttons (I, O, P: see devSkip), the frame rate and steps per
+  // second at the top right of the world view, and a grey circle around every other detected object
+  // in the world view too (the core's circles, as the lab's: the ship's yellow, the one under the
+  // pointer brighter)
+  const DEV = new URLSearchParams(location.search).get('dev') === '1';
+  // ?mode=sandbox: sandbox mode, the same game run by sandbox.txt (not script.txt), starting from the
+  // central inventory (see the inventory, below); else story mode (script.txt), from an empty one.
+  // The title row's two links switch between them (other URL parameters kept).
+  const MODE = new URLSearchParams(location.search).get('mode') === 'sandbox' ? 'sandbox' : 'story';
+  const SCRIPT_FILE = MODE === 'sandbox' ? 'sandbox.txt' : 'script.txt';
+  // ?all=1: all discovered (for testing): every visible morph of every species counts as discovered
+  // (allDiscovered) and the gun has every bullet pattern from the start; the central inventory is
+  // neither read nor written (in either mode).
+  const ALL = new URLSearchParams(location.search).get('all') === '1';
+  for (const [id, m] of [['mode-story', 'story'], ['mode-sandbox', 'sandbox']]) {
+    const q = new URLSearchParams(location.search);
+    if (m === 'sandbox') q.set('mode', 'sandbox'); else q.delete('mode');
+    const s = q.toString();
+    $(id).href = s ? `?${s}` : location.pathname;
+    $(id).classList.toggle('on', m === MODE);
+    if (m === MODE) $(id).setAttribute('aria-current', 'page');
+  }
+  C.opt.circlesAll = () => DEV;
   C.opt.focusCircle = () => true;   // a yellow circle around the ship's detected object, inside the frame
   C.opt.frameColor = () => '#fff';   // the world view's frame around the ship: white      // with the morph's colour dot, as in the morph book
   // Only the player's ship ([put_player]) is ever followed: no creature is focused by being put
@@ -41,18 +61,26 @@
     return { title: Math.max(44, 1.8 * s), line: 0, inShip: true, dy: -40 };   // a little above the middle
   };
 
-  // Text with _italic_, *bold* and *_italic bold_* (either nesting) and \n (a line break) as nodes:
-  // plain text, <i>, <b>, <br>.
+  // Text with _italic_, *bold* and *_italic bold_* (either nesting), {<button>:<key>} (the button's
+  // text in a round-cornered box, then the key as a keycap; {<button>} or {:<key>}: one of them) and
+  // \n (a line break) as nodes: plain text, <i>, <b>, <span>, <br>.
   function styled(text) {
     const out = [];
     let last = 0;
-    for (const m of text.matchAll(/\*_([^*_]+)_\*|_\*([^*_]+)\*_|\*([^*]+)\*|_([^_]+)_/g)) {
+    for (const m of text.matchAll(/\{([^{}:]*)(?::([^{}]*))?\}|\*_([^*_]+)_\*|_\*([^*_]+)\*_|\*([^*]+)\*|_([^_]+)_/g)) {
       if (m.index > last) out.push(text.slice(last, m.index));
+      last = m.index + m[0].length;
+      if (m[0][0] === '{') {
+        const b = m[1].trim(), k = (m[2] || '').trim();
+        if (b) { const el = document.createElement('span'); el.className = 'msg-btn'; el.textContent = b; out.push(el); }
+        if (k) { const el = document.createElement('span'); el.className = 'msg-key'; el.textContent = k; out.push(el); }
+        continue;
+      }
+      m.splice(1, 2);   // the groups below as before: 1-2 both, 3 bold, 4 italic
       const both = m[1] ?? m[2], el = document.createElement(both !== undefined || m[3] !== undefined ? 'b' : 'i');
       if (both !== undefined) { const i = document.createElement('i'); i.textContent = both; el.append(i); }
       else el.textContent = m[3] ?? m[4];
       out.push(el);
-      last = m.index + m[0].length;
     }
     if (last < text.length) out.push(text.slice(last));
     // \n (a backslash and n, as written in script.txt): a line break
@@ -82,10 +110,10 @@
       let s = hint.startsWith('\n') ? hint.slice(1) : ' ' + hint;
       if (hint.startsWith('\n')) p.append(document.createElement('br'));
       if (spc && s.endsWith(marks.next)) {
-        h.append(s.slice(0, -marks.next.length));
+        h.append(...styled(s.slice(0, -marks.next.length)));
         const m = document.createElement('span'); m.className = 'mark'; m.dataset.key = 'spc'; m.textContent = marks.next;
         h.append(m);
-      } else h.textContent = s;
+      } else h.append(...styled(s));
       if (extra) h.append(' ', extra);
       p.append(h);
     }
@@ -96,6 +124,42 @@
     el.classList.add('fade');
     msgTimer = setTimeout(showMsg, MSG_FADE_MS);
   }
+  // The message bar is one line of a fixed height (style.css): its font is --msg-base, or smaller if
+  // the script's widest message, with what follows it (≫, or ⧗ and a condition's progress), would
+  // not fit its width at that size. Measured on the page (the same fonts, bold and italic), once the
+  // script is loaded and on every resize (a window resized or rotated, fullscreen in or out).
+  // The progress a line's conditions show after ⧗ at its widest (CONDITIONS' t.progress), for fitMsg
+  function progressSample(conds) {
+    const PROG = { object: ([n]) => `morph: ${n}/${n}`, mass: ([, x]) => `mass: ${(+x).toFixed(1)}/${x}`,
+                   survive_time: ([s]) => `time: ${s}/${s}` };
+    return conds.filter(c => PROG[c.name]).map(c => ' ' + PROG[c.name](c.args)).join('');
+  }
+  function fitMsg() {
+    const el = $('msg');
+    if (!SCRIPT.length || !el.clientWidth) return;
+    el.style.removeProperty('--msg-font');
+    const cs = getComputedStyle(el), base = parseFloat(cs.fontSize), avail = el.clientWidth - parseFloat(cs.paddingRight) - 2;
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;font-size:100px;white-space:nowrap;line-height:1';
+    let tip = null;   // a [next_msg]'s tip, for the next message that moves on by Space
+    for (const L of SCRIPT) {
+      const nm = L.actions.find(a => a.name === 'next_msg');
+      if (nm) tip = nm.args[0] || MARKS.tip;
+      if (!L.text) continue;
+      const d = document.createElement('div');
+      d.style.width = 'max-content';
+      const t = !L.conds.length && tip ? ` ${tip}` : '';
+      if (!L.conds.length) tip = null;
+      d.append(...styled(L.text), ...styled(L.conds.length ? ` ${marks.act}${progressSample(L.conds)}` : `${t} ${marks.next}`));
+      probe.append(d);
+    }
+    el.parentNode.append(probe);
+    const widest = Math.max(0, ...Array.from(probe.children, d => d.getBoundingClientRect().width));
+    probe.remove();
+    if (widest > 0 && widest * base / 100 > avail) el.style.setProperty('--msg-font', `${Math.floor(10 * avail * 100 / widest) / 10}px`);
+  }
+  window.addEventListener('resize', fitMsg);
+
   function showMsg() {
     msgTimer = null;
     const el = $('msg'), m = msgNext;
@@ -182,8 +246,8 @@
   // Title: "New morph discovered!" when a discovery opened the book.
   function renderBook() {
     $('book-grid').classList.toggle('bullets', book.mode === 'bullet');
-    document.querySelector('.book-box').classList.toggle('wide', book.mode === 'bullet');   // the bullet book: wider
-    $('book-close').dataset.key = book.mode === 'bullet' ? 'S' : 'X';   // its key badge: the key that closes this book
+    document.querySelector('.book-box').classList.toggle('wide', book.mode !== 'morph');   // the bullet and species books: wider
+    $('book-close').dataset.key = 'Esc';   // only Escape closes a book (its letters pick slots)   // its key badge: the key that closes this book
     // the morph book's species, at its lower right (a morph is only a morph of its species)
     $('book-species').hidden = book.mode !== 'morph' || !C.pattern;
     if (C.pattern) {
@@ -191,11 +255,17 @@
       code.textContent = speciesName || C.speciesOf(C.pattern);   // no name: the id
       $('book-species').replaceChildren('Species: ', code);
     }
+    // sandbox mode: the species' name goes to the species book
+    $('book-species').classList.toggle('link', MODE === 'sandbox');
+    $('book-species').title = MODE === 'sandbox' ? 'Choose another species (C)' : '';
+    $('book-clear').hidden = MODE !== 'sandbox';
     if (book.mode === 'bullet') return renderBullets();
+    if (book.mode === 'species') return renderSpecies();
+    allDiscovered();
     const canPick = book.action !== 'none' && shipLost();   // a click on a discovered morph does something
     const canClone = clone.on && !shipLost() && !book.fromDiscovery;   // [clone:on]: pick one to clone (not in the discovery's book)
-    $('book-title').textContent = book.fromDiscovery ? 'New morph discovered!' : canPick ? 'Choose a morph to respawn'
-      : canClone ? 'Choose a morph to clone' : 'Dissolve to respawn';   // read-only: how to get a pick
+    $('book-title').textContent = book.fromDiscovery ? 'New morph discovered!' : canPick ? 'Choose morph to respawn'
+      : canClone ? 'Choose morph to clone' : 'Dissolve to respawn';   // read-only: how to get a pick
     const grid = $('book-grid');
     grid.replaceChildren(...visibleList().map((name, slot) => {
       const d = discovered.find(x => x.name === name), el = document.createElement('div');
@@ -243,13 +313,14 @@
   }
   // The book never scrolls: if it is taller than the game window (two rows or more of pictures),
   // shrink every picture box alike until it fits. Only measurable while it is shown.
+  // (The species book's thumbnail grids alike, each narrowed by its own height / width.)
   function fitBook() {
-    const box = document.querySelector('.book-box'), pics = $('book-grid').querySelectorAll('.pic');
+    const box = document.querySelector('.book-box'), pics = $('book-grid').querySelectorAll('.pic, .thumbs');
     if ($('book').hidden || !pics.length) return;
     const over = box.scrollHeight - $('book').clientHeight * 0.98;   // scrollHeight: its full content (it is clipped at 98%)
     if (over <= 0) return;
-    const rows = Math.ceil(pics.length / 4), size = pics[0].getBoundingClientRect().width;
-    const fit = Math.max(16, size - over / rows - 1);
+    const rows = Math.ceil(pics.length / 4), r = pics[0].getBoundingClientRect(), aspect = r.height / r.width || 1;
+    const fit = Math.max(16, r.width - (over / rows) / aspect - 1);
     pics.forEach(p => { p.style.width = fit + 'px'; });
   }
   // A click on a discovered morph in the book: close it, do the morph_book_action, and play (even
@@ -384,13 +455,16 @@
   // clicked to switch to them (the one in use with a yellow border), the others are "?".
   // Keys picking a slot, by its place: the books' rows of 4 on the keyboard's rows (morphs: ASDF,
   // ZXCV; bullets: 1234, QWER, ASDF, ZX..).
-  const SLOT_KEYS = { morph: [...'ASDFZXCV'], bullet: [...'1234QWERASDFZXCV'] };
+  const SLOT_KEYS = { morph: [...'ASDFZXCV'], bullet: [...'1234QWERASDFZXCV'], species: [...'QWERASDFZX'] };
   // [new_bullet:<n>]: one pattern for every n energy (the score, from 0), less those listed: how
   // many more can be created now
+  let bulletsCreated = 0;   // patterns created this run ([need:create_bullet], bulletCredits)
+  // One creation per <every> energy gathered this run (the score), less those created this run: the
+  // patterns the run started with (the sandbox's inventory) or that the script gave do not count
   function bulletCredits() {
     if (!newBullet || !Bullets.on) return 0;
     const have = Bullets.list.length, all = Object.keys(Bullets.KINDS).length;
-    return Math.max(0, Math.min(all - have, Math.floor(Dots.score / newBullet.every) - have));
+    return Math.max(0, Math.min(all - have, Math.floor(Dots.score / newBullet.every) - bulletsCreated));
   }
   // The Bullets button reads "Create" (green) while one can be created; turning so, with a glint
   function syncNew() {
@@ -400,13 +474,21 @@
     syncButtons();
     if (bulletNew) revealButton($('bullets'));
   }
-  // A "?" slot clicked while one can be created: that pattern is added to the list (the one in use
-  // stays), revealed as a new card, green until the book closes; the book stays open
+  // A "?" slot clicked while one can be created: that pattern is added to the list and the gun
+  // switches to it, revealed as a new card (green), turning yellow (in use) once revealed; the
+  // book stays open
   function createBullet(name) {
     if (bulletCredits() <= 0 || !Bullets.addRandom(name)) return;
+    bulletsCreated++;
     newBullets.add(name);
+    Bullets.select(name);
+    revealing.add(name);
     revealName = name; renderBook(); revealName = null;
     syncNew();
+    setTimeout(() => {
+      revealing.delete(name);
+      if (book.open && book.mode === 'bullet') renderBook();
+    }, REVEAL_FLIP_MS);
   }
   // Each slot: yellow border, the one in use; cyan, another listed (a click fires it); green, one
   // created since the book opened; "?", not listed (cyan, a click creates it, while one can be:
@@ -470,6 +552,53 @@
     img.src = p.src; img.alt = ''; img.className = 'bpic';
     img.style.width = p.w + 'px'; img.style.height = p.h + 'px';
     return img;
+  }
+  // ---- species book (sandbox mode) ------------------------------------------------------------
+  // The Species button (C), or the species' name in the morph book: a slot per visible species
+  // ([add_allow_species]), in order: a small thumbnail of each of its visible morphs in a row (the
+  // centre of its picture if discovered, else black), and its name. The current one has a
+  // yellow border. A click chooses it (chooseSpecies: its [on_choose_species] block sets the world up).
+  // A species' visible morphs: its [add_allow_species] list, or for all, every morph of it (its patterns)
+  const speciesMorphs = e => !e.morphs.includes('all') ? e.morphs
+    : [...new Set(PATTERNS.filter(p => C.speciesOf(p) === e.id && !p.hidden).map(p => C.morphName(p).replace(C.BOOM, '')))];
+  function openSpeciesBook() {
+    if (MODE !== 'sandbox') return;
+    if (book.open && book.mode !== 'species') closeBook();
+    book.mode = 'species';
+    showBook();
+  }
+  function renderSpecies() {
+    $('book-title').textContent = 'Choose species';
+    const cur = C.pattern && C.speciesOf(C.pattern);
+    $('book-grid').replaceChildren(...visSpecies.map((e, slot) => {
+      const found = discoveredBy.get(e.id) || [];
+      const el = document.createElement('div'), thumbs = document.createElement('div'), label = document.createElement('span');
+      el.className = 'book-slot pick species' + (e.id === cur ? ' current' : '');
+      thumbs.className = 'thumbs';
+      for (const m of speciesMorphs(e)) {
+        const d = found.find(x => x.name === m), t = document.createElement('div');
+        t.className = 'thumb';
+        if (d) { t.title = m; if (d.img) { const img = new Image(); img.src = d.img; img.alt = m; t.append(img); } }
+        thumbs.append(t);
+      }
+      label.className = 'label';
+      label.textContent = e.name || e.id;
+      el.append(thumbs, label);
+      el.title = `Choose ${e.name || e.id}`;
+      el.onclick = () => pickSpecies(e.id);
+      if (SLOT_KEYS.species[slot]) el.dataset.key = SLOT_KEYS.species[slot];
+      return el;
+    }));
+    fitBook();
+  }
+  let chosenSpecies = null;   // the species last chosen in the book: Retry's replay chooses it again
+  function pickSpecies(id) {
+    closeBook();
+    if (clone.held) endClone();
+    chosenSpecies = id;
+    chooseSpecies(id);
+    retake = true; cand = null;
+    C.setRunning(true);
   }
   function openBulletBook() {
     if (!Bullets.on) return;
@@ -556,6 +685,8 @@
   function setBook(on) { book.on = on; syncButtons(); if (!on) closeBook(); }
   $('morphs').onclick = () => openBook();   // (holding a clone: the book to pick another one to clone)
   $('bullets').onclick = () => openBulletBook();
+  $('species').onclick = () => openSpeciesBook();
+  $('book-species').onclick = () => { if (book.mode === 'morph') openSpeciesBook(); };
   $('book-close').onclick = closeBook;
   $('book').addEventListener('pointerdown', e => { if (e.target === $('book')) closeBook(); });   // outside the box
   // Each frame: has the followed ship been a visible morph not discovered yet, without a break, for
@@ -571,7 +702,7 @@
     if (chapterShowing()) return;   // no discovery (nor its book) under a chapter card; it waits
     const d = C.focus && C.stats.short.det;
     const known = d && d.name && discovered.find(x => x.name === d.name);
-    if (known && !Number.isFinite(known.hue) && Number.isFinite(d.hue)) known.hue = d.hue;   // put in unseen: its colour now
+    if (known && !Number.isFinite(known.hue) && Number.isFinite(d.hue)) { known.hue = d.hue; saveInventory(); }   // put in unseen: its colour now
     // a new discovery; or a known morph, whose picture is retaken quietly after SNAPSHOT_STEPS (once
     // the detection has settled), replacing the old one: only once after a Respawn or a book pick
     if (!book.on || !d || !d.name || !isVisible(d.name)) { cand = null; return; }
@@ -582,14 +713,89 @@
     if (cand.n < (known ? SNAPSHOT_STEPS : DISCOVER_STEPS)) return;
     cand.taken = true;   // kept, so the same stretch as this morph takes no more pictures
     retake = false;
-    if (known) { known.img = snapshot(); if (book.open) renderBook(); return; }
+    if (known) { known.img = snapshot(); known.given = false; saveInventory(); if (book.open) renderBook(); return; }   // (a given one held: earned now)
     discover(d.name, d.hue, snapshot());
     openBook(d.name);
   }
   // Add a morph to the discovered list (its hue, the book's dot colour, once it has been detected;
   // img: its picture in the book, if it was found in play).
+  // ?all=1: the visible morphs not discovered yet are, quietly (no picture yet: one is taken the
+  // first time the ship holds each)
+  function allDiscovered() {
+    if (!ALL || !C.pattern) return;
+    for (const n of visibleList()) if (findMorph(n) && !discovered.some(x => x.name === n)) discovered.push({ name: n, hue: NaN, img: null });
+  }
   function discover(name, hue = NaN, img = null) {
-    if (!discovered.some(x => x.name === name)) discovered.push({ name, hue, img });
+    if (!discovered.some(x => x.name === name)) { discovered.push({ name, hue, img }); saveInventory(); }
+  }
+
+  // ---- inventory ------------------------------------------------------------------------------
+  // The inventory: the discovered morphs of every species (discoveredBy: name, colour, picture)
+  // and the bullet patterns the gun has (Bullets.list). The central inventory, in localStorage
+  // (INV_KEY), gathers them from every run: whatever a run gains is merged into it as it comes
+  // (a discovery, a new picture or colour, a bullet added or created), never removed. A story run
+  // starts from an empty inventory; a sandbox run starts from the central one (loaded at the start,
+  // before sandbox.txt runs), and saves into it as a story run does.
+  const INV_KEY = 'cognoship-inventory';
+  function loadInventory() {
+    try {
+      const o = JSON.parse(localStorage.getItem(INV_KEY));
+      if (o && typeof o === 'object') return { morphs: o.morphs && typeof o.morphs === 'object' ? o.morphs : {}, bullets: Array.isArray(o.bullets) ? o.bullets : [] };
+    } catch (e) {}
+    return { morphs: {}, bullets: [] };
+  }
+  let invTimer = null;
+  const unsavedBullets = new Set();   // patterns [bullet:all] gave: not saved
+  // Merge this run's inventory into the central one, soon (several changes in a frame: one write)
+  let invCleared = false;   // the central inventory was just cleared: nothing more is saved (the page reloads)
+  function saveInventory() { if (!invTimer && !invCleared && !ALL) invTimer = setTimeout(flushInventory, 100); }
+  function flushInventory() {
+    clearTimeout(invTimer); invTimer = null;
+    if (invCleared) return;
+    const inv = loadInventory();
+    for (const [sp, list] of discoveredBy) {
+      const c = Array.isArray(inv.morphs[sp]) ? inv.morphs[sp] : (inv.morphs[sp] = []);
+      for (const d of list) {
+        if (d.given) continue;   // [discover_morph]: not earned
+        const e = c.find(x => x.name === d.name);
+        if (!e) c.push({ name: d.name, hue: Number.isFinite(d.hue) ? d.hue : null, img: d.img || null });
+        else {
+          if (d.img) e.img = d.img;   // the latest picture
+          if (Number.isFinite(d.hue)) e.hue = d.hue;
+        }
+      }
+    }
+    for (const b of Bullets.list) if (!unsavedBullets.has(b) && !inv.bullets.includes(b)) inv.bullets.push(b);
+    try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); }
+    catch (e) { console.warn('Cognoship: the inventory could not be saved', e); }
+  }
+  window.addEventListener('pagehide', () => { if (invTimer) flushInventory(); });
+  // Sandbox mode: "Hold to clear data" in the books, held for CLEAR_HOLD_MS, empties the central
+  // inventory, then reloads the page: a fresh sandbox run from nothing. Let go sooner: nothing happens.
+  const CLEAR_HOLD_MS = 3000;
+  let clearTimer = null;
+  $('book-clear').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    $('book-clear').setPointerCapture?.(e.pointerId);
+    $('book-clear').classList.add('holding');
+    clearTimer = setTimeout(() => {
+      clearTimer = null;
+      invCleared = true; clearTimeout(invTimer); invTimer = null;
+      try { localStorage.removeItem(INV_KEY); } catch (err) {}
+      $('book-clear').classList.remove('holding'); $('book-clear').classList.add('done');
+      $('book-clear').textContent = 'Data cleared';
+      setTimeout(() => location.reload(), 600);
+    }, CLEAR_HOLD_MS);
+  });
+  const clearCancel = () => { if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; } $('book-clear').classList.remove('holding'); };
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) $('book-clear').addEventListener(ev, clearCancel);
+  // Sandbox: start from the central inventory
+  function loadCentralInventory() {
+    const inv = loadInventory();
+    for (const [sp, list] of Object.entries(inv.morphs))
+      if (Array.isArray(list))
+        discoveredBy.set(sp, list.filter(d => d && d.name).map(d => ({ name: d.name, hue: Number.isFinite(d.hue) ? d.hue : NaN, img: d.img || null })));
+    if (inv.bullets.length) Bullets.setList(inv.bullets.join(','));
   }
   // A picture of the ship view as it is now (as drawn this frame, so called from the frame hook,
   // right after the render), scaled down to the world view's scale (C.WS px per cell): a data URL.
@@ -626,8 +832,48 @@
   // A morph of the current species by its name (limus, gyrans, ...), or a pattern id (5N7KKM-limus).
   const findMorph = id => PATTERNS.find(p => C.speciesOf(p) === C.speciesOf(C.pattern) &&
                                              C.morphName(p).replace(C.BOOM, '') === id) || PATTERNS.find(p => p.id === id);
+  // The current species' first morph (its first pattern, as listed), by name
+  function firstMorph() {
+    const p = C.pattern && PATTERNS.find(p => C.speciesOf(p) === C.speciesOf(C.pattern) && !p.hidden);
+    return p ? C.morphName(p).replace(C.BOOM, '') : null;
+  }
+  // The visible species ([add_allow_species]), in order: { name, id, morphs: its visible morphs }.
+  // For the species chooser to come; nothing reads it yet ([species] loads any species).
+  const visSpecies = [];
+  const speciesBlocks = new Map();   // [on_choose_species[:<id>]] blocks: id ('' = any species) -> its lines
+  // A species chosen (the species book, to come; [choose_species:<id>]): load it ([species], with
+  // its [add_allow_species] name), make its morphs visible ([allow_morph], its [add_allow_species]
+  // list), then run the actions of its [on_choose_species:<id>] block, or else of the general one, in
+  // order and at once (no waiting: a block holds actions only).
+  function chooseSpecies(id) {
+    const e = visSpecies.find(x => x.id === id);
+    if (!e) return console.warn(`script.txt: [choose_species:${id}]: not added by [add_allow_species]`);
+    ACTIONS.species(e.name, id);
+    ACTIONS.allow_morph(e.morphs.join(','));
+    for (const L of speciesBlocks.get(id) ?? speciesBlocks.get('') ?? [])
+      for (const a of L.actions) ACTIONS[a.name](...a.args);
+  }
   const PUT_HOW = ['center', 'random', 'far'];
   const ACTIONS = {
+    // add_allow_species:<name>:<id>[:<ids>]: add species <id> (named <name>, as [species]) to the
+    // visible species, with its visible morphs <ids> (as [allow_morph]; none given: all). Again:
+    // its name and morphs updated.
+    // on_choose_species[:<id>] ... end: a block of lines, taken out of the script's run
+    // (parseScript), whose actions chooseSpecies runs. No id: for any species; with one: for that
+    // species only, instead of the general block.
+    on_choose_species: () => {},
+    end: () => {},
+    // choose_species:<id>: as if the player chose species <id> in the species book (chooseSpecies)
+    // (redone by Retry, in its replay and in the current line run afresh: the species the player
+    // chose since, if any)
+    choose_species: (id) => chooseSpecies(resetting && chosenSpecies ? chosenSpecies : id),
+    add_allow_species: (name, id, ids) => {
+      if (!id || !PATTERNS.some(p => C.speciesOf(p) === id)) return console.warn(`script.txt: unknown species [add_allow_species:${name}:${id}]`);
+      const morphs = ids === undefined ? ['all'] : morphIds([ids]);
+      const e = visSpecies.find(x => x.id === id);
+      if (e) Object.assign(e, { name: name || e.name, morphs }); else visSpecies.push({ name, id, morphs });
+      syncButtons();   // (sandbox: the Species button)
+    },
     // species:<name>:<id>: load species <id> (its rule; the world is kept), with no visible
     // morphs; the morph book names it "Species: <name>" (genus and species, e.g. Aquarium
     // originale). ([species:<id>]: no name, the book shows the id.)
@@ -648,6 +894,7 @@
       const ids = morphIds(args);
       vis.all = ids.includes('all');
       vis.allow = new Set(ids.filter(id => id !== 'all'));
+      allDiscovered();
     },
     // morph_book:on|off: show or hide the Morphs button (off also closes the book)
     morph_book: (state = 'on') => setBook(state !== 'off'),
@@ -670,10 +917,18 @@
     put_morph: (id, how = 'center') => putMorph('put_morph', id, how, 'never'),
     // put_player:<id>[:center|random|far]: as put_morph, but the new creature is the player's
     // ship (followed), and <id> becomes the player's morph: what Respawn puts back.
-    put_player: (id, how = 'center') => { if (putMorph('put_player', id, how, true)) playerMorph = id; },
+    // put_player:first: the species' first morph (its first pattern).
+    put_player: (id, how = 'center') => {
+      if (id === 'first') id = firstMorph() ?? id;
+      if (putMorph('put_player', id, how, true)) playerMorph = id;
+    },
     // discover_morph:<ids>: add these morphs to the discovered list (the player may have found
     // others already: they stay) (the condition is [need:discover_morph])
-    discover_morph: (...args) => { for (const id of morphIds(args)) discover(id); },
+    // Given, not earned: kept out of the central inventory (for testing), until the ship holds it
+    // long enough for its picture.
+    discover_morph: (...args) => {
+      for (const id of morphIds(args)) if (!discovered.some(x => x.name === id)) { discover(id); discovered.find(x => x.name === id).given = true; }
+    },
     // morph_book_action:<type>: what a click on a discovered morph in the book does (it also closes
     // the book): clear_put = [clear_world][put_player:<id>]; put = [put_player:<id>:random];
     // none = nothing. The default is clear_put.
@@ -695,14 +950,14 @@
     },
     // min_morph:<n>[:<ids>[:center|random|far]]: keep at least n creatures besides the player's
     // ship on the board: whenever there are fewer, put in one more (as [put_morph]), a morph
-    // picked at random from <ids> (default: the visible list), placed as given (default random).
+    // picked at random from <ids> (default, or all: the visible list), placed as given (default random).
     // n = 0 or off: stop.
     min_morph: (n, ids = '', how = 'random') => {
       const k = parseInt(n, 10);
       if (n === 'off' || k === 0) { minMorph = null; return; }
       if (!(k > 0)) return console.warn(`script.txt: bad value [min_morph:${n}], ignored`);
       if (!PUT_HOW.includes(how)) { console.warn(`script.txt: unknown option [min_morph:${n}:${ids}:${how}], using random`); how = 'random'; }
-      minMorph = { n: k, ids: morphIds([ids]), how, next: 0 };
+      minMorph = { n: k, ids: ids === 'all' ? [] : morphIds([ids]), how, next: 0 };
     },
     // dot:<n>|off: the dots channel (dots.js): keep <n> dots on the board, which any creature
     // eats; the player's ship eating one scores 10 (the score shows at the top, from 0 when the
@@ -725,6 +980,11 @@
       const before = Bullets.list;
       Bullets.setList(names, equip);
       const added = Bullets.list.filter(n => !before.includes(n));
+      // all: for testing, kept out of the central inventory (patterns named, or random, are saved)
+      if (names.split(',').some(t => t.trim().toLowerCase() === 'all')) {
+        const named = names.split(',').map(t => t.trim()).concat(equip ? [equip.trim()] : []).map(Bullets.kindOf);
+        for (const n of added) if (!named.includes(n)) unsavedBullets.add(n);
+      }
       if (!replaying && added.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(added);
     },
     // bullet_limit:<x>: the bullets channel is emptied once it holds more than x bullets' worth of
@@ -753,7 +1013,7 @@
     // ⧗). A part left out or empty is back to its default.
     next_msg: (tip = '', next = '', act = '') => {
       marks.tip = tip || MARKS.tip; marks.next = next || MARKS.next; marks.act = act || MARKS.act;
-      tipPending = true;
+      tipPending = !replaying;   // not when skipped to ([jump_here], dev I): the tip is for the script's first message
     },
     // speed:<x>: the game speed (the Speed slider), x = n or 1/n (1/8 .. 8), snapped to the
     // nearest slot
@@ -830,6 +1090,9 @@
     // first_clone: the player has placed a clone (picked in the morph book while clone mode is
     // allowed, then pasted on the ship view) since the line was reached
     first_clone: () => { const n0 = clonesPlaced; return () => clonesPlaced > n0; },
+    // create_bullet: the player has created a bullet type (Create, then a "?" in the bullet book)
+    // since the line was reached ([new_bullet] must allow one)
+    create_bullet: () => { const n0 = bulletsCreated; return () => bulletsCreated > n0; },
     // recycle: the player has erased some mass (erase on, any channel, pressed on the ship view)
     // since the line was reached, and the ship has then dissolved
     recycle: () => {
@@ -841,7 +1104,7 @@
     },
     // object:<n>[:exact|min|max]: the world holds exactly (the default) / at least / at most n
     // objects (creatures detected), the ship included; the count smoothed (smoothed).
-    // Progress: "<count>/<n>".
+    // Progress: "morph: <count>/<n>".
     object: (n, how = 'exact') => {
       const v = parseInt(n, 10);
       if (!(v >= 0)) { console.warn(`script.txt: bad value [need:object:${n}], ignored`); return () => true; }
@@ -849,12 +1112,12 @@
       if (!CMP[how]) { console.warn(`script.txt: unknown option [need:object:${n}:${how}], using exact`); how = 'exact'; }
       const count = smoothed(allObjects);
       const t = () => { const k = count(); return k !== null && CMP[how](k); };
-      t.progress = () => `${count() ?? 0}/${v}`;
+      t.progress = () => `morph: ${count() ?? 0}/${v}`;
       return t;
     },
     // mass:<r|g|b|rgb>:<x>[:min|max]: the objects in the world (the ship included) hold at least
     // (the default) / at most x g of mass in that channel (rgb: all three), as the stats count it;
-    // smoothed as [need:object]. Progress: "<mass>/<x>", one decimal.
+    // smoothed as [need:object]. Progress: "mass: <mass>/<x>", one decimal.
     mass: (ch, x, how = 'min') => {
       const CH = { r: [0], g: [1], b: [2], rgb: [0, 1, 2] }, v = parseFloat(x);
       if (!CH[ch] || !(v >= 0)) { console.warn(`script.txt: bad [need:mass:${ch}:${x}], ignored`); return () => true; }
@@ -862,13 +1125,13 @@
       if (!CMP[how]) { console.warn(`script.txt: unknown option [need:mass:${ch}:${x}:${how}], using min`); how = 'min'; }
       const mass = smoothed(() => { const m = C.worldMass(); return m && CH[ch].reduce((s, c) => s + m[c], 0); });
       const t = () => { const m = mass(); return m !== null && CMP[how](m); };
-      t.progress = () => `${(mass() ?? 0).toFixed(1)}/${v}`;
+      t.progress = () => `mass: ${(mass() ?? 0).toFixed(1)}/${v}`;
       return t;
     },
     // survive_time:<s>: the ship has stayed alive for s game seconds (C.STEPS_PER_S steps each:
     // paused time does not count, and the same against the creatures on any device or speed), from
     // when the line is reached, not under a chapter card; dissolving stops the count, and the next
-    // ship (Respawn) starts it again from 0. Progress: "<t>/<s> sec".
+    // ship (Respawn) starts it again from 0. Progress: "time: <t>/<s>".
     survive_time: (s) => {
       const v = parseFloat(s);
       if (!(v >= 0)) { console.warn(`script.txt: bad value [need:survive_time:${s}], ignored`); return () => true; }
@@ -881,7 +1144,7 @@
         else if (!book.open && !chapterShowing()) n += dn;
         return n >= v * C.STEPS_PER_S;
       };
-      t.progress = () => `${Math.min(v, Math.floor(n / C.STEPS_PER_S))}/${v} sec`;
+      t.progress = () => `time: ${Math.min(v, Math.floor(n / C.STEPS_PER_S))}/${v}`;
       return t;
     },
     // upward: the ship view's Upward is on
@@ -939,14 +1202,16 @@
   function showProgress() {
     if (progress) progress.el.textContent = progress.fns.map(f => f()).join(' ');
   }
+  // Then the [on_choose_species[:<id>]] ... [end] blocks are taken out of the script's run (into
+  // speciesBlocks, see chooseSpecies).
   function parseScript(txt) {
-    return txt.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
+    const lines = txt.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#')).map(l => {
       const toks = [];
       let m;
       while ((m = l.match(/\s*\[([^\]]*)\]\s*$/))) { toks.unshift(m[1].trim()); l = l.slice(0, m.index); }
       const actions = [], conds = [];
       for (const t of toks) {
-        const [name, ...args] = t.split(':').map(x => x.trim());
+        const [name, ...args] = t.split(/:(?![^{}]*\})/).map(x => x.trim());   // a ':' inside {...} stays
         if (name === 'need') {
           const [cond, ...cargs] = args;
           if (CONDITIONS[cond]) conds.push({ name: cond, args: cargs });
@@ -958,6 +1223,26 @@
       // msg: the line is a message (it has text, or [blank]: an empty one)
       return { text: l.trim(), actions, conds, msg: !!l.trim() || actions.some(a => a.name === 'blank') };
     });
+    const out = [];
+    let block = null;   // the lines of the block being read
+    for (const L of lines) {
+      const open = L.actions.find(a => a.name === 'on_choose_species');
+      if (open) {
+        if (block) console.warn('script.txt: [on_choose_species] inside another block, ignored');
+        else { block = []; speciesBlocks.set(open.args[0] || '', block); }
+        continue;
+      }
+      if (L.actions.some(a => a.name === 'end')) {
+        if (!block) console.warn('script.txt: [end] with no [on_choose_species], ignored');
+        block = null;
+        continue;
+      }
+      if (!block) { out.push(L); continue; }
+      if (L.text || L.conds.length) console.warn(`script.txt: a message or condition in an [on_choose_species] block, ignored: ${L.text}`);
+      block.push(L);
+    }
+    if (block) console.warn('script.txt: [on_choose_species] with no [end]: the block runs to the end of the file');
+    return out;
   }
   // A line with [new_scene] or [chapter] waits while the morph book shows (and zaps out): the
   // views must not fade, nor the card come up, behind it. checkScript runs it once it is gone.
@@ -969,7 +1254,7 @@
   // card, no extra fade), nor what only steers the script or the music.
   const CHECKPOINTS = ['chapter', 'new_scene'], REPLAY_SKIP = new Set([...CHECKPOINTS, 'jump_here', 'next_msg', 'music']);
   let resetting = false;
-  let replaying = false;   // actions redone (Reset, [jump_here], god I): nothing pops up ([bullet]'s book)
+  let replaying = false;   // actions redone (Reset, [jump_here], dev I): nothing pops up ([bullet]'s book)
   function resetScene() {
     if (line < 0 || resetting || chapterShowing() || bookShowing()) return;
     if (clone.held) endClone();
@@ -1013,7 +1298,7 @@
       const fns = tests.map(t => t.progress).filter(Boolean);
       progress = fns.length ? { el: document.createElement('span'), fns } : null;
       showProgress();
-      say(L.text, tests.length ? marks.act : last ? '' : tip ? `\n${marks.tip} ${marks.next}` : marks.next,
+      say(L.text, tests.length ? marks.act : last ? '' : tip ? `${marks.tip} ${marks.next}` : marks.next,
           wait, !tests.length && !last, progress?.el);   // cyan: the player has (or had) something to do
     }
     else if (!tests.length) next();   // tokens only, nothing to wait for
@@ -1021,15 +1306,14 @@
   function next() { if (line + 1 < SCRIPT.length) run(line + 1); }
   // Space / a click on the message bar moves on: a message with no condition
   const byContinue = () => deferred < 0 && line >= 0 && SCRIPT[line].msg && !tests.length;
-  // ?god=1: O completes the waiting line's [need] conditions at once (a line waiting only on an
+  // ?dev=1: O completes the waiting line's [need] conditions at once (a line waiting only on an
   // action, a chapter card, is left alone); P scores as if the ship ate a dot (+10 energy); I goes
   // to the next chapter
-  const GOD = new URLSearchParams(location.search).get('god') === '1';
-  function godSkip() { if (GOD && deferred < 0 && line >= 0 && tests.length && SCRIPT[line].conds.length) { showSuccess(); next(); } }
+  function devSkip() { if (DEV && deferred < 0 && line >= 0 && tests.length && SCRIPT[line].conds.length) { showSuccess(); next(); } }
   // I: on to the next [chapter] line. Every action on the lines in between runs first, in order
   // (as [jump_here] does), with their messages, conditions and chapter cards skipped.
-  function godChapter() {
-    if (!GOD || line < 0 || resetting) return;
+  function devChapter() {
+    if (!DEV || line < 0 || resetting) return;
     const cur = deferred >= 0 ? deferred : line + 1;   // a deferred line has not run its actions yet
     const to = SCRIPT.findIndex((L, i) => i > line && L.actions.some(a => a.name === 'chapter'));
     if (to < 0) return;
@@ -1042,8 +1326,21 @@
     run(to);
   }
   // its buttons, at the top left of the world view: Ch (I), Ok (O), Do (P)
-  $('god').hidden = !GOD;
-  $('god-ch').onclick = godChapter; $('god-ok').onclick = godSkip; $('god-do').onclick = () => { if (GOD) Dots.eat(); };
+  $('dev').hidden = !DEV;
+  $('dev-ch').onclick = devChapter; $('dev-ok').onclick = devSkip; $('dev-do').onclick = () => { if (DEV) Dots.eat(); };
+  // the frame rate and the simulation steps per second, over the last half second
+  $('dev-fps').hidden = !DEV;
+  const fps = { t: 0, frames: 0, steps: 0 };
+  function devFps() {
+    if (!DEV) return;
+    const now = performance.now();
+    if (!fps.t) { Object.assign(fps, { t: now, frames: 0, steps: C.simSteps }); return; }
+    fps.frames++;
+    if (now - fps.t < 500) return;
+    const s = (now - fps.t) / 1000;
+    $('dev-fps').textContent = `${Math.round(fps.frames / s)} fps · ${Math.round((C.simSteps - fps.steps) / s)} steps/s`;
+    Object.assign(fps, { t: now, frames: 0, steps: C.simSteps });
+  }
   // "SUCCESS" over the game window when a waiting line's [need] conditions are met: fades in, holds,
   // then slowly fades out (the .success animation, SUCCESS_MS); the game goes on meanwhile
   const SUCCESS_MS = 3000;
@@ -1147,8 +1444,8 @@
   // its data-key; a slider gets one at each end, from data-key-lo / data-key-hi, over the track),
   // and the channel patches' 1-3 (core opt.showKeys). Space is left out (it moves the messages on).
   const KEYS = { play: '\u21b5', sound: 'M', headup: 'E', morphs: 'X', reset: 'Z', 'morphs-dead': 'X', fire: 'A',
-                 'book-close': 'X', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S', restart: '\u2190',
-                 'god-ch': 'I', 'god-ok': 'O', 'god-do': 'P' };
+                 'book-close': 'Esc', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S', species: 'C', restart: '\u2190',
+                 'dev-ch': 'I', 'dev-ok': 'O', 'dev-do': 'P' };
   const SLIDER_KEYS = { speed: ['Q', 'W'], zoom: ['R', 'T'] };   // [left end (less), right end (more)]
   const SLIDER_INSET = 10;   // px in from each end of the track
   // (a button with a .kt text span gets its badge there, at the text's top right)
@@ -1208,10 +1505,12 @@
     $('bullet-nav').hidden = !many;
     syncButtons();   // the Bullets button
     syncNew();   // the list changed: as many more creatable?
+    saveInventory();   // (a pattern added: into the central inventory)
     if (book.open && book.mode === 'bullet') { if (Bullets.on) renderBook(); else closeBook(); }
     $('fire').title = 'Fire a bullet the way the ship moves (A)' + (many ? '; D / F: the previous / next pattern' : '');
   };
   C.hooks.frame = () => {
+    devFps();
     updateBackground();
     // Respawn / Choose fade with the views ([new_scene], [chapter]), as "Dissolved" (core)
     const shade = worldShade(), dead = document.querySelector('.ship-dead');
@@ -1241,6 +1540,7 @@
     $('bullets').classList.toggle('new', bulletNew);
     $('bullets').textContent = bulletNew ? 'Create' : 'Bullets';
     $('bullets').hidden = !Bullets.on || shipLost();   // the bullet book's button: while the gun is on, not while lost
+    $('species').hidden = MODE !== 'sandbox' || !visSpecies.length;   // sandbox mode: the species book's button
     $('headup').setAttribute('aria-pressed', C.viewMode !== 'board');
     $('speed').value = C.speedIdx + 1;
     $('zoom').value = C.zoomIdx + 1;
@@ -1274,7 +1574,7 @@
   if (C.zoomIdx !== clampZoom(C.zoomIdx)) C.setZoom(clampZoom(C.zoomIdx));   // e.g. ?zoom=2
   const doZoom = d => { flash('zoom'); C.setZoom(clampZoom(C.zoomIdx + d)); };   // R out, T in
   $('play').onclick = doPlay;
-  const doRestart = () => { flash('restart'); resetScene(); };   // Reset (and Backspace)
+  const doRestart = () => { flash('restart'); resetScene(); };   // Retry (and Backspace)
   $('restart').onclick = doRestart;
   $('reset').onclick = doReset;
   $('morphs-dead').onclick = () => openBook();
@@ -1290,20 +1590,21 @@
       // a slot's letter (SLOT_KEYS) picks it, if it can be picked (which closes the book too)
       const el = k.length === 1 && $('book-grid').querySelector(`.book-slot.pick[data-key="${k.toUpperCase()}"]`);
       if (el) el.click();
-      // else Escape, or the key that opened this book (X: morphs, D: bullets), closes it
-      else if (k === 'Escape' || (k === 'x' && book.mode === 'morph') || (k === 's' && book.mode === 'bullet')) closeBook();
+      // else Escape (only: the letters that open the books pick slots in them) closes it
+      else if (k === 'Escape') closeBook();
       else if (e.code === 'Space') e.preventDefault();   // not even the focused Close button
       return;
     }
     if (e.code === 'Space') { e.preventDefault(); if (byContinue()) next(); }
-    else if (k === 'o') { if (GOD) flash('god-ok'); godSkip(); }
-    else if (k === 'p') { if (GOD) { flash('god-do'); Dots.eat(); } }
-    else if (k === 'i') { if (GOD) flash('god-ch'); godChapter(); }
+    else if (k === 'o') { if (DEV) flash('dev-ok'); devSkip(); }
+    else if (k === 'p') { if (DEV) { flash('dev-do'); Dots.eat(); } }
+    else if (k === 'i') { if (DEV) flash('dev-ch'); devChapter(); }
     else if (k === 'Enter') { e.preventDefault(); doPlay(); }
     else if (k === 'z') { if (lostShown()) doReset(); }   // only while Respawn shows
     else if (k === 'a') doFire();
     else if (k === 'x') { if (book.on) openBook(); }   // the morph book, as the Morphs / Choose buttons
     else if (k === 's') { if (!$('bullets').hidden) openBulletBook(); }   // the bullet book, as the Bullets button
+    else if (k === 'c') { if (!$('species').hidden) openSpeciesBook(); }   // the species book (sandbox mode)
     else if (k === 'd') { if (Bullets.cycle(-1)) flash('bullet-prev'); }
     else if (k === 'f') { if (Bullets.cycle(1)) flash('bullet-next'); }
     else if (k === 'q') doSpeed(-1);   // slower
@@ -1326,10 +1627,13 @@
   // ---- start ------------------------------------------------------------------------------
   // The world starts empty with no species; the script, run once the simulation has started,
   // loads the species and puts the creatures in.
-  const scriptText = fetch('script.txt', { cache: 'no-cache' })
-    .then(r => { if (!r.ok) throw new Error(`script.txt: HTTP ${r.status}`); return r.text(); });
+  const scriptText = fetch(SCRIPT_FILE, { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(`${SCRIPT_FILE}: HTTP ${r.status}`); return r.text(); });
   C.start({ empty: true }).then(() => scriptText.then(txt => {
+    if (ALL) Bullets.setList('all');
+    else if (MODE === 'sandbox') loadCentralInventory();
     SCRIPT = parseScript(txt);
+    fitMsg();
     // [jump_here] (for writing the script): start at the first line that has it. Every action on
     // the lines before it runs first, in order, so the set-up is as if played up to there; their
     // messages and conditions are skipped, and so are the chapter cards.
@@ -1339,5 +1643,5 @@
       for (const a of L.actions) if (a.name !== 'chapter') ACTIONS[a.name](...a.args);
     replaying = false;
     if (from < SCRIPT.length) run(from);
-  }, err => { console.error(err); say('Could not load the script (script.txt).'); }), Page.showError);
+  }, err => { console.error(err); say(`Could not load the script (${SCRIPT_FILE}).`); }), Page.showError);
 })();

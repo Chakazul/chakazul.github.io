@@ -1,5 +1,5 @@
-# script file of the game, see README.md for syntax
-[next_msg:Click here or press Space to continue:≫:⧗]
+# script file for story mode, see README.md for syntax
+[next_msg:Click here or {:Space} to continue:≫:⧗]
 [speed:1][gun:off][new_bullet:off][clone:off][erase:off][morph_book:off]
 [morph_book_action:clear_put][retry_action:clear_put]
 #[bullet:all:Orbium]
@@ -24,21 +24,22 @@ Thankfully, _Lenium_ actively senses and reacts to its surroundings.
 So we can steer the ship by blocking parts of its sensory field.
 In the right panel, try clicking on the ship to block its senses.[need:first_touch]
 Nice! You can now steer the ship, and even change its shape.
+At the top, choose which of {R}{G}{B} you want to interfere with.
 
 # morphs
 [new_scene]
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:limus]
 You may notice the ship is always spinning.
-In the panel, click Upward or press *E* to stay upward.[need:upward]
+In the panel, use {Upward:E} to stay upward.[need:upward]
 Much better.
 [morph_book:on]
-A specific shape and behavior of your ship is called a *morph*.
-This morph is named _limus_.
+A *morph* is a specific shape and behavior of your ship.
+This morph is called _limus_.
 Try to change it into another morph. (Hint: gently pat its side)[need:discover_morph:gyrans]
 Congrats! You discovered a new morph.
-Remember, when the ship dissolves, ...
-click Respawn (*Z*), or Choose (*X*) another discovered morph.
+Remember, only when the ship dissolves, ...
+use {Respawn:Z}, or {Choose:X} a morph to respawn.
 
 [new_scene]
 [upward:off]
@@ -48,8 +49,8 @@ This morph is _tardus_.
 Try to discover the hidden morph. (Hint: briefly pat its tail)[need:discover_morph:lithos]
 Nice, you are gentle and patient.
 Also try out the other controls in the panel.
-On a keyboard, hold *Shift* to show their keys.
-Now embarking for the _Sirius A_ star system, 9 light years away.
+On a keyboard, hold {:Shift} to show their keys.
+Now embark for the _Sirius A_ star system, 9 light years away.
 
 
 [chapter:2:You Are Not Alone]
@@ -58,7 +59,7 @@ Now embarking for the _Sirius A_ star system, 9 light years away.
 
 # dots
 [allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus]
-[discover_morph:limus,tardus]
+#[discover_morph:limus,tardus]
 [clear_world][put_player:limus]
 [dot:5][min_morph:6:paragyrans,paratardus,lithos+gyrans:far]
 Other ships appear, and so do *energy* packets.
@@ -68,15 +69,13 @@ Steer your ship to collect 50 energy.[need:energy:50]
 [gun:on]
 Enough energy for the *Lenium gun*!
 [bullet:Orbium:Orbium]
-Press *A* or click Fire to fire _Lenium_ bullets.
+{Fire:A} to fire _Lenium_ bullets.
 They mess with other ships' sensory fields.
 This _Orbium_ type bullet is weak. More types will come later.
-Reach 100 energy for a new bullet type.[need:energy:100]
-[bullet:Scutium:Scutium]
-The _Scutium_ bullet type has been created.
-Switch bullets using Bullets button or ◀ ▶ (*S/D/F*).
 [new_bullet:50]
 From now on, for every 50 energy, you can create a new bullet type.
+Reach 100 energy. Then {Create:S} a new bullet type.[need:create_bullet]
+Switch bullet type using {Bullets:S} or {◀:D} {▶:F}.
 Each bullet type has unique effects.
 Now we are leaving the _Orion Arm_.
 
@@ -89,9 +88,9 @@ Now we are leaving the _Orion Arm_.
 [allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,paratardus,sequetardus]
 [clear_world][put_player:rectus]
 [dot:3][min_morph:10:rectus,gyrans,tardus,lithos,paragyrans,antigyrans:far]
-We have arrived at the _Perseus Arm_, 7,000 light years from home.
-To survive the interstellar medium, our ship evolved.
-Evolved from _Aquarium originale_ into _Aquarium novus_.
+_Scutum-Centaurus Arm_ of the Milky Way, 10,000 light years from home.
+To survive the interstellar medium, our ship evolved into a new *species*.
+From _Aquarium originale_ evolved into _A. novus_.
 New species, new morph possibilities.
 
 # clone
@@ -100,9 +99,9 @@ New species, new morph possibilities.
 [dot:7][min_morph:2:paragyrans,antigyrans,paratardus:far]
 To engineer new morphs, we developed advanced *cloning* technology.
 [clone:on]
-In the right panel, choose a morph to clone, then place it near your ship.[need:first_clone]
+In the right panel, {Clone:X} a morph, and place it near your ship.[need:first_clone]
 Great! The placement, orientation, and timing, all are important.
-Use cloning to engineer a twin morph.[need:discover_morph:paragyrans,antigyrans,paratardus,sequetardus]
+Use cloning to combine two _gyrans_ into a twin morph.[need:discover_morph:paragyrans,antigyrans,paratardus,sequetardus]
 Bravo! You engineered a twin morph.
 
 # erase
@@ -112,7 +111,7 @@ Bravo! You engineered a twin morph.
 #However, this species is surprisingly resistant to cognitive masking, thus harder to dissolve.
 #That is why we pioneered *direct recycling* technology.
 #[erase:on]
-#Click R G B button twice to enter recycle mode, then dissolve the ship.[need:recycle]
+#{R} {G} {B} twice to enter recycle mode, then dissolve the ship.[need:recycle]
 #A large quantity of _Lenium_ has been recycled.
 
 Feel free to continue experimenting and finding new morphs.
@@ -154,7 +153,7 @@ You survived.
 [dot:3][min_morph:2:auctus:far]
 Mutations keep happening.
 You start as a dysfunctional morph of _Aquarium explodens_.
-Discover all 3 morphs. Reset if necessary.[need:discover_morph:rectus,tachus,cor:all]
+Discover all 3 morphs. {Retry:←} if necessary.[need:discover_morph:rectus,tachus,cor:all]
 You endured.
 
 [new_scene]
@@ -171,7 +170,7 @@ We will continue our interstellar journey.
 There is no objective while we are wandering through space.
 Just our _Lenium_ ships keep evolving to survive the interstellar medium.
 And to survive black hole mergers, supernovae, galaxy collisions, etc.
-Here is a selection of our Leniologists' favorites.
+Here is a selection of our Leniologists' favorite species.
 
 [new_scene]
 [species:Aquarium virgatus:KZ2BLD]
@@ -180,7 +179,7 @@ Here is a selection of our Leniologists' favorites.
 [dot:5][min_morph:5:rectus,gyrans:far]
 _Small Magellanic Cloud_, 200,000 light years from home.
 The striped species _Aquarium virgatus_.
-Find _virgatus_.[need:discover_morph:virgatus]
+Find morph _virgatus_.[need:discover_morph:virgatus]
 Next species...
 
 [new_scene]
@@ -190,7 +189,7 @@ Next species...
 [dot:5][min_morph:4:antigyrans,paragyrans:far]
 _Andromeda Galaxy_, 2,500,000 light years from home.
 The zigzagging species _Aquarium sinuosus_.
-Find _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
+Engineer twin morph _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
 Next species...
 
 [new_scene]
@@ -200,7 +199,7 @@ Next species...
 [dot:5][min_morph:3:metamorpha]
 _Virgo Cluster_, 53,800,000 light years from home.
 The shapeshifting species _Aquarium metamorpha_.
-Find _tachus_ or _tardus_ (both twin morphs).[need:discover_morph:tardus,tachus]
+Engineer twin morph _tachus_ or _tardus_.[need:discover_morph:tardus,tachus]
 Next species...
 
 
@@ -219,9 +218,9 @@ And finally, they go out of control.
 A so-called Gray Goo incident.
 To deal with these self-replicating machines, ...
 [bullet:Paraptera:Paraptera]
-[bullet_limit:10]
+[bullet_limit:15]
 you are equipped with the powerful bullet, _Paraptera_.
-Press *A* or click Fire.
+{Fire:A} to suppress their growth.
 Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
 [clear_world:empty]
@@ -236,14 +235,14 @@ Peace has been restored. Thank you for your service.
 # immune system
 [species:Cilium immunitatis:G6G6CR]
 [allow_morph:rectus,limus,tardus,lithos,munitus]
-[clear_world][put_player:rectus][put_morph:lithos:far][put_morph:munitus:far]
-[dot:3]
+[clear_world][put_player:rectus]
+[min_morph:10:rectus,limus]
 To prevent future Gray Goo events, we accelerated our evolution.
 At the edge of the universe, a new genus _Cilium_ was born.
 They could serve as the nascent immune system of a healthy universe.
 "These morphs may release a red substance that neutralizes Gray Goo, ...
-if the morphs work together," Leniologists suspect.
-Produce an abundance of the red substance.[need:mass:r:50]
+if only the morphs work together," Leniologists suspect so.
+Produce the red substance.[need:mass:r:50]
 The immune system works! Cooperation triumphs.
 Red Goo and Gray Goo are now perfectly balanced.
 
@@ -257,7 +256,7 @@ The *cognitive masking* capability of _Lenium_ was discovered ...
 by scientists Cool, Hartl, Levin and Petti, shortly after.
 Music: _Long Way_ by Rexlambo, _A Few Jumps Away_ by Arthur Vyncke, ...
 _Out of the Skies, Under the Earth_ by Chris Zabriskie, ...
-_Billions and Billions_ by Stellardrone
+_Billions and Billions_ by Stellardrone.
 Gameplay inspired by _FTL_, _Asteroids_.
 
 Thank you for your participation.
