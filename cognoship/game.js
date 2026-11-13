@@ -179,6 +179,12 @@
     C.setLayout(stacked, BAND, SHIP_SCALE, 1);   // the ship view at the right edge
     const layer = document.querySelector(stacked ? '.layer-ship' : '.layer-world');
     layer.append($('bullet-nav'), $('fire'));
+    let col = $('dev-col');
+    if (!col) {   // (made here if the page lacks it, e.g. an index.html cached from before it)
+      col = document.createElement('div'); col.id = 'dev-col'; col.className = 'dev-col';
+      document.querySelector('.layer-ship').append(col);
+    }
+    (stacked ? col : layer).append($('dev'), $('dev-fps'));   // ?dev=1: left of the ship view, a column
     fitMsg();
   }
   window.addEventListener('resize', applyLayout);
@@ -1383,7 +1389,9 @@
     fps.frames++;
     if (now - fps.t < 500) return;
     const s = (now - fps.t) / 1000;
-    $('dev-fps').textContent = `${Math.round(fps.frames / s)} fps · ${Math.round((C.simSteps - fps.steps) / s)} steps/s · ${C.stepMs.toFixed(1)} ms/step${FFTSim.on ? ' · FFT' : ''} · ${innerWidth}×${innerHeight} @${devicePixelRatio.toFixed(2)}`;   // (the CSS viewport and pixel ratio: for the phone test's sizes)
+    const parts = [`${Math.round(fps.frames / s)} fps`, `${Math.round((C.simSteps - fps.steps) / s)} steps/s`, `${C.stepMs.toFixed(1)} ms/step`,
+                   ...(FFTSim.on ? ['FFT'] : []), `${innerWidth}×${innerHeight}`, `@${devicePixelRatio.toFixed(2)}`];   // (the CSS viewport and pixel ratio: for the phone test's sizes)
+    $('dev-fps').textContent = parts.join(stacked ? '\n' : ' · ');   // stacked: one per row
     Object.assign(fps, { t: now, frames: 0, steps: C.simSteps });
   }
   // "SUCCESS" over the game window when a waiting line's [need] conditions are met: fades in, holds,

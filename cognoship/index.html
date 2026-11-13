@@ -85,6 +85,9 @@
           <button id="clone-ok" title="Paste the clone where it is placed" hidden>&#10003;</button>
           <button id="clone-cancel" title="Cancel the clone">&#10007;</button>
         </div>
+        <!-- the stacked layout: ?dev=1's buttons and stats, left of the ship view at its top, in a column
+             (game.js applyLayout moves #dev and #dev-fps in here, and back) -->
+        <div id="dev-col" class="dev-col"></div>
         <!-- in the ship view, between "Dissolved" and Upward / Zoom, when the world needs a reset (everything dissolved) -->
         <div class="ship-dead">
           <button id="reset" class="major" hidden title="Start again with your morph (Z)"><span class="kt">Respawn</span></button>
