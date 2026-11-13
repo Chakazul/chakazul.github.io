@@ -1,0 +1,4 @@
+[
+ {"code": "Z18A9R", "kernel": 3, "key": "m", "value": 0.121, "was": 0.123,
+  "why": "Makes the transgyrans crossing (two mirror gyrans meeting and parting) a stable morph instead of a passing state; the other Z18A9R morphs change by under 0.5 % in mass (MORPH.md, output/transgyrans/tune/)."}
+]

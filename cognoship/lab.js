@@ -24,7 +24,7 @@
   C.opt.circlesAll = () => mode === 'tuning' || (statsOn() && C.everyObject);
   C.opt.hoverTracks = () => statsOn() && C.everyObject;
   C.opt.stars = () => Page.soundOn;   // the star field follows the Stars button
-  C.banner = 'Reset (Z) or Add (X) to try again';
+  C.banner = 'Reset (Z) or Spray (X) to try again';
 
   // Stats chart (statschart.js): 3D or 2D phase space, a stat per axis (stats: t mass chan both hue
   // speed omega). Drag the 3D view to rotate it.
@@ -117,6 +117,7 @@
   }
   // A new species changes the rule: reset the world with its first morph.
   spSel.onchange = () => {
+    if (clone.held) endClone();   // (another rule)
     C.setPattern(C.listed().find(p => C.speciesOf(p) === spSel.value).id); C.reset(); spSel.blur();
     flash('species', 'reset');
   };
@@ -127,7 +128,10 @@
     spSel.onchange();
   }
   // A new morph of the same species only changes what Add (X) puts in; the world is kept.
-  function selectMorph(id) { C.selectMorph(id); mSel.value = C.pattern.id; }
+  function selectMorph(id) {
+    C.selectMorph(id); mSel.value = C.pattern.id;
+    if (clone.held) Clone.swap(clone.held, C.pattern, C.R);   // the held one changes with it
+  }
   // Picking a morph in the list, even the current one, also adds it (like Add). A native select
   // fires no change for the option already chosen, so it is cleared while open and restored after.
   const clearMorph = () => { if (mSel.selectedIndex >= 0) mSel.selectedIndex = -1; };
@@ -136,7 +140,11 @@
   const restoreMorph = () => { if (mSel.selectedIndex < 0) mSel.value = C.pattern.id; };
   mSel.addEventListener('blur', restoreMorph);
   mSel.addEventListener('keydown', e => { if (e.key === 'Escape') restoreMorph(); });
-  mSel.onchange = () => { selectMorph(mSel.value); mSel.blur(); flash('morph', 'add'); C.addPattern(); };
+  mSel.onchange = () => {
+    selectMorph(mSel.value); mSel.blur();
+    if (clone.held) flash('morph', 'add');   // (holding one to add: that one is held instead)
+    else { flash('morph', 'spray'); C.addPattern(); }
+  };
   // Previous / next morph (C / V), within the species, wrapping round.
   function stepPattern(d) {
     const n = mSel.options.length, i = (mSel.selectedIndex + d + n) % n;
@@ -148,15 +156,20 @@
   $('pat-next').onclick = nextMorph;
 
   // Each action with the controls it touches: Step while playing also pauses (Play/Pause).
-  const doPlay = () => { flash('play'); C.togglePlay(); };
+  const doPlay = () => {
+    if (clone.held) { clone.held.wasRunning = false; endClone(); }   // (Play while holding one: dropped)
+    flash('play'); C.togglePlay();
+  };
   const doStep = () => { flash(...(C.running && C.status === 'alive' ? ['play', 'step'] : ['step'])); C.stepOnce(); };
   const doReset = () => { flash('reset'); C.reset(); };
-  const doAdd = () => { flash('add'); C.addPattern(); };
+  const doSpray = () => { flash('spray'); C.addPattern(); };
+  const doAdd = () => { flash('add'); startClone(); };
   const doView = () => { flash('headup'); C.toggleHeadUp(); };
   const doSpeed = d => { flash('speed'); C.changeSpeed(d); };
   $('play').onclick = doPlay;
   $('step').onclick = doStep;
   $('reset').onclick = doReset;
+  $('spray').onclick = doSpray;
   $('add').onclick = doAdd;
   $('headup').onclick = doView;
   $('speed').value = C.speedIdx + 1;
@@ -336,14 +349,97 @@
     el.oninput = () => { set(+el.value); out.textContent = (+el.value).toFixed(2); C.analyze(0); };
   }
 
+  // ---- Add: a morph held to paste ---------------------------------------------------------
+  // Add (B) holds the current morph (clone.js): it follows the pointer over the world view and the
+  // ship view alike (shown in both: one board place), turned by ↻ (N) and flipped by ↔ (M) (as
+  // seen in the view the pointer was last in), until a click pastes it there, or Esc / ✗ cancels.
+  // A touch places it instead (moved by dragging), pasted by ✓ (or Enter). The simulation pauses
+  // while it is held, then plays on as before. Picking another morph holds that one instead.
+  const clone = { held: null };
+  let inWorld = true;   // the pointer was last over the world view (else the ship view)
+  $('ui').addEventListener('pointermove', e => {
+    const r = $('ui').getBoundingClientRect();
+    inWorld = (e.clientX - r.left) / r.width < C.PX / C.CW;
+  });
+  function startClone() {
+    const was = clone.held ? clone.held.wasRunning : C.running;
+    C.setRunning(false);
+    clone.held = Object.assign(Clone.hold(C.pattern, C.R), { wasRunning: was });
+    syncClone();
+  }
+  function endClone() {
+    const was = clone.held && clone.held.wasRunning;
+    clone.held = null; syncClone();
+    if (was) C.setRunning(true);
+  }
+  function syncClone() {
+    const H = clone.held;
+    $('clone-tools').hidden = !H;
+    $('clone-ok').hidden = !(H && H.at);   // ✓ once a touch has placed it
+    $('add').classList.toggle('clone-on', !!H);
+  }
+  function flipClone() { Clone.flip(clone.held, inWorld ? 0 : C.viewAngle()); }
+  // Paste it at cell at, follow what it became (a pasted creature, or the one it joined)
+  function pasteClone(at) {
+    Clone.paste(clone.held, at);
+    C.analyze(0);
+    const i = C.found ? Creatures.pick(C.found, at[0], at[1], 2 * C.R, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
+    if (i >= 0) C.setFocus(i);
+    endClone();
+  }
+  // Enter / ✓: where a touch placed it, else under the mouse (either view)
+  function confirmClone() {
+    const at = clone.held.at || C.pointerCell();
+    if (at) { flash('clone-ok'); pasteClone(at); }
+  }
+  const where = () => clone.held && (clone.held.at || C.pointerCell());
+  const press = (at, e) => {
+    if (!clone.held) return false;
+    if (e && e.pointerType !== 'mouse') { clone.held.at = at; syncClone(); return true; }
+    pasteClone(at);
+    return true;
+  };
+  const drag = (at, e) => { if (clone.held && clone.held.at && e && e.pointerType !== 'mouse') clone.held.at = at; };
+  C.opt.worldPress = press;
+  C.opt.worldDrag = drag;
+  C.opt.zoomPress = (off, e) => C.focus ? press([C.focus.col + off[0], C.focus.row + off[1]], e) : false;
+  C.opt.zoomDrag = (off, e) => { if (C.focus) drag([C.focus.col + off[0], C.focus.row + off[1]], e); };
+  // the ghost, in both views, at one board place
+  C.opt.worldGhost = () => {
+    const H = clone.held, at = where();
+    if (!at) return null;
+    return { at, r: H.form.w * C.WS * 0.75, draw: (ctx, x, y) => Clone.draw(ctx, H, x, y, 0, C.WS) };
+  };
+  C.opt.drawGhost = (ctx, hoverAt, centre, cellPx, phi, focus) => {
+    const H = clone.held;
+    if (!H) return false;
+    const at = where();
+    if (!at) return true;   // nothing to show, and no tool circle either
+    const b = [C.wrapD(at[0] - focus.col, C.BW), C.wrapD(at[1] - focus.row, C.BH)];
+    const c = Math.cos(-phi), s = Math.sin(-phi);   // board -> view
+    Clone.draw(ctx, H, centre[0] + (b[0] * c - b[1] * s) * cellPx, centre[1] + (b[0] * s + b[1] * c) * cellPx, phi, cellPx);
+    return true;
+  };
+  // the ghost keeps following the pointer over the buttons (they sit on the world view)
+  C.opt.keepHover = el => !!clone.held && !!el && $('clone-tools').contains(el);
+  $('clone-tools').addEventListener('pointermove', e => { if (clone.held) C.hoverAt(e); });
+  $('clone-rot').onclick = () => { if (clone.held) Clone.rotate(clone.held); };
+  $('clone-flip').onclick = () => { if (clone.held) flipClone(); };
+  $('clone-ok').onclick = () => { if (clone.held) confirmClone(); };
+  $('clone-cancel').onclick = () => { if (clone.held) endClone(); };
+
   // ---- keys -------------------------------------------------------------------------------
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'SELECT' || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (e.code === 'Space') { e.preventDefault(); doStep(); }
-    else if (k === 'Enter') { e.preventDefault(); doPlay(); }
+    else if (k === 'Enter') { e.preventDefault(); if (clone.held) confirmClone(); else doPlay(); }
+    else if (k === 'Escape') { if (clone.held) { flash('clone-cancel'); endClone(); } }
     else if (k === 'z') doReset();
-    else if (k === 'x') doAdd();
+    else if (k === 'x') doSpray();
+    else if (k === 'b') doAdd();
+    else if (k === 'n') { if (clone.held) { flash('clone-rot'); Clone.rotate(clone.held); } }
+    else if (k === 'm') { if (clone.held) { flash('clone-flip'); flipClone(); } }
     else if (k === 'c') e.shiftKey ? stepSpecies(-1) : prevMorph();
     else if (k === 'v') e.shiftKey ? stepSpecies(1) : nextMorph();
     else if (k === 'q') doSpeed(1);

@@ -132,6 +132,14 @@ const Core = (function () {
                 // circle when it returns true.
                 zoomPress: () => false,
                 keepHover: () => false,
+                // worldPress(at, e): a press on the world view at board cell at = [col, row]; true =
+                // taken by the page (no focus pick), its drag then follows (worldDrag(at, e)).
+                // worldGhost(hover): the page's own thing in the world view, { at, r, draw(ctx, x, y) }
+                // (drawn centred on cell at, wrapping round the edges within r px), or null; hover:
+                // the mouse's cell there, or null
+                worldPress: () => false,
+                worldDrag: () => {},
+                worldGhost: () => null,
                 // patchErase: the selected channel's patch toggles erase (no action patches)
                 patchErase: () => false,
                 // frameColor: the world view's frame around the followed creature (null: as the panel border)
@@ -142,6 +150,8 @@ const Core = (function () {
                 // focusCircle: a yellow circle around the followed creature in the world view (as
                 // Detect: Every draws it), inside its frame, also when the other circles are off
                 focusCircle: () => false,
+                // worldFrame: the world view framed as the ship panel, all four corners rounded alike
+                worldFrame: () => false,
                 // zoomDrag(off, e): the pointer of a press zoomPress took moves (off as zoomPress's)
                 zoomDrag: () => {},
                 drawGhost: () => false,
@@ -242,17 +252,20 @@ const Core = (function () {
   // Two levels: species (a rule code, e.g. 5N7KKM) and morph (a form of it, e.g. limus). Each
   // legacy pattern has its own rule settings, so it counts as a species with one morph.
   const speciesOf = p => p.logic === 'legacy' ? p.id : p.rule;
-  const SPECIES_NAMES = { '5N7KKM': 'Aquarium original', 'VT049W': 'Aquarium replicating', 'G6G6CR': 'Cilium',
-    'Z18A9R': 'Aquarium spinning', 'KH97WU': 'Aquarium dancing', 'GDNQYX': 'Aquarium drifting',
-    'HGMLH8': 'Aquarium shapeshifting', 'PJ1EF7': 'Aquarium multiplying', 'KZ2BLD': 'Aquarium striped',
-    'XEH4YR': 'Aquarium exploding', 'HAESRE': 'Aquarium zigzagging' };
-  const SPECIES_LAST = ['G6G6CR'];   // Cilium, the one non-Aquarium species, goes to the bottom
+  const SPECIES_NAMES = { '5N7KKM': 'Aquarium originale', 'VT049W': 'Aquarium replicans', 'G6G6CR': 'Cilium immunitatis',
+    'Z18A9R': 'Aquarium vorticosus', 'KH97WU': 'Aquarium dancing', 'GDNQYX': 'Aquarium novus',
+    'HGMLH8': 'Aquarium metamorpha', 'PJ1EF7': 'Aquarium multiplicans', 'KZ2BLD': 'Aquarium virgatus',
+    'XEH4YR': 'Aquarium explodens', 'HAESRE': 'Aquarium sinuosus' };
+  // Picker order, as sandbox.txt lists them (KH97WU, not in it, after the other Aquariums); others go last
+  const SPECIES_ORDER = ['5N7KKM', 'GDNQYX', 'Z18A9R', 'PJ1EF7', 'XEH4YR', 'KZ2BLD', 'HAESRE', 'HGMLH8',
+    'VT049W', 'KH97WU', 'G6G6CR'];
   const speciesName = p => p.logic === 'legacy' ? p.name : `${SPECIES_NAMES[p.rule] || p.rule} (${p.rule})`;
   const morphName = p => p.logic === 'legacy' ? 'rectus' : p.name.replace(p.rule + ' ', '');
   const BOOM = / \u{1F4A5}$/u;   // the self-replicating morphs' emoji: shown in the picker, not recorded
   const listed = () => {   // hidden: only via ?form=
     const l = PATTERNS.filter(p => !p.hidden || p === pattern);
-    return l.filter(p => !SPECIES_LAST.includes(p.rule)).concat(l.filter(p => SPECIES_LAST.includes(p.rule)));
+    const rank = p => { const i = SPECIES_ORDER.indexOf(p.rule); return i < 0 ? SPECIES_ORDER.length : i; };
+    return l.sort((a, b) => rank(a) - rank(b));   // stable: morphs keep their order within a species
   };
   const morphs = () => listed().filter(p => speciesOf(p) === speciesOf(pattern));
   // A new morph of the same species only changes what Add puts in; the world is kept.
@@ -762,6 +775,42 @@ const Core = (function () {
     else ctx.rect(PX + 3, 1, PW - 4, CH - 2);
     ctx.stroke();
   }
+  // The world view's frame: as the ship panel's border, its corners rounded as the canvas box's own
+  // (style.css .canvas-box, in CSS px; at least the panel's 10), and outside them the colour behind
+  // the canvas, so all four corners look alike (the box's CSS rounds only the canvas's outer ones).
+  // Both are read from the page at most twice a second (they change with the theme, fullscreen, size).
+  const worldCorner = { at: -1e9, r: 10, bg: '#000' };
+  function worldFrame() {
+    const now = performance.now();
+    if (now - worldCorner.at > 500) {
+      worldCorner.at = now;
+      const box = ui.parentElement;
+      worldCorner.r = Math.max(10, (parseFloat(getComputedStyle(box).borderTopLeftRadius) || 0) * logicalPerCss(false));
+      let bg = 'rgba(0, 0, 0, 0)';
+      for (let el = box.parentElement; el && /^rgba\(.*, 0\)$|^transparent$/.test(bg); el = el.parentElement)
+        bg = getComputedStyle(el).backgroundColor;
+      worldCorner.bg = /^rgba\(.*, 0\)$|^transparent$/.test(bg) ? '#000' : bg;
+    }
+    const r = worldCorner.r;
+    ctx.setLineDash([]);
+    if (ctx.roundRect) {   // the corners outside the rounded rectangle
+      ctx.fillStyle = worldCorner.bg;
+      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.roundRect(0, 0, PX, CH, r); ctx.fill('evenodd');
+    }
+    ctx.strokeStyle = PANEL_BORDER; ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(1, 1, PX - 2, CH - 2, r - 1); else ctx.rect(1, 1, PX - 2, CH - 2);
+    ctx.stroke();
+  }
+  // The world wraps round: the offsets (px) at which to draw a circle at (x, y), radius r, so that
+  // every part of it within the world view shows (x, y taken into the view first)
+  function wrapCopies(x, y, r) {
+    x = ((x % PX) + PX) % PX; y = ((y % CH) + CH) % CH;
+    const xs = [x], ys = [y];
+    if (x - r < 0) xs.push(x + PX); if (x + r > PX) xs.push(x - PX);
+    if (y - r < 0) ys.push(y + CH); if (y + r > CH) ys.push(y - CH);
+    return xs.flatMap(a => ys.map(b => [a, b]));
+  }
   const hueFill = (h, a) => Number.isFinite(h) ? `hsla(${h.toFixed(0)},100%,55%,${a})` : `rgba(200,200,200,${a})`;
 
   // ---- overlay --------------------------------------------------------------------------
@@ -845,23 +894,29 @@ const Core = (function () {
     const detEvery = detectMode === 'every';
     if (opt.circlesAll() || detEvery) {
       const hv = hovered();
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();   // (never into the ship view)
       ctx.setLineDash([]);
       for (const [k, c] of found.comps.entries()) {
         const isF = focus && Math.hypot(wrapD(c.col - focus.col, BW), wrapD(c.row - focus.row, BH)) < 0.5;
         const isH = hv && hv.i === k;
-        const x = (c.col + 0.5) * WS, y = (c.row + 0.5) * WS, r = Math.max(3, 2 * c.radius * WS);
-        ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+        const r = Math.max(3, 2 * c.radius * WS);
         const det = detEvery ? detOf(k, isF) : null, lab = shownLabel(det);
-        ctx.strokeStyle = lab ? hueFill(det.hue, 1)   // a known morph: thick, in its hue
-          : isF ? 'rgba(255,212,0,.9)' : isH ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)';
-        ctx.lineWidth = lab ? 3 : isH ? 2 : 1;
-        ctx.stroke();
-        if (lab) {
-          ctx.font = ital() + '600 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(lab, x, y - r - 2);
-          ctx.fillStyle = '#fff'; ctx.fillText(lab, x, y - r - 2);
+        // (with its name above it: the copies reach that far up)
+        for (const [x, y] of wrapCopies((c.col + 0.5) * WS, (c.row + 0.5) * WS, lab ? r + 16 : r)) {
+          ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+          ctx.strokeStyle = lab ? hueFill(det.hue, 1)   // a known morph: thick, in its hue
+            : isF ? 'rgba(255,212,0,.9)' : isH ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)';
+          ctx.lineWidth = lab ? 3 : isH ? 2 : 1;
+          ctx.stroke();
+          if (lab) {
+            ctx.font = ital() + '600 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(lab, x, y - r - 2);
+            ctx.fillStyle = '#fff'; ctx.fillText(lab, x, y - r - 2);
+          }
         }
       }
+      ctx.restore();
     }
 
     // zoom frame around the focus in the world view (rotated with the view), as the ship panel's
@@ -894,12 +949,25 @@ const Core = (function () {
     }
 
     // tool outline, in both views (dashed = mask, solid = erase, dotted = draw)
+    // (in the world view only, wrapping round its edges)
     const off = toolOffset();
     if (off) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
       ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2; ctx.setLineDash(ACTION_DASH[action].map(x => x * 2 / 3));
-      ctx.beginPath();
-      ctx.arc((focus.col + 0.5 + off[0]) * WS, (focus.row + 0.5 + off[1]) * WS, Math.max(2, maskR * WS), 0, 2 * Math.PI);
-      ctx.stroke();
+      const r = Math.max(2, maskR * WS);
+      for (const [x, y] of wrapCopies((focus.col + 0.5 + off[0]) * WS, (focus.row + 0.5 + off[1]) * WS, r)) {
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // the page's ghost in the world view (opt.worldGhost), wrapping round its edges
+    const wg = opt.worldGhost(worldHover);
+    if (wg) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
+      for (const [x, y] of wrapCopies((wg.at[0] + 0.5) * WS, (wg.at[1] + 0.5) * WS, wg.r)) wg.draw(ctx, x, y);
+      ctx.restore();
     }
     // ship view: the tool circle follows the pointer while it hovers, filled while pressed
     const ring = masking ? masking.view : hover;
@@ -1023,6 +1091,7 @@ const Core = (function () {
       ctx.fillRect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge);
       panelBorder();   // its sides run through the square: drawn again, unfaded
     }
+    if (opt.worldFrame()) worldFrame();   // last: over everything in the world view, unfaded
   }
 
   // ---- canvas input ---------------------------------------------------------------------
@@ -1046,6 +1115,9 @@ const Core = (function () {
     const p = canvasPoint(e);
     if (p[0] < 0) return;   // (the stacked canvas's band)
     if (p[0] < PX) {
+      if (e.button === 0 && opt.worldPress([p[0] / WS - 0.5, p[1] / WS - 0.5], e)) {   // taken by the page
+        pageDrag = e.pointerId; dragWorld = true; ui.setPointerCapture(e.pointerId); e.preventDefault(); return;
+      }
       // world view: focus the creature under (or near) the click
       if (!opt.clickFocus()) return;
       const i = Creatures.pick(found, p[0] / WS - 0.5, p[1] / WS - 0.5, CLICK_GATE, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH);
@@ -1063,7 +1135,7 @@ const Core = (function () {
     }
     if (inZoom(p) && focus && !masking && e.button === 0) {
       if (opt.zoomPress(rot(viewOffset(p)), e)) {   // taken by the page: its drag follows (opt.zoomDrag)
-        pageDrag = e.pointerId; ui.setPointerCapture(e.pointerId); e.preventDefault(); return;
+        pageDrag = e.pointerId; dragWorld = false; ui.setPointerCapture(e.pointerId); e.preventDefault(); return;
       }
       masking = { id: e.pointerId, view: viewOffset(p) };
       ui.setPointerCapture(e.pointerId);
@@ -1098,14 +1170,18 @@ const Core = (function () {
     if (ui.title !== tip) ui.title = tip;
     ui.style.cursor = tip ? 'pointer' : '';   // a hand over the patches
     if (masking && e.pointerId === masking.id) masking.view = viewOffset(p);
-    if (pageDrag === e.pointerId) opt.zoomDrag(rot(viewOffset(p)), e);
+    if (pageDrag === e.pointerId) {
+      if (!dragWorld) opt.zoomDrag(rot(viewOffset(p)), e);
+      else if (p[0] >= 0 && p[0] < PX && p[1] < CH) opt.worldDrag([p[0] / WS - 0.5, p[1] / WS - 0.5], e);
+    }
     hover = e.pointerType === 'mouse' && inZoom(p) ? viewOffset(p) : null;
     worldHover = e.pointerType === 'mouse' && p[0] >= 0 && p[0] < PX ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
   });
   // (opt.keepHover(el): keep the ship-view hover point when the pointer moves onto el, e.g. a
   // button over the view)
-  ui.addEventListener('pointerleave', e => { if (!opt.keepHover(e.relatedTarget)) hover = null; worldHover = null; });
-  let pageDrag = null;   // the pointer of a press the page took (opt.zoomPress), while held
+  ui.addEventListener('pointerleave', e => { if (!opt.keepHover(e.relatedTarget)) { hover = null; worldHover = null; } });
+  let pageDrag = null;   // the pointer of a press the page took (opt.zoomPress, opt.worldPress), while held
+  let dragWorld = false;   // ... in the world view (else the ship view)
   const endMask = e => { if (masking && e.pointerId === masking.id) masking = null; if (pageDrag === e.pointerId) pageDrag = null; };
   ui.addEventListener('pointerup', endMask);
   ui.addEventListener('pointercancel', endMask);
@@ -1113,7 +1189,17 @@ const Core = (function () {
   ui.addEventListener('contextmenu', e => e.preventDefault());
   // The ship-view hover point from a pointer event elsewhere (a page's button over the view), so
   // what follows the pointer keeps following it there.
-  function hoverAt(e) { const p = canvasPoint(e); hover = e.pointerType === 'mouse' && inZoom(p) ? viewOffset(p) : null; }
+  function hoverAt(e) {
+    const p = canvasPoint(e), mouse = e.pointerType === 'mouse';
+    hover = mouse && inZoom(p) ? viewOffset(p) : null;
+    worldHover = mouse && p[0] >= 0 && p[0] < PX && p[1] < CH ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
+  }
+  // The board cell [col, row] under the mouse, in either view, or null
+  function pointerCell() {
+    if (worldHover) return worldHover;
+    if (hover && focus) { const b = rot(hover); return [focus.col + b[0], focus.row + b[1]]; }
+    return null;
+  }
   // Drop the held tool and the hover ring (e.g. when something covers the ship view).
   function clearPointer() { masking = null; hover = null; }
 
@@ -1144,7 +1230,7 @@ const Core = (function () {
 
   const core = {
     // constants
-    q, R, DEBUG, BW, BH, WS, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
+    q, R, DEBUG, BW, BH, WS, PX, CW, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
     CH_NAMES, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
     // live objects (mutated in place)
     stats, md, opt, hooks,
@@ -1153,7 +1239,7 @@ const Core = (function () {
     // helpers
     deg, wrapD, viewAngle, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass,
     // actions
-    start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt,
+    start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt, pointerCell,
     pickChannel, setLayout, logicalPerCss,
     setDetectMode, setEveryObject, setRunning, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
     setZoom, setMaskR, setStars, starDrift,

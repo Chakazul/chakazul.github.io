@@ -208,10 +208,15 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game: the Morphs button, right-aligned in the ship view, at canvas y 97 of 512 (18.95%: where the
    name box was; it is now at the bottom, core.js opt.nameBoxLow), 2 px higher by eye */
 .clone-tools{position:absolute;right:12px;top:calc(18.95% + var(--ui-h) * .5 + 6px);z-index:3;
-  display:grid;grid-template-columns:repeat(2,var(--ui-h));gap:6px}   /* below Morphs: ↻ ↔ / ✓ 🗙, two to a row */
-#clone-ok[hidden]{display:block;visibility:hidden}   /* keeps its place, so 🗙 stays put */
+  display:grid;grid-template-columns:repeat(2,var(--ui-h));gap:6px}   /* below Morphs: ↻ ↔ / ✓ ✗, two to a row */
+#clone-ok[hidden]{display:block;visibility:hidden}   /* keeps its place, so ✗ stays put */
 .clone-tools[hidden]{display:none}
-#morphs.clone-on{border:2px solid var(--clone)}   /* clone mode allowed ([clone:on]) */
+#morphs.clone-on{border:2px solid var(--clone)}
+/* Lab: the same buttons in a row at the top left of the world view (lab.html, Add) */
+#clone-tools.lab-clone{--ui-h:34px;--ui-font:14px;left:12px;top:12px;right:auto;display:flex;gap:6px}
+#clone-tools.lab-clone[hidden],.lab-clone #clone-ok[hidden]{display:none}
+.lab-clone button{height:var(--ui-h)}
+#add.clone-on{border-color:var(--clone);color:var(--clone)}   /* Lab: a morph held to add */   /* clone mode allowed ([clone:on]) */
 #bullets.new{border:2px solid var(--new);color:var(--new)}   /* a bullet pattern can be created ([new_bullet]): "Create" */
 #clone-tools button{width:var(--ui-h);padding:0;border-radius:50%;font-size:calc(var(--ui-font) * 1.3);line-height:1;
   border:2px solid var(--clone)}

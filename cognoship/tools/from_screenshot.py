@@ -24,9 +24,22 @@ Steps (the ones used for Z18A9R trias):
      the correlation of per-channel radial profiles around the CoM (rotation-free), with the
      settled state shown as the screenshot would show it;
   4. its settled state, recentred and cropped, is the pattern, at R = --R.
-Writes into --out (default: /tmp/from_screenshot_<name>): seed.png (the grid as read),
-scales.png (each pair at the end of the verify run; rows = gammas, columns = scales),
+Writes into --out (default: output/from_screenshot_<name>, gitignored): seed.png (the grid as
+read), scales.png (each pair at the end of the verify run; rows = gammas, columns = scales),
 verify.png (the chosen pattern at the start, middle and end of the verify run) and pattern.json.
+
+Options for harder sources (the ones used for Z18A9R transgyrans, from a recording):
+  - a video (.mp4, .mov, .webm, .mkv; needs ffmpeg): --frame N reads its N-th frame (from 1);
+  - --crop x0,y0,x1,y1: only that part of the image (px), e.g. one creature of several;
+  - --clean-overlays: paint out what the game draws over the world view before reading it: the
+    ship view's grey frame, the grey detection circles and the yellow one of the followed ship
+    (also as a recording's softened colours show them), filled in from their neighbours; stray
+    bits left apart from the bodies are dropped from the grid;
+  - --raw: keep the grid as read (values ** --gamma), not settled or checked: for a passing
+    state (e.g. two creatures mid-interaction), which settling would turn into what it becomes.
+Example:
+  ~/github/complexity/.venv/bin/python tools/from_screenshot.py "../assets/screenshots/Z18A9R transgyrans.mp4" \\
+      --frame 1 --clean-overlays --raw --gamma 1.8 --px 4.85 --code Z18A9R --name transgyrans [--add]
 """
 import argparse, itertools, json, os, re, sys
 from fractions import Fraction
@@ -51,6 +64,8 @@ def load_rule(src, code):
     else:
         sys.exit(f'no entry with code {code} in {src}')
     ps = [dict(p) for p in e['params']]
+    for t in json.load(open(os.path.join(HERE, 'rule_tweaks.json'))):   # as tools/gen_aquarium.py
+        if t['code'] == code: ps[t['kernel']][t['key']] = t['value']
     T, dn = ps[0]['T'], [0.0, 0.0, 0.0]
     for p in ps: dn[p['c'][1]] += p['h']
     for p in ps: p['h'] = round(p['h'] / dn[p['c'][1]], 3)   # free_h
@@ -171,6 +186,61 @@ def window(A, r=64):
 
 
 # ---- 1. the cell grid --------------------------------------------------------------------------
+def video_frame(path, n, out):
+    """The n-th frame (from 1) of a video, as a png in out (ffmpeg)"""
+    import subprocess
+    png = os.path.join(out, f'frame{n:04d}.png')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', path, '-vf', f'select=eq(n\\,{n - 1})', '-vsync', '0',
+                    '-frames:v', '1', png], check=True)
+    return png
+
+
+def crop_image(path, box, out):
+    x0, y0, x1, y1 = box
+    png = os.path.join(out, 'cropped.png')
+    Image.open(path).convert('RGB').crop((x0, y0, x1, y1)).save(png)
+    return png
+
+
+def clean_overlays(path, out):
+    """Paint out the game's overlays on the world view, by colour: grey (the ship view's frame,
+    the detection circles, and their soft edges) and the followed ship's yellow circle (#ffd400,
+    ~(170, 155, 60) in a recording); then fill them in from their neighbours."""
+    im = np.asarray(Image.open(path).convert('RGB')).astype(float)
+    r, g, b = im[..., 0], im[..., 1], im[..., 2]
+    mx, mn, rr = im.max(2), im.min(2), np.maximum(r, 1)
+    grey = (mx - mn < 22) & (mx > 14) & (mx < 175)
+    yellow = (r > 40) & (r < 215) & (g / rr > 0.72) & (g / rr < 0.97) & (b / rr > 0.1) & (b / rr < 0.55)
+    mask = ndimage.binary_dilation(grey | yellow, iterations=2)
+    known = ~mask
+    for _ in range(60):
+        s = np.zeros_like(im); c = np.zeros(mask.shape)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            s += np.roll(im * known[..., None], (dy, dx), (0, 1)); c += np.roll(known, (dy, dx), (0, 1))
+        fill = ~known & (c > 0)
+        im[fill] = s[fill] / c[fill, None]; known |= fill
+    png = os.path.join(out, 'cleaned.png')
+    Image.fromarray(im.clip(0, 255).astype(np.uint8)).save(png)
+    return png
+
+
+def drop_strays(A, thr=0.08, min_mass=40):
+    """Zero the bits of the grid apart from the bodies (connected parts of less than min_mass)"""
+    lab, n = ndimage.label(A.sum(0) > thr)
+    if n:
+        sz = ndimage.sum(A.sum(0), lab, range(1, n + 1))
+        A[:, ~np.isin(lab, 1 + np.nonzero(sz >= min_mass)[0])] = 0
+    return crop(A)
+
+
+def add_entry(entry):
+    path = os.path.join(HERE, 'extra_patterns.json')
+    extra = json.load(open(path)) if os.path.exists(path) else []
+    extra = [x for x in extra if (x['code'], x['name']) != (entry['code'], entry['name'])] + [entry]
+    json.dump(extra, open(path, 'w'), indent=1)
+    print(f'added to {path}; now run: python3 tools/gen_aquarium.py')
+
+
 def read_grid(path, px=None, floor=0.03, keep_grey=False):
     im = np.asarray(Image.open(path).convert('RGB')).astype(float) / 255
     lum = im.sum(2)
@@ -268,7 +338,7 @@ DRIFT = 0.015  # and then stays within 1.5 %
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('png')
+    ap.add_argument('png', help='a screenshot, or a video (.mp4 .mov .webm .mkv) with --frame')
     ap.add_argument('--code', required=True, help='rule code in 233.json, e.g. Z18A9R')
     ap.add_argument('--name', required=True, help='form name, e.g. trias')
     ap.add_argument('--R', type=int, default=18, help='the R the screenshot was taken at (default 18)')
@@ -286,13 +356,42 @@ def main():
     ap.add_argument('--out', help='folder for images and pattern.json')
     ap.add_argument('--add', action='store_true', help='append to tools/extra_patterns.json')
     ap.add_argument('--jobs', type=int, default=os.cpu_count())
+    ap.add_argument('--frame', type=int, default=1, help="a video's frame to read (from 1; default 1)")
+    ap.add_argument('--crop', help='x0,y0,x1,y1: read only this part of the image (px)')
+    ap.add_argument('--clean-overlays', action='store_true',
+                    help="paint out the game's overlays first (the ship view's frame, the detection circles)")
+    ap.add_argument('--raw', action='store_true',
+                    help='keep the grid as read (values ** --gamma): no settling, no checks (a passing state)')
+    ap.add_argument('--gamma', type=float, default=1.8, help='with --raw: cell value = screenshot value ** gamma (default 1.8)')
     a = ap.parse_args()
 
-    out = a.out or os.path.join('/tmp', 'from_screenshot_' + re.sub(r'\W+', '_', a.name))
+    out = a.out or os.path.join(HERE, '..', 'output', 'from_screenshot_' + re.sub(r'\W+', '_', a.name))
     os.makedirs(out, exist_ok=True)
-    raw, per, ph = read_grid(a.png, a.px, a.floor, a.keep_grey)
+    png = a.png
+    if os.path.splitext(png)[1].lower() in ('.mp4', '.mov', '.webm', '.mkv', '.m4v'):
+        png = video_frame(png, a.frame, out)
+    if a.crop:
+        png = crop_image(png, [int(v) for v in a.crop.split(',')], out)
+    if a.clean_overlays:
+        png = clean_overlays(png, out)
+    raw, per, ph = read_grid(png, a.px, a.floor, a.keep_grey)
+    if a.clean_overlays:
+        raw = drop_strays(raw)
     save_png(os.path.join(out, 'seed.png'), raw, 5)
     print(f'grid: {per:.2f} px per cell, phase {ph:.1f}; seed {raw.shape[2]}x{raw.shape[1]} cells')
+
+    if a.raw:
+        cells = crop(np.clip(raw ** a.gamma, 0, 1))
+        src = os.path.basename(a.png) + (f' (frame {a.frame})' if png != a.png and 'frame' in os.path.basename(png) else '')
+        entry = {'code': a.code, 'name': a.name, 'R': a.R,
+                 'source': f'Read from {src} (Cognoship at R = {a.R}) by tools/from_screenshot.py --raw'
+                           f'{" --clean-overlays" if a.clean_overlays else ""}: {per:.2f} px per cell, values ** {a.gamma}; '
+                           'as read, not settled.',
+                 'cells': [cells2rle(c) for c in cells]}
+        json.dump(entry, open(os.path.join(out, 'pattern.json'), 'w'), indent=1)
+        print(f'raw: {cells.shape[2]}x{cells.shape[1]} cells, mass {cells.sum():.0f}; images and pattern.json in {out}')
+        if a.add: add_entry(entry)
+        return
 
     ps, T = load_rule(a.src, a.code)
     CFG.update(ps=ps, T=T, R=a.R, raw=raw, settle=a.settle, verify=a.verify)
@@ -337,12 +436,7 @@ def main():
     json.dump(entry, open(os.path.join(out, 'pattern.json'), 'w'), indent=1)
     print(f'chose gamma {g}, scale {z}: {cells.shape[2]}x{cells.shape[1]} cells, mass {cells.sum():.0f}, shape {sim:.2f}')
     print(f'images: {out}/seed.png, {out}/scales.png, {out}/verify.png')
-    if a.add:
-        path = os.path.join(HERE, 'extra_patterns.json')
-        extra = json.load(open(path)) if os.path.exists(path) else []
-        extra = [x for x in extra if (x['code'], x['name']) != (a.code, a.name)] + [entry]
-        json.dump(extra, open(path, 'w'), indent=1)
-        print(f'added to {path}; now run: python3 tools/gen_aquarium.py')
+    if a.add: add_entry(entry)
 
 
 if __name__ == '__main__':

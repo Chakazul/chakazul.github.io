@@ -34,7 +34,8 @@ entries = [json.loads(l.rstrip().rstrip(',')) for l in lines[1:76] if l.strip()]
 # Renamed after the steps above (so VT049W's first "para" still becomes "paralimus")
 POST_RENAME = {('G6G6CR', 'fortified'): 'munitus', ('VT049W', 'para'): 'paragyrans',
                ('KH97WU', 'antipara'): 'antigyrans', ('KH97WU', 'dual'): 'impetus+gyrans',
-               ('HAESRE', 'anti'): 'antigyrans', ('HAESRE', 'para'): 'paragyrans'}
+               ('HAESRE', 'anti'): 'antigyrans', ('HAESRE', 'para'): 'paragyrans',
+               ('VT049W', 'rectus+gyrans'): 'pararectus'}
 BOOM = {('XEH4YR', 'auctus')}   # self-replicating, though not marked R in the file
 RENAME = {('KZ2BLD', ''): 'virgatus', ('KZ2BLD', 'gyrans tachus'): 'gyrans',
           ('HGMLH8', 'parapedes'): 'tardus', ('HGMLH8', 'para'): 'tachus'}
@@ -53,6 +54,10 @@ def clean(code, name, k):
     name = re.sub(r'\s+R$', ' (replicating)', name)   # "vagus R" -> "vagus (replicating)"
     return RENAME.get((code, name), name)
 
+# Changes to a code's rule (tools/rule_tweaks.json, shared with tools/from_screenshot.py): one
+# kernel parameter set to a new value, e.g. Z18A9R kernel 3's m, so transgyrans is stable
+TWEAKS = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rule_tweaks.json')))
+
 rules, pats, seen, zk = {}, [], {}, 0
 for e in entries:
     code = e['code'].split('<')[0]
@@ -65,6 +70,10 @@ for e in entries:
     name = POST_RENAME.get((code, name), name)
     p0 = e['params'][0]
     ks = [{key: p[key] for key in KEYS} for p in e['params']]
+    for t in TWEAKS:
+        if t['code'] == code:
+            assert ks[t['kernel']][t['key']] == t['was'], (code, t)
+            ks[t['kernel']][t['key']] = t['value']
     assert all(p['kn'] == 1 and p['gn'] == 1 for p in e['params']), e['name']
     base = re.sub(r'[ ()]+', '-', name).strip('-')
     pid = f'{code}-{base}'

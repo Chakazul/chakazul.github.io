@@ -82,8 +82,8 @@
         <div id="clone-tools" class="clone-tools" hidden>
           <button id="clone-rot" title="Turn the clone 45 degrees clockwise">&#8635;</button>
           <button id="clone-flip" title="Flip the clone left to right">&#8596;</button>
-          <button id="clone-ok" title="Paste the clone where it is placed" hidden>&#10004;</button>
-          <button id="clone-cancel" title="Cancel the clone">&#x1F5D9;</button>
+          <button id="clone-ok" title="Paste the clone where it is placed" hidden>&#10003;</button>
+          <button id="clone-cancel" title="Cancel the clone">&#10007;</button>
         </div>
         <!-- in the ship view, between "Dissolved" and Upward / Zoom, when the world needs a reset (everything dissolved) -->
         <div class="ship-dead">
@@ -99,7 +99,7 @@
           <button id="book-close">Close</button>
           <div id="book-species" class="book-species" hidden></div>
           <!-- sandbox mode: held for 3 s, clears the central inventory -->
-          <div id="book-clear" class="book-clear" hidden title="Hold for 3 seconds to clear every discovered morph and bullet, from every run">Hold to clear data</div>
+          <div id="book-clear" class="book-clear" hidden title="Hold for 3 seconds to clear every discovered morph and bullet, and the energy, from every run">Hold to clear data</div>
         </div>
       </div>
       <!-- "SUCCESS", centred over the game window when a line's [need] conditions are met, fading out -->
@@ -138,6 +138,7 @@
 <script src="dots.js"></script>
 <script src="bullet_patterns.js"></script>
 <script src="bullets.js"></script>
+<script src="clone.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

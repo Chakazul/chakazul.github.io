@@ -50,7 +50,8 @@ Mode, **Hold to clear data** in any book (held for 3 seconds) erases it.
 - **Fire** (`A`, the round button): shoots the bullet type in use the way the ship is heading
   (a standing ship fires at random). Bullets confuse the senses of what they hit, including your
   own ship if you fly into them. ◀ ▶ (`D` `F`) or the **Bullets** button (`S`) switch types; when
-  it reads **Create**, you have enough energy for a new type: open it and pick a **?**.
+  it reads **Create**, you have enough energy for a new type: open it and pick a **?** (it costs
+  that energy).
 - **Clone:** when the Morphs button reads **Clone**, pick a discovered morph and place a copy of
   it (↻ turns it, ↔ flips it). You board the copy: it becomes your ship, and the old one drifts
   on. Paste it away from your ship to switch morph; paste another next to you, and the two may

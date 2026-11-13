@@ -20,8 +20,9 @@ can instead erase or draw mass, for comparison.
   action (`4` `5` `6`): **Mask** (dashed: hidden from the kernels, no mass touched; G mask
   steers best), **Erase** (solid: set to 0 while held), **Draw** (dotted: set to 1).
 - **Pause** (`Enter`) · **Step** (`Space`) · **Mask radius**.
-- **Reset** (`Z`): clear the board and put the pattern in the centre. **Add** (`X`): add it at a
-  random empty spot and angle, keeping the board.
+- **Reset** (`Z`): clear the board and put the pattern in the centre. **Spray** (`X`): add it at a
+  random empty spot and angle, keeping the board. **Add** (`B`): hold it to paste where you click,
+  in the world view or the ship view; ↻ ↔ (`N` `M`) turn and flip it, `Enter` pastes, `Esc` cancels.
 - **Speed** (`Q` faster, `W` slower): 1/8 to 8, 30 steps a second at 1, by the clock.
 - **Zoom** of the ship view. **Heading up** (`E`): turn the ship view with the direction of travel.
 - **Species** and **Morph** pickers (`C` `V` step morphs; `Shift`+`C` / `V` step species).

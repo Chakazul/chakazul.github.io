@@ -47,6 +47,7 @@
     if (m === MODE) $(id).setAttribute('aria-current', 'page');
   }
   C.opt.circlesAll = () => DEV;
+  C.opt.worldFrame = () => true;   // the world view framed as the ship view, its corners rounded alike
   C.opt.focusCircle = () => true;   // a yellow circle around the ship's detected object, inside the frame
   C.opt.frameColor = () => '#fff';   // the world view's frame around the ship: white      // with the morph's colour dot, as in the morph book
   // Only the player's ship ([put_player]) is ever followed: no creature is focused by being put
@@ -377,8 +378,7 @@
     const wasRunning = clone.held ? clone.held.wasRunning : book.wasRunning;
     closeBook();
     C.setRunning(false);   // paused until it is placed (or cancelled), then as it was
-    clone.held = { name, M: [1, 0, 0, 1], src: Rule.formCells(p.cells, p.R, C.R), wasRunning };
-    buildClone();
+    clone.held = Object.assign(Clone.hold(p, C.R, name), { wasRunning });
     syncButtons();
   }
   // Drop the held clone (pasted or cancelled); off: also disallow clone mode ([clone:off]).
@@ -392,44 +392,9 @@
   // the ghost keeps following the pointer over ↻ / ↔ (they sit on the ship view)
   C.opt.keepHover = el => !!clone.held && !!el && $('clone-tools').contains(el);
   $('clone-tools').addEventListener('pointermove', e => { if (clone.held) C.hoverAt(e); });
-  // The held form turned and flipped by M (board frame), resampled bilinearly, and its picture
-  // (rgb = channels, alpha = their largest) for the ghost.
-  function buildClone() {
-    const H = clone.held, s = H.src, [a, b, c, d] = H.M, det = a * d - b * c;
-    const inv = [d / det, -b / det, -c / det, a / det];   // M^-1, row-major
-    const S = Math.ceil(Math.hypot(s.w, s.h)) + 2, m = (S - 1) / 2, sx0 = (s.w - 1) / 2, sy0 = (s.h - 1) / 2;
-    const cells = [0, 1, 2].map(() => Array.from({ length: S }, () => new Array(S).fill(0)));
-    const at = (k, y, x) => (y >= 0 && y < s.h && x >= 0 && x < s.w ? s.cells[k][y][x] : 0);
-    for (let y = 0; y < S; y++)
-      for (let x = 0; x < S; x++) {
-        const dx = x - m, dy = y - m, sx = inv[0] * dx + inv[1] * dy + sx0, sy = inv[2] * dx + inv[3] * dy + sy0;
-        const x0 = Math.floor(sx), y0 = Math.floor(sy), fx = sx - x0, fy = sy - y0;
-        for (let k = 0; k < 3; k++)
-          cells[k][y][x] = (at(k, y0, x0) * (1 - fx) + at(k, y0, x0 + 1) * fx) * (1 - fy) + (at(k, y0 + 1, x0) * (1 - fx) + at(k, y0 + 1, x0 + 1) * fx) * fy;
-      }
-    H.form = { w: S, h: S, cells };
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = S;
-    const g = cv.getContext('2d'), im = g.createImageData(S, S);
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const v = [0, 1, 2].map(k => cells[k][y][x]), i = (y * S + x) * 4;
-      im.data.set([...v.map(q => Math.round(255 * Math.min(1, q))), Math.round(255 * Math.min(1, Math.max(...v)))], i);
-    }
-    g.putImageData(im, 0, 0);
-    H.img = cv;
-  }
-  const mul = (P, Q) => [P[0] * Q[0] + P[1] * Q[2], P[0] * Q[1] + P[1] * Q[3], P[2] * Q[0] + P[3] * Q[2], P[2] * Q[1] + P[3] * Q[3]];
-  function rotateClone() {   // 45 degrees clockwise as seen (a rotation looks the same in any view)
-    if (!clone.held) return;
-    const r = Math.PI / 4, c = Math.cos(r), s = Math.sin(r);
-    clone.held.M = mul([c, -s, s, c], clone.held.M); buildClone();
-  }
-  function flipClone() {     // left to right as seen: the view's horizontal flip, in the board frame
-    if (!clone.held) return;
-    const p = C.viewAngle(), c = Math.cos(p), s = Math.sin(p);
-    const R = [c, -s, s, c], Ri = [c, s, -s, c];
-    clone.held.M = mul(mul(mul(R, [-1, 0, 0, 1]), Ri), clone.held.M); buildClone();
-  }
+  // ↻: 45 degrees clockwise; ↔: left to right as seen in the ship view (clone.js)
+  function rotateClone() { if (clone.held) Clone.rotate(clone.held); }
+  function flipClone() { if (clone.held) Clone.flip(clone.held, C.viewAngle()); }
   // the ghost over the ship view, drawn as the view shows the board (phi: board = rot(view, phi)):
   // where it is placed (a touch, awaiting ✓), else under the hovering mouse
   C.opt.drawGhost = (ctx, hoverAt, centre, cellPx, phi, focus) => {
@@ -442,9 +407,7 @@
       x = centre[0] + (b[0] * c - b[1] * s) * cellPx; y = centre[1] + (b[0] * s + b[1] * c) * cellPx;
     } else if (hoverAt) [x, y] = hoverAt;
     else return true;   // nothing to show, and no tool circle either
-    ctx.translate(x, y); ctx.rotate(-phi); ctx.scale(cellPx, cellPx);
-    ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 0.75;
-    ctx.drawImage(H.img, -H.form.w / 2, -H.form.h / 2);
+    Clone.draw(ctx, H, x, y, phi, cellPx);
     return true;
   };
   // A click on the ship view pastes the held clone there (centred on the pointer). A touch (no
@@ -470,7 +433,7 @@
   // becoming one half and pasting the other next to it.
   function pasteClone(at) {
     const H = clone.held;
-    SimGL.add(H.form, Math.round(at[1] - H.form.h / 2), Math.round(at[0] - H.form.w / 2));
+    Clone.paste(H, at);
     C.analyze(0);
     const i = C.found ? Creatures.pick(C.found, at[0], at[1], 2 * C.R, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
     if (i >= 0) { C.setFocus(i); playerMorph = H.name; retake = true; cand = null; }
@@ -488,18 +451,13 @@
   // Keys picking a slot, by its place: the books' rows of 4 on the keyboard's rows (morphs: ASDF,
   // ZXCV; bullets: 1234, QWER, ASDF, ZX..).
   const SLOT_KEYS = { morph: [...'ASDFZXCV'], bullet: [...'1234QWERASDFZXCV'], species: [...'QWERASDFZX'] };
-  // [new_bullet:<n>]: one pattern for every n energy (the score, from 0), less those listed: how
-  // many more can be created now
-  let bulletsCreated = 0;   // patterns created this run ([need:create_bullet], bulletCredits)
-  // One pattern per <every> energy gathered this run (the score, from 0 at the run's start), less
-  // those gained this run, scripted ([bullet]) or created: the ones the run started with (the
-  // sandbox's inventory, ?all=1) do not count. (Story: 30 energy, Orbium given, [new_bullet:30]:
-  // the next one at 60.)
-  let bulletsAtStart = 0;   // the list's length when the script started
+  // [new_bullet:<n>]: creating a pattern costs n energy (the score): how many more can be created
+  // now, with the energy there is (none while it is below n), at most as many as are not listed
+  let bulletsCreated = 0;   // patterns created this run ([need:create_bullet])
   function bulletCredits() {
     if (!newBullet || !Bullets.on) return 0;
     const have = Bullets.list.length, all = Object.keys(Bullets.KINDS).length;
-    return Math.max(0, Math.min(all - have, Math.floor(Dots.score / newBullet.every) - (have - bulletsAtStart)));
+    return Math.max(0, Math.min(all - have, Math.floor(energy / newBullet.every)));
   }
   // The Bullets button reads "Create" (green) while one can be created; turning so, with a glint
   function syncNew() {
@@ -515,10 +473,12 @@
   function createBullet(name) {
     if (bulletCredits() <= 0 || !Bullets.addRandom(name)) return;
     bulletsCreated++;
+    payBullets(1);   // its price, from the energy
     newBullets.add(name);
     Bullets.select(name);
     revealing.add(name);
     revealName = name; renderBook(); revealName = null;
+    scrollToReveal();
     syncNew();
     setTimeout(() => {
       revealing.delete(name);
@@ -673,6 +633,14 @@
     el.classList.add('reveal');
     el.style.setProperty('--reveal-delay', base + k * REVEAL_STAGGER_MS + 'ms');
   }
+  // The book's list scrolling sideways (the stacked layout): brings the first card being revealed
+  // to its middle, so the reveal is seen
+  function scrollToReveal() {
+    const grid = $('book-grid'), el = grid.querySelector('.book-slot.reveal');
+    if (!el || grid.scrollWidth <= grid.clientWidth) return;
+    const g = grid.getBoundingClientRect(), r = el.getBoundingClientRect();
+    grid.scrollLeft += r.left - g.left - (g.width - r.width) / 2;
+  }
   // The same reveal on a button (the Bullets button turning "Create"), once, from now
   function revealButton(el) {
     el.classList.remove('reveal');
@@ -690,6 +658,7 @@
     C.setRunning(false);
     $('book').hidden = false;
     fitBook();
+    scrollToReveal();
     zap(true);
     $('book-close').focus();
   }
@@ -785,7 +754,9 @@
 
   // ---- inventory ------------------------------------------------------------------------------
   // The inventory: the discovered morphs of every species (discoveredBy: name, colour, picture)
-  // and the bullet patterns the gun has (Bullets.list). The central inventory, in localStorage
+  // and the bullet patterns the gun has (Bullets.list), and the energy (the dots score; sandbox
+  // only: a sandbox run starts from the central energy and saves what it gains and spends; a story
+  // run's energy, from 0, is its own). The central inventory, in localStorage
   // (INV_KEY), gathers them from every run: whatever a run gains is merged into it as it comes
   // (a discovery, a new picture or colour, a bullet added or created), never removed. A story run
   // starts from an empty inventory; a sandbox run starts from the central one (loaded at the start,
@@ -794,10 +765,24 @@
   function loadInventory() {
     try {
       const o = JSON.parse(localStorage.getItem(INV_KEY));
-      if (o && typeof o === 'object') return { morphs: o.morphs && typeof o.morphs === 'object' ? o.morphs : {}, bullets: Array.isArray(o.bullets) ? o.bullets : [] };
+      if (o && typeof o === 'object') return { morphs: o.morphs && typeof o.morphs === 'object' ? o.morphs : {},
+        bullets: Array.isArray(o.bullets) ? o.bullets : [], energy: Number.isFinite(o.energy) ? Math.max(0, o.energy) : 0 };
     } catch (e) {}
-    return { morphs: {}, bullets: [] };
+    return { morphs: {}, bullets: [], energy: 0 };
   }
+  // The energy: what the ship has eaten (dots.js counts it: its score's rises), less what bullet
+  // patterns cost. energyUnsaved (sandbox only): its change since it was last saved, added to the
+  // central energy (so two tabs add up).
+  let energy = 0, dotsSeen = 0, energyUnsaved = 0;
+  function changeEnergy(d) {
+    d = Math.max(-energy, d);
+    energy += d;
+    if (d && MODE === 'sandbox') { energyUnsaved += d; saveInventory(); }   // (a story run's energy is its own)
+    showEnergy();
+  }
+  // n bullet patterns gained (created, or given by [bullet]): [new_bullet:<n>]'s price each, from
+  // the energy (none while [new_bullet] is off; the energy never below 0)
+  function payBullets(n) { if (newBullet && n > 0) changeEnergy(-n * newBullet.every); }
   let invTimer = null;
   const unsavedBullets = new Set();   // patterns [bullet:all] gave: not saved
   // Merge this run's inventory into the central one, soon (several changes in a frame: one write)
@@ -820,6 +805,7 @@
       }
     }
     for (const b of Bullets.list) if (!unsavedBullets.has(b) && !inv.bullets.includes(b)) inv.bullets.push(b);
+    inv.energy = Math.max(0, inv.energy + energyUnsaved); energyUnsaved = 0;
     try { localStorage.setItem(INV_KEY, JSON.stringify(inv)); }
     catch (e) { console.warn('Cognoship: the inventory could not be saved', e); }
   }
@@ -850,6 +836,7 @@
       if (Array.isArray(list))
         discoveredBy.set(sp, list.filter(d => d && d.name).map(d => ({ name: d.name, hue: Number.isFinite(d.hue) ? d.hue : NaN, img: d.img || null })));
     if (inv.bullets.length) Bullets.setList(inv.bullets.join(','));
+    energy = inv.energy; showEnergy();   // (not a gain)
   }
   // A picture of the ship view as it is now (as drawn this frame, so called from the frame hook,
   // right after the render), scaled down to the world view's scale (C.WS px per cell): a data URL.
@@ -1039,6 +1026,7 @@
         const named = names.split(',').map(t => t.trim()).concat(equip ? [equip.trim()] : []).map(Bullets.kindOf);
         for (const n of added) if (!named.includes(n)) unsavedBullets.add(n);
       }
+      payBullets(added.filter(n => !unsavedBullets.has(n)).length);   // each costs [new_bullet]'s price, as a created one ([bullet:all]'s extras free)
       if (!replaying && added.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(added);
     },
     // bullet_limit:<x>: the bullets channel is emptied once it holds more than x bullets' worth of
@@ -1048,9 +1036,9 @@
       if (!(v > 0)) { console.warn(`script.txt: bad value [bullet_limit:${x}], ignored`); return; }
       Bullets.setLimit(v);
     },
-    // new_bullet:<n>|off: one bullet pattern may be listed for every n energy (the score, counted
-    // from 0, not from this line): while fewer are, the Bullets button reads "Create" and a "?" in
-    // the bullet book creates that pattern (bulletCredits); off: no more
+    // new_bullet:<n>|off: a bullet pattern may be created for n energy (the score): while the
+    // energy is at least n, the Bullets button reads "Create" and a "?" in the bullet book creates
+    // that pattern, taking n from the energy (bulletCredits); off: none may
     new_bullet: (n) => {
       const v = parseFloat(n);
       newBullet = n === 'off' ? null : v > 0 ? { every: v } : null;
@@ -1210,7 +1198,7 @@
     energy: (n) => {
       const v = parseFloat(n);
       if (!Number.isFinite(v)) { console.warn(`script.txt: bad value [need:energy:${n}], ignored`); return () => true; }
-      return () => Dots.score >= v;
+      return () => energy >= v;
     },
     discover_morph: (...args) => {
       let mode = 'any';
@@ -1541,7 +1529,12 @@
   C.hooks.change = () => syncButtons();
   // the score, at the top of the world view (centred) while the dots are on; in fullscreen too
   Dots.hooks.score = () => {
-    $('score').hidden = !Dots.on; $('score-v').textContent = Dots.score;
+    const d = Dots.score - dotsSeen;   // eaten since (not a fall: dots.js may restart its count)
+    dotsSeen = Dots.score;
+    if (d > 0) changeEnergy(d); else showEnergy();
+  };
+  function showEnergy() {
+    $('score').hidden = !Dots.on; $('score-v').textContent = energy;
     const was = bulletNew;
     syncNew();   // [new_bullet:<n>]: one more may be creatable
     if (bulletNew !== was && book.open && book.mode === 'bullet') renderBook();   // "Create or choose bullet" now, or no more
@@ -1694,7 +1687,6 @@
   C.start({ empty: true }).then(() => scriptText.then(txt => {
     if (ALL) Bullets.setList('all');
     else if (MODE === 'sandbox') loadCentralInventory();
-    bulletsAtStart = Bullets.list.length;
     SCRIPT = parseScript(txt);
     fitMsg();
     // [jump_here] (for writing the script): start at the first line that has it. Every action on

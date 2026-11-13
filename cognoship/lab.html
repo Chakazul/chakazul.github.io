@@ -41,6 +41,14 @@
       <!-- action+stats: moves the chart to the far left of the world view and back -->
       <button id="c-move" class="icon" hidden title="Move the chart to the left edge" aria-label="Move the chart left">&#9664;</button>
       <div id="error" class="error" hidden></div>
+      <!-- while a morph is held to add (Add, B): at the top left of the world view, turn it 45 degrees
+           clockwise (N), flip it (M), paste it where a touch placed it (Enter; only then shown), cancel (Esc) -->
+      <div id="clone-tools" class="clone-tools lab-clone" hidden>
+        <button id="clone-rot" title="Turn the morph 45 degrees clockwise (N)">&#8635;</button>
+        <button id="clone-flip" title="Flip the morph left to right, as seen in the view the pointer was last in (M)">&#8596;</button>
+        <button id="clone-ok" title="Paste the morph where it is placed (Enter)" hidden>&#10003;</button>
+        <button id="clone-cancel" title="Cancel (Esc)">&#10007;</button>
+      </div>
     </div>
     <div class="controls">
       <button id="play" title="Pause / play (Enter)">Pause</button>
@@ -55,8 +63,9 @@
       <label class="pat">Species <select id="species" title="Species (selecting one resets; Shift+C / Shift+V previous / next)"></select></label>
       <button id="reset" title="Clear the board and put the morph in the centre (Z)">Reset</button>
       <span class="sep" aria-hidden="true"></span>
-      <button id="add" title="Add the morph at a random empty spot and angle (X)">Add</button>
-      <label class="pat">Morph <select id="morph" title="Morph: picking one adds it (like Add)"></select></label>
+      <button id="spray" title="Spray: add the morph at a random empty spot and angle (X)">Spray</button>
+      <button id="add" title="Add the morph where you click, in the world view or the ship view (B): it follows the pointer, ↻ / ↔ (N / M) turn and flip it, Enter pastes it, Esc cancels">Add</button>
+      <label class="pat">Morph <select id="morph" title="Morph: picking one sprays it (like Spray); while holding one to add, picking one holds it instead"></select></label>
       <button id="pat-prev" class="icon" title="Previous morph (C)" aria-label="Previous morph">&#9650;</button>
       <button id="pat-next" class="icon" title="Next morph (V)" aria-label="Next morph">&#9660;</button>
       <button id="detect" aria-pressed="true" title="Morph detection, from the stats compared with the species' long history: None; Focused (the focused creature's morph, at the top of the ship view); Every (the default: also every creature's in the world view)">Detect: Every</button>
@@ -110,7 +119,7 @@
     <b>Detect</b> names the morph of the followed ship (Focused) or of every ship (Every, the default), by comparing its recent stats with the recorded ones of each morph; <b>???</b> when it is not sure.
     <br/>
     <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off · <kbd>A</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> next / previous mode (Action / Stats / Action+Stats / Tuning) · <kbd>S</kbd> record 300 steps of stats (<kbd>Shift</kbd>: as a fuzzy morph) · <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> next stat on the x / y / z / colour axis (<kbd>Shift</kbd>: previous) ·
-    <kbd>Z</kbd> reset world · <kbd>X</kbd> add morph · <kbd>C</kbd> <kbd>V</kbd> previous / next morph (<kbd>Shift</kbd>: species).
+    <kbd>Z</kbd> reset world · <kbd>X</kbd> spray the morph (at random) · <kbd>B</kbd> add the morph where you click (<kbd>N</kbd> turn, <kbd>M</kbd> flip, <kbd>Enter</kbd> paste, <kbd>Esc</kbd> cancel) · <kbd>C</kbd> <kbd>V</kbd> previous / next morph (<kbd>Shift</kbd>: species).
     <br/>
     Music: <i>Long Way</i> by Rexlambo, <i>A Few Jumps Away</i> by Arthur Vyncke, <i>Out of the Skies, Under the Earth</i> by Chris Zabriskie, <i>Billions and Billions</i> by Stellardrone.
   </p>
@@ -129,6 +138,7 @@
 <script src="detect.js"></script>
 <script src="page.js"></script>
 <script src="core.js"></script>
+<script src="clone.js"></script>
 <script src="lab.js"></script>
 </body>
 </html>
