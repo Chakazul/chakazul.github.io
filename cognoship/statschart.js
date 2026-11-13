@@ -176,7 +176,8 @@ const StatsChart = (function () {
         cap = 4096; h.len = 0; h.segs = []; h.outl = {};
         data = Object.fromEntries(KEYS.map(k => [k, new Float32Array(cap)])); brks = new Uint8Array(cap);
       },
-      push(s, gap, morph, fuzzy = false) {
+      // level: 'whole' for a twin or trio recorded as one (core.js wholes), else the default (a part)
+      push(s, gap, morph, fuzzy = false, level = 'part') {
         if (h.len === cap) {   // grow x2
           cap *= 2;
           for (const k of KEYS) { const d = new Float32Array(cap); d.set(data[k]); data[k] = d; }
@@ -188,7 +189,7 @@ const StatsChart = (function () {
         for (const k of KEYS) data[k][j] = k === 't' ? s.t - t0 : s[k];
         brks[j] = gap ? 1 : 0;
         const last = h.segs[h.segs.length - 1];
-        if (gap || last.morph !== morph || last.fuzzy !== fuzzy) h.segs.push({ start: j, morph, gap, fuzzy });
+        if (gap || last.morph !== morph || last.fuzzy !== fuzzy || last.level !== level) h.segs.push({ start: j, morph, gap, fuzzy, level });
       },
       get: (k, j) => data[k][j],
       brk: j => brks[j] === 1,
@@ -211,7 +212,7 @@ const StatsChart = (function () {
           segs: h.segs.map((sg, i) => {
             const end = i + 1 < h.segs.length ? h.segs[i + 1].start : h.len, rows = [];
             for (let j = sg.start; j < end; j++) rows.push(KEYS.map(k => r(data[k][j])));
-            return { morph: sg.morph, gap: sg.gap, ...(sg.fuzzy ? { fuzzy: true } : {}), data: rows };
+            return { morph: sg.morph, gap: sg.gap, ...(sg.fuzzy ? { fuzzy: true } : {}), ...(sg.level === 'whole' ? { level: 'whole' } : {}), data: rows };
           }),
         };
       },
@@ -220,7 +221,7 @@ const StatsChart = (function () {
         for (const sg of obj.segs) sg.data.forEach((row, n) => {
           const s = {};
           KEYS.forEach((k, q) => { const v = idx[q] >= 0 ? row[idx[q]] : null; s[k] = v === null ? NaN : v; });
-          h.push(s, n === 0 && sg.gap, sg.morph, !!sg.fuzzy);
+          h.push(s, n === 0 && sg.gap, sg.morph, !!sg.fuzzy, sg.level === 'whole' ? 'whole' : 'part');
         });
       },
     };

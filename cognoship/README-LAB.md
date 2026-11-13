@@ -36,12 +36,15 @@ can instead erase or draw mass, for comparison.
 **Mode** (`A`, `Shift`+`A` backwards) cycles Action, Stats, Action+Stats and Tuning.
 
 - **Stats:** a 2D / 3D phase-space chart of the followed creature (mass, R G B masses, hue, speed,
-  turn rate) in place of the ship view, or beside it in Action+Stats. Axis keys `D` `F` `G` `H`.
-- **Record** (`S`): add the next 300 steps to the species' long history. **Delete** removes the
+  turn rate) in place of the ship view, or beside it in Action+Stats. Axis keys `G` `H` `J` `K`.
+- **Record** (`S`), **Record Whole** (`D`), **Record Fuzzy** (`F`): add the next 300 steps to the
+  species' long history: of the followed creature, of the twin or trio it is part of, or of it as a
+  fuzzy (loosely matched) morph. **Delete** removes the
   last piece. **Download** saves it as `<species>.json`; put it in `assets/stats/` and it loads
   with the species, and morph detection learns from it.
-- **Tuning:** the detection sliders (merge saddle, threshold, min area), with every detected
-  object circled.
+- Wholes (Record Whole; see Tuning's twin saddle) are only compared with wholes, parts with parts.
+- **Tuning:** the detection sliders (merge saddle, threshold, min area, twin saddle), with every
+  detected object circled and every whole dashed.
 
 ## URL parameters
 

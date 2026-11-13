@@ -84,9 +84,9 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
 - **Zoom**: screen px per cell in the ship view (2× to 16×, the game 3× to 12×; the default is the slot nearest
   4 R across, 6× = 64 cells at R = 18).
 - **Species** and **Morph** pickers. A species is a rule code, named in the picker as Aquarium
-  original (5N7KKM), Aquarium replicating (VT049W), Aquarium spinning (Z18A9R), Aquarium dancing (KH97WU),
-  Aquarium drifting (GDNQYX), Aquarium shapeshifting (HGMLH8), Aquarium multiplying (PJ1EF7),
-  Aquarium striped (KZ2BLD), Aquarium exploding (XEH4YR), Aquarium zigzagging (HAESRE) and, last, Cilium (G6G6CR). Choosing one resets the
+  originale (5N7KKM), A. novus (GDNQYX), A. vorticosus (Z18A9R), A. multiplicans (PJ1EF7),
+  A. explodens (XEH4YR), A. virgatus (KZ2BLD), A. saltans (KH97WU), A. sinuosus (HAESRE),
+  A. metamorpha (HGMLH8), A. replicans (VT049W) and Cilium immunitatis (G6G6CR), in `sandbox.txt`'s order. Choosing one resets the
   world with its first morph. A morph (limus, …) only changes what Reset, Spray (`X`) and Add (`B`) put in, and
   keeps the world. Picking a morph in the list (even the current one) also adds it, like Spray;
   ▲ ▼ or `C` `V` only step through the morphs; `Shift`+`C` / `Shift`+`V` step to the
@@ -198,7 +198,7 @@ In sandbox mode only, a **Species** button (`C`) sits at the top of the ship vie
 Bullets and Morphs, and the species' name at the morph book's lower right is a link too. Both open
 the **species book**, "Choose a species" (as wide as the bullet book): a slot per species added by
 `[add_allow_species]`, in order, with a small thumbnail of each of its visible morphs in one row
-(up to 8: the centre of its picture if discovered; black if discovered without one; the book's own colour if not), above its name; the
+(up to 8: the centre of its picture if discovered, the whole picture for a twin or trio, i.e. a morph recorded as a whole, and for every Cilium morph (large creatures), listed in `aquarium233.js` `rules[code].wholes` by `tools/gen_aquarium.py` from the stats files; black if discovered without one; the book's own colour if not), above its name; the
 current species has a lighter background (so does the player's morph, the one Respawn puts back, in the morph book while choosing a morph to respawn). Every book's title shows its verb in the colour of the slots that do it (the morph book's "respawn" in cyan and "clone" in pink; "Choose" (species) or "use" (bullets) in cyan and "Create" in green in the others). Pickable slots in every book have a darker cyan border than the Respawn and Choose buttons. Keys pick slots, the book's rows on the keyboard's: `Q`–`R`,
 `A`–`F`, `Z` `X`; only Escape closes it (as every book; its Close button shows *Esc*). A
 pick fades the views out as `[new_scene]` does, does `[choose_species]` with it unseen (its `[on_choose_species]` block sets the world up), fades them back in and plays
@@ -556,7 +556,7 @@ rad/s (its absolute value: either direction counts the same).
   shows age: the short history fades from bright to dark, the long history is dark. A legend
   ("c: …" with a colour bar) sits top-left (3D: under the axis rows); click it to step the stat.
   Clicking an axis label in the chart (or an axis row of the 3D legend) steps it to the next stat;
-  so do keys `D` `F` `G` `H` for x, y, z and colour (`Shift`: the previous stat). Axes
+  so do keys `G` `H` `J` `K` for x, y, z and colour (`Shift`: the previous stat). Axes
   with several series pair them by colour. Drag the 3D view to rotate it (z is up).
 - **Short history:** the last 50 steps, always kept (steps with no focus as empty points, so the
   line runs out after the focus dies), drawn fading from the brightest colour (newest,
@@ -634,7 +634,7 @@ not used, so where in its cycle a creature is doesn't matter.
 - Needs a long history of two morphs or more (a species with no saved file shows only **???**).
 - Offline check on the saved files (each morph's first half of samples as the reference, windows
   of its second half as the test; `node` with `statschart.js` and `detect.js`): 91% of windows
-  named, 99.3% of those right; the misses were HGMLH8 *metamorpha* (it passes through *tachus*'
+  named, 99.3% of those right; the misses were HGMLH8 *metamorpha* (it passes through *paratachus*'
   and *tardus*' shapes; then named *para* and *parapedes*). With one morph left out of the reference, its windows were wrongly
   named another morph 10% of the time. Lithos and tardus of 5N7KKM, Z18A9R and G6G6CR stay
   correctly named with every mass 2% off either way, and still at 5% off; two live 5N7KKM lithos
@@ -647,8 +647,8 @@ not used, so where in its cycle a creature is doesn't matter.
   spread (0.75 x its standard deviation per feature, at least the fixed width), and the softmax
   compares normalised densities, so a broad cloud pays for its breadth: a precise morph that fits
   wins, and the fuzzy one is named only where none is near. Shown as **~cytos** (with a "~"). To
-  add one: **Shift+S** (or Shift+click Record) records a fuzzy piece and asks for its name (the
-  last fuzzy name is offered; plain Record / `S` also asks, offering the picker's morph; it need not be in the morph picker); Download to keep it. A fuzzy
+  add one: **Record Fuzzy** (`F`) records a fuzzy piece and asks for its name (the
+  last fuzzy name is offered; Record / `S` also asks, offering the picker's morph; it need not be in the morph picker); Download to keep it. A fuzzy
   piece named like a precise morph is kept apart from it. Check
   (VT049W, each of the six cytos pieces left out of the reference in turn): every window named
   ~cytos; rectus, lithos and tachus still right, and each of them left out of the reference stays
@@ -678,6 +678,29 @@ not used, so where in its cycle a creature is doesn't matter.
 
 ## Tuning mode
 
+**Wholes (the game and the lab).** A twin or trio (paragyrans, rectogyrans, trias…) is one
+creature of several parts, which the merge saddle sees as separate objects. A second merge at the
+**twin saddle** (`rules[code].detect.wholeSaddle`; the Twin saddle slider; `?wsaddle=`) joins parts
+into a *whole* (creatures.js `wholes`). Wholes are tracked and named on their own: the long
+history stores each piece's level (Stats mode's **Record Whole**, `D`; `"level": "whole"` in the
+file), parts are compared only with morphs recorded as parts, wholes only with those recorded as
+wholes. A whole shows, as one circle in its morph's hue with its name (its parts' names hidden),
+once named 3 classifications in a row, and goes once not named 3 in a row; a whole of creatures
+merely touching is never named, so never shown. Tuning mode draws every whole dashed. While the
+followed creature is part of a shown whole, the **ship** is the whole (core.js `ship()`): the ship
+view centres on it and turns with its heading, the arrow and the world view's frame and circle are
+its, the tool and the page's presses (the lab's Add, the game's clones) are placed relative to it,
+and its name is the name box's, the game's discoveries' and the morph book picture's (centred on
+it). The part is still what is tracked, followed and recorded (Record Whole records its whole).
+A new twin is followed by its part at first, until its whole is named: then the view moves to the
+whole's centre. The twin
+saddles per species: 0.6, except 0.4 for A. saltans (KH97WU) and 0.3 for A. vorticosus (Z18A9R:
+transgyrans's gyrans part between crossings, and at 0.6 it is whole only half the time, in
+10-step stretches, too broken to be named), chosen by eye in the lab, starting
+from a measurement (`output/whole_saddle/measure.py` and `tradeoff.py`: each twin run long, the
+highest twin saddle at which its parts stay one whole all, or nearly all, of the time). A loose twin (gyrans orbiting a lithos) is whole only while
+its parts touch, at any value.
+
 Tuning mode (key `A`) shows an extra row of detection sliders and circles every detected object in the world
 view (the focus in yellow): **Merge saddle** (basins merge when the saddle is at least this
 fraction of the lower peak; higher = fewer merges), **Threshold** (potential below it is
@@ -685,9 +708,9 @@ background; higher cuts thin bridges between creatures) and **Min area** (in uni
 radius R/4). Defaults, chosen by hand to stop the ship view jumping between merging and splitting
 objects in a crowded board: threshold 0.1, min area 1 (were 0.05, 1; threshold 0.15 for a while, but it left
 1–3% of a creature's mass, at its edges, outside the object, against under 1% at 0.1), and a merge saddle per species, set in
-`tools/gen_aquarium.py` (`DETECT`) and written into `aquarium233.js` as `rules[code].detect`: 0.95 for
-Aquarium (5N7KKM) and Aquarium replicating (VT049W), 0.9 for Cilium (G6G6CR) and Aquarium spinning
-(Z18A9R), 1.0 for Aquarium dancing (KH97WU) and drifting (GDNQYX); it was 0.8 for all. Above 1.0 nothing changes (a saddle never exceeds the lower peak, so no distinct peaks
+`tools/gen_aquarium.py` (`DETECT`) and written into `aquarium233.js` as `rules[code].detect`: 1.0,
+except 0.95 for A. replicans (VT049W) and A. virgatus (KZ2BLD) and 0.9 for Cilium (G6G6CR), chosen
+by eye in the lab; it was 0.8 for all. Above 1.0 nothing changes (a saddle never exceeds the lower peak, so no distinct peaks
 merge from 1.0 up). The readout adds **in objects**: the share of the board's mass inside detected objects (the
 rest is in blocks under the threshold or in dropped small basins). Also
 settable as `?saddle=`, `?thr=`, `?area=`.

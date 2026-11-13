@@ -173,23 +173,33 @@ Find morph _virgatus_.[need:discover_morph:virgatus]
 Next species...
 
 [new_scene]
+[species:Aquarium saltans:KH97WU]
+[allow_morph:limus,gyrans,impetus,antigyrans]
+[clear_world][put_player:limus]
+[dot:5][min_morph:3:gyrans,impetus,antigyrans]
+_Andromeda Galaxy_, 2,500,000 light years from home.
+The dancing species _Aquarium saltans_.
+Find morph _impetus_.[need:discover_morph:impetus]
+Next species...
+
+[new_scene]
 [species:Aquarium sinuosus:HAESRE]
 [allow_morph:zigzag,lithos,antigyrans,paragyrans]
 [clear_world][put_player:zigzag]
 [dot:5][min_morph:4:antigyrans,paragyrans:far]
-_Andromeda Galaxy_, 2,500,000 light years from home.
+_Triangulum Galaxy_, 3,000,000 light years from home.
 The zigzagging species _Aquarium sinuosus_.
 Engineer twin morph _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
 Next species...
 
 [new_scene]
 [species:Aquarium metamorpha:HGMLH8]
-[allow_morph:metamorpha,tardus,tachus]
+[allow_morph:metamorpha,paratardus,paratachus]
 [clear_world][put_player:metamorpha]
 [dot:5][min_morph:3:metamorpha]
 _Virgo Cluster_, 53,800,000 light years from home.
 The shapeshifting species _Aquarium metamorpha_.
-Engineer twin morph _tachus_ or _tardus_.[need:discover_morph:tardus,tachus]
+Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus]
 Next species...
 
 
@@ -199,7 +209,7 @@ Next species...
 # erase swarm (very hard)
 [stars:270]
 [species:Aquarium replicans:VT049W]
-[allow_morph:gyrans,rectus,tachus,lithos,paralimus,paragyrans,pararectus]
+[allow_morph:gyrans,rectus,tachus,lithos,paralimus,paragyrans,rectogyrans]
 [clear_world][put_player:gyrans][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
 [dot:3]
 We have arrived at a distant, ancient galaxy.

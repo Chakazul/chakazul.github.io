@@ -317,6 +317,7 @@ def run_job(job):
         if t < verify:
             A = step(A, ps, Ks, dt)
     sim = similarity(raw, A, g, z) if A.sum() > 1 else 0.0
+    if not np.isfinite(sim): sim = -1.0   # (e.g. the settled state split far apart: never the best)
     return g, z, settled, A, hist, sim
 
 

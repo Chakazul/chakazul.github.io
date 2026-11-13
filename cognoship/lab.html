@@ -82,6 +82,7 @@
     <label title="Basins merge when the saddle between them is at least this fraction of the lower peak. Higher = fewer merges, smaller objects; above 1 = never merge.">Merge saddle <input id="t-saddle" type="range" min="0.5" max="1.5" step="0.05"><output id="t-saddle-v"></output></label>
     <label title="Blocks whose potential K*A is below this are background. Higher = thin bridges between creatures are cut, objects shrink.">Threshold <input id="t-thr" type="range" min="0.02" max="0.3" step="0.01"><output id="t-thr-v"></output></label>
     <label title="Objects smaller than this fraction of R/4-radius disc area are dropped.">Min area <input id="t-area" type="range" min="0" max="4" step="0.25"><output id="t-area-v"></output></label>
+    <label title="Twins and trios: the objects merged again across saddles at least this fraction of the lower peak make a whole (dashed circles here), named against the morphs recorded as wholes (Stats: Record Whole). Below Merge saddle; lower = parts further apart still count as one creature.">Twin saddle <input id="t-whole" type="range" min="0.2" max="1.2" step="0.05"><output id="t-whole-v"></output></label>
   </div>
   <!-- Stats mode (A): controls of the phase-space chart (statschart.js), which
        replaces the ship view -->
@@ -92,7 +93,9 @@
       <button id="c-every" aria-pressed="true" title="Show the short history of every object, not only the focus (Record still records the focus only)">Every object: ON</button>
       <span class="sep" aria-hidden="true"></span>
       <span class="group">History</span>
-      <button id="c-rec" aria-pressed="false" title="Record 300 steps into the long history (the short history gathered so far, then new steps), asking the morph name (S; Shift+S or Shift+click: as a fuzzy morph); press again to stop early">Record</button>
+      <button id="c-rec" aria-pressed="false" title="Record 300 steps of the focus into the long history (the short history gathered so far, then new steps), asking the morph name (S); press again to stop early">Record</button>
+      <button id="c-rec-whole" aria-pressed="false" title="Record 300 steps of the whole the focus is part of (a twin or a trio, found at the Twin saddle), asking the morph name (D); wholes are only named against wholes, parts against parts; press again to stop early">Record Whole</button>
+      <button id="c-rec-fuzzy" aria-pressed="false" title="Record 300 steps of the focus as a fuzzy morph, matched loosely and shown as ~name, asking its name (F); press again to stop early">Record Fuzzy</button>
       <button id="c-clear" title="Delete the last piece of the long history">Delete</button>
       <button id="c-save" title="Download the long history as <species>.json; put it in Cognoship/assets/stats/ to load it with the species">Download</button>
       <span class="chart-info" id="c-info"></span>
@@ -118,7 +121,7 @@
     In the world view (left) <b>click one ship</b> to follow it in the ship view.
     <b>Detect</b> names the morph of the followed ship (Focused) or of every ship (Every, the default), by comparing its recent stats with the recorded ones of each morph; <b>???</b> when it is not sure.
     <br/>
-    <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off · <kbd>A</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> next / previous mode (Action / Stats / Action+Stats / Tuning) · <kbd>S</kbd> record 300 steps of stats (<kbd>Shift</kbd>: as a fuzzy morph) · <kbd>D</kbd> <kbd>F</kbd> <kbd>G</kbd> <kbd>H</kbd> next stat on the x / y / z / colour axis (<kbd>Shift</kbd>: previous) ·
+    <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off · <kbd>A</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> next / previous mode (Action / Stats / Action+Stats / Tuning) · <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> record 300 steps of stats (the focus / its whole / as a fuzzy morph) · <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> next stat on the x / y / z / colour axis (<kbd>Shift</kbd>: previous) ·
     <kbd>Z</kbd> reset world · <kbd>X</kbd> spray the morph (at random) · <kbd>B</kbd> add the morph where you click (<kbd>N</kbd> turn, <kbd>M</kbd> flip, <kbd>Enter</kbd> paste, <kbd>Esc</kbd> cancel) · <kbd>C</kbd> <kbd>V</kbd> previous / next morph (<kbd>Shift</kbd>: species).
     <br/>
     Music: <i>Long Way</i> by Rexlambo, <i>A Few Jumps Away</i> by Arthur Vyncke, <i>Out of the Skies, Under the Earth</i> by Chris Zabriskie, <i>Billions and Billions</i> by Stellardrone.

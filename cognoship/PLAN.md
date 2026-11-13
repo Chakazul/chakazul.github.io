@@ -655,7 +655,7 @@ each wants a short lab session before it is scripted.
 | 3 Brave new world | GDNQYX | clone, recycle |
 | 4 Megastructure | Z18A9R | building up an object count (unfinished: ends at "We will") |
 
-Unused: VT049W, PJ1EF7, XEH4YR, KZ2BLD, KH97WU, HAESRE, HGMLH8, G6G6CR (Cilium).
+Unused: none since 2026-11-13 (the story has all 11, A. saltans KH97WU last added).
 
 Typos in `script.txt` to fix: "techonologies", "wheels or levels" (levers?), "speices", "This
 supermassive black releases" (black hole).
@@ -709,7 +709,7 @@ using 8.2.6), then `[need:survive_time:30]`, then "The shield holds." Build, def
 | **KH97WU** (dancing) | *impetus*, *impetus+gyrans* | **Dance:** dock with a gyrans to form *impetus+gyrans*; a cooperation chapter where shooting doesn't help. | docking |
 | **KZ2BLD** (striped) | *virgatus* | **Corridor:** stripes suggest a long, oriented body; steer through a line of beacons, then become *virgatus*. | beacons, hold |
 | **HAESRE** (zigzagging) | *zigzag*, *zigzag+lithos* | **Pilot's test:** collect energy along a path; zigzagging makes precise steering the challenge. | beacons, energy |
-| **HGMLH8** (shapeshifting) | *metamorpha*, *tardus*, *tachus* | **Metamorphosis II:** become each of the three in order, against the clock. The notes say some of its morphs aren't recognised, so check its detection settings first. | hold, time goals |
+| **HGMLH8** (shapeshifting) | *metamorpha*, *paratardus*, *paratachus* | **Metamorphosis II:** become each of the three in order, against the clock. The notes say some of its morphs aren't recognised, so check its detection settings first. | hold, time goals |
 | **G6G6CR** (Cilium) | the one non-Aquarium species; *munitus* = "fortified" | **First contact / finale:** a truly alien species; protect a *munitus* from hostile creatures, or recycle the ship into Cilium. | hostile creatures, synthesis |
 
 Suggested order after chapter 4: HAESRE (pure steering), KH97WU (cooperation), VT049W

@@ -24,6 +24,7 @@
   C.opt.circlesAll = () => mode === 'tuning' || (statsOn() && C.everyObject);
   C.opt.hoverTracks = () => statsOn() && C.everyObject;
   C.opt.stars = () => Page.soundOn;   // the star field follows the Stars button
+  C.opt.wholes = () => true;   // twins and trios found and named as one (core.js), the Twin saddle slider
   C.banner = 'Reset (Z) or Spray (X) to try again';
 
   // Stats chart (statschart.js): 3D or 2D phase space, a stat per axis (stats: t mass chan both hue
@@ -47,12 +48,15 @@
   C.hooks.pattern = () => {
     const ts = $('t-saddle');
     ts.value = C.DETECT.saddle; $('t-saddle-v').textContent = C.DETECT.saddle.toFixed(2); fillRange(ts);
+    const tw = $('t-whole');
+    tw.value = C.DETECT.wholeSaddle; $('t-whole-v').textContent = C.DETECT.wholeSaddle.toFixed(2); fillRange(tw);
     syncPicker();
   };
   C.hooks.frame = () => {
     drawReadout();
     if (chart.relock && stats.short.len >= stats.short.cap) chart.relock = false;
-    if (statsOn()) StatsChart.draw($('c-canvas'), stats.short, stats.long, chart, C.everyObject ? C.tracks.map(t => t.hist) : [], C.hovered()?.tr?.hist);
+    const w = stats.recLeft > 0 && stats.level === 'whole' ? C.focusWhole() : null;   // recording a whole: its line
+    if (statsOn()) StatsChart.draw($('c-canvas'), w ? w.hist : stats.short, stats.long, chart, C.everyObject ? C.tracks.map(t => t.hist) : [], C.hovered()?.tr?.hist);
   };
 
   // ---- readout ----------------------------------------------------------------------------
@@ -236,43 +240,53 @@
     $('c-lock').setAttribute('aria-pressed', chart.lock);
   };
   $('c-every').onclick = () => { flash('c-every'); C.setEveryObject(!C.everyObject); syncChart(); };
-  // Record (S): records the next REC_STEPS steps of the focus into the long history, as a new
-  // piece. Pressing it while recording stops early. It asks for the morph name to record under
-  // (offered: the picker's morph). Shift+S records a fuzzy piece (detect.js), offering the last
-  // fuzzy name recorded. A name need not be a morph in the picker (e.g. cytos).
+  // Record (S), Record Whole (D), Record Fuzzy (F): record the next REC_STEPS steps into the long
+  // history, as a new piece: of the focus; of the whole it is part of (a twin, a trio: core.js
+  // stats.level 'whole'); or of the focus as a fuzzy morph (detect.js). Each asks for the morph name
+  // (offered: the picker's morph; fuzzy: the last fuzzy name recorded; a name need not be a morph in
+  // the picker, e.g. cytos). Any of them pressed while recording stops early.
+  const REC_BUTTONS = { part: ['c-rec', 'Record'], whole: ['c-rec-whole', 'Record Whole'], fuzzy: ['c-rec-fuzzy', 'Record Fuzzy'] };
+  let recKind = 'part';
   function syncRecord() {
-    $('c-rec').textContent = stats.recLeft > 0 ? 'Stop' : 'Record';
-    $('c-rec').setAttribute('aria-pressed', stats.recLeft > 0);
+    for (const [kind, [id, text]] of Object.entries(REC_BUTTONS)) {
+      const on = stats.recLeft > 0 && kind === recKind;
+      $(id).textContent = on ? 'Stop' : text;
+      $(id).setAttribute('aria-pressed', on);
+    }
   }
-  const doRecord = (fuzzy = false) => {
-    flash('c-rec');
+  const doRecord = (kind = 'part') => {
+    const fuzzy = kind === 'fuzzy';
+    flash(REC_BUTTONS[stats.recLeft > 0 ? recKind : kind][0]);
     if (stats.recLeft > 0) { stats.recLeft = 0; stats.longGap = true; }   // stop
     else {
+      recKind = kind; stats.level = kind === 'whole' ? 'whole' : 'part';
       const last = fuzzy && [...stats.long.segs].reverse().find(sg => sg.fuzzy);
       const name = fuzzy
         ? prompt('Record a fuzzy morph (matched loosely, shown as ~name). Name:', last ? last.morph : '')
-        : prompt('Record the focus as morph:', C.morphName(C.pattern).replace(C.BOOM, ''));
+        : prompt(stats.level === 'whole' ? 'Record the whole (twin or trio) the focus is part of, as morph:' : 'Record the focus as morph:', C.morphName(C.pattern).replace(C.BOOM, ''));
       if (!name || !name.trim()) return;   // cancelled
       stats.recName = name.trim(); stats.recFuzzy = fuzzy;
       stats.recLeft = C.REC_STEPS; stats.recStart = stats.long.len;
       stats.longGap = true;
       // the piece starts with the focus's short history gathered so far (since its last gap),
       // the rest of the REC_STEPS steps recorded as they come
-      const h = stats.short;
-      if (C.focus && h.len) {
+      const h = stats.level === 'whole' ? C.focusWhole()?.hist : stats.short;
+      if (C.focus && h && h.len) {
         let j0 = h.len - 1;
         while (j0 > 0 && !h.brk(j0)) j0--;
         for (let j = j0; j < h.len; j++) {
           const s = Object.fromEntries(['t', 'mass', 'mR', 'mG', 'mB', 'speed', 'omega'].map(k => [k, h.raw(k, j)]));
           if (!Number.isFinite(s.mass)) continue;   // no focus at that step
-          stats.long.push(s, stats.longGap, stats.recName, stats.recFuzzy);
+          stats.long.push(s, stats.longGap, stats.recName, stats.recFuzzy, stats.level);
           stats.longGap = false; stats.recLeft--;
         }
       }
     }
     syncRecord();
   };
-  $('c-rec').onclick = e => doRecord(e.shiftKey);
+  $('c-rec').onclick = () => doRecord('part');
+  $('c-rec-whole').onclick = () => doRecord('whole');
+  $('c-rec-fuzzy').onclick = () => doRecord('fuzzy');
   // Delete: removes the last piece of the long history; during a recording, the piece being
   // recorded (and stops it; nothing if it has no samples yet).
   $('c-clear').onclick = () => {
@@ -297,7 +311,7 @@
   };
   syncRecord();
   // Step axis i (0 x, 1 y, 2 z, 3 colour) to the next (d = 1) or previous (d = -1) stat: a click on
-  // its label, or keys D F G H (Shift: backwards).
+  // its label, or keys G H J K (Shift: backwards).
   function cycleAxis(i, d) {
     const o = i === 3 ? StatsChart.C_OPTIONS : StatsChart.OPTIONS;
     const step = v => o[(o.indexOf(v) + d + o.length) % o.length];
@@ -342,7 +356,8 @@
   const D = C.DETECT, U = C.MIN_AREA_UNIT;
   const tune = [['t-saddle', v => D.saddle = v, D.saddle],
                 ['t-thr', v => D.threshold = v, D.threshold],
-                ['t-area', v => D.minArea = v * U, D.minArea / U]];
+                ['t-area', v => D.minArea = v * U, D.minArea / U],
+                ['t-whole', v => D.wholeSaddle = v, D.wholeSaddle]];
   for (const [id, set, v0] of tune) {
     const el = $(id), out = $(id + '-v');
     el.value = v0; out.textContent = (+el.value).toFixed(2); fillRange(el);
@@ -402,8 +417,9 @@
   const drag = (at, e) => { if (clone.held && clone.held.at && e && e.pointerType !== 'mouse') clone.held.at = at; };
   C.opt.worldPress = press;
   C.opt.worldDrag = drag;
-  C.opt.zoomPress = (off, e) => C.focus ? press([C.focus.col + off[0], C.focus.row + off[1]], e) : false;
-  C.opt.zoomDrag = (off, e) => { if (C.focus) drag([C.focus.col + off[0], C.focus.row + off[1]], e); };
+  const fromShip = off => { const sh = C.ship(); return [sh.col + off[0], sh.row + off[1]]; };   // (off: from the ship view's centre)
+  C.opt.zoomPress = (off, e) => C.focus ? press(fromShip(off), e) : false;
+  C.opt.zoomDrag = (off, e) => { if (C.focus) drag(fromShip(off), e); };
   // the ghost, in both views, at one board place
   C.opt.worldGhost = () => {
     const H = clone.held, at = where();
@@ -446,8 +462,10 @@
     else if (k === 'w') doSpeed(-1);
     else if (k === 'e') doView();
     else if (k === 'a') nextMode(e.shiftKey ? -1 : 1);
-    else if (k === 's') doRecord(e.shiftKey);
-    else if ('dfgh'.includes(k) && k.length === 1) cycleAxis('dfgh'.indexOf(k), e.shiftKey ? -1 : 1);
+    else if (k === 's') doRecord('part');
+    else if (k === 'd') doRecord('whole');
+    else if (k === 'f') doRecord('fuzzy');
+    else if ('ghjk'.includes(k) && k.length === 1) cycleAxis('ghjk'.indexOf(k), e.shiftKey ? -1 : 1);
     else if (e.key >= '1' && e.key <= '3') C.channel = +e.key - 1;
     else if (e.key >= '4' && e.key <= '6') C.action = +e.key - 4;
   });

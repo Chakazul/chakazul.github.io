@@ -18,11 +18,31 @@ on Cognoship's 384×256 torus, the same rule and board as the game. Masses are i
   mass, speed (R per unit time), turning rate (rad per unit time), number of bodies and radial
   profile. A mirror image has the same mass, speed and profile but the opposite turning rate.
 
-## VT049W pararectus (renamed, 2026-11-13)
+## VT049W rectogyrans (renamed, 2026-11-13)
 
 Formerly *rectus+gyrans* (from 233.json): renamed in `tools/gen_aquarium.py` (`POST_RENAME`),
-id `VT049W-pararectus`. Its long history is in `assets/stats/VT049W.json`, and it is in VT049W's
+id `VT049W-rectogyrans` (first named pararectus, then rectogyrans: a rectus and a gyrans, as
+GDNQYX's). Its long history is in `assets/stats/VT049W.json`, and it is in VT049W's
 allow lists in `script.txt` and `sandbox.txt`.
+
+## GDNQYX pararectus and rectogyrans (new, 2026-11-13)
+
+From `../assets/screenshots/GDNQYX pararectus.png` and `GDNQYX rectogyrans.png`, rebuilt by
+`tools/from_screenshot.py` (settled and checked): pararectus, two rectus side by side (gamma 1.4,
+64×30 cells, shape 0.97); rectogyrans, a rectus joined to a gyrans (gamma 1.0, 50×54 cells, shape
+0.95). Both single bodies moving straight. Against GDNQYX's morphs (R = 18, settled):
+
+| morph | mass | speed | turn |
+|---|---|---|---|
+| **pararectus** | 1934 | 0.097 | 0 |
+| **rectogyrans** | 1863 | 0.110 | 0.003 |
+| paragyrans | 1791 | 0.113 | 0 |
+| lithos+gyrans | 1897 | 0.056 | 0.021 |
+| paratardus | 1981 | 0.009 | 0 |
+| rectus | 885 | 0.067 | 0.003 |
+
+Rectogyrans is closest to paragyrans (4 % heavier, as fast): its long history will show whether
+the detection tells them apart. In the sandbox's allow list.
 
 ## 5N7KKM paralithos (new, 2026-11-13)
 

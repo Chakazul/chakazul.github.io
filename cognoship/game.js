@@ -48,6 +48,7 @@
   }
   C.opt.circlesAll = () => DEV;
   C.opt.worldFrame = () => true;   // the world view framed as the ship view, its corners rounded alike
+  C.opt.wholes = () => true;   // twins and trios found, named and followed as one (core.js wholes, ship)
   C.opt.focusCircle = () => true;   // a yellow circle around the ship's detected object, inside the frame
   C.opt.frameColor = () => '#fff';   // the world view's frame around the ship: white      // with the morph's colour dot, as in the morph book
   // Only the player's ship ([put_player]) is ever followed: no creature is focused by being put
@@ -423,12 +424,13 @@
   C.opt.zoomDrag = (off, e) => {
     const H = clone.held;
     if (!H || !H.at || !C.focus || (e && e.pointerType === 'mouse')) return;
-    H.at = [C.focus.col + off[0], C.focus.row + off[1]];
+    const sh = C.ship();   // (off is from the ship view's centre: the ship, a twin's whole)
+    H.at = [sh.col + off[0], sh.row + off[1]];
   };
   C.opt.zoomPress = (off, e) => {
     const H = clone.held;
     if (!H || !C.focus) return false;
-    const at = [C.focus.col + off[0], C.focus.row + off[1]];
+    const sh = C.ship(), at = [sh.col + off[0], sh.row + off[1]];
     if (e && e.pointerType !== 'mouse') { H.at = at; syncButtons(); return true; }
     pasteClone(at);
     return true;
@@ -576,6 +578,7 @@
     book.mode = 'species';
     showBook();
   }
+  const WIDE_THUMBS = ['G6G6CR'];   // species whose morphs are large (Cilium): every thumbnail the whole picture
   function renderSpecies() {
     setTitle([['Choose', 'choose'], ' a species']);
     const cur = C.pattern && C.speciesOf(C.pattern);
@@ -586,7 +589,8 @@
       thumbs.className = 'thumbs';
       for (const m of speciesMorphs(e)) {
         const d = found.find(x => x.name === m), t = document.createElement('div');
-        t.className = 'thumb' + (d ? '' : ' unknown');   // not discovered: the box's colour (discovered with no picture: black)
+        const twin = (AQUARIUM233.rules[e.id]?.wholes || []).includes(m) || WIDE_THUMBS.includes(e.id);   // recorded as a whole (a twin, a trio), or a species of large creatures
+        t.className = 'thumb' + (d ? '' : ' unknown') + (twin ? ' whole' : '');   // not discovered: the box's colour (discovered with no picture: black)
         if (d) { t.title = m; if (d.img) { const img = new Image(); img.src = d.img; img.alt = m; t.append(img); } }
         thumbs.append(t);
       }
@@ -729,7 +733,7 @@
     const dn = C.simSteps - lastStep;
     lastStep = C.simSteps;
     if (chapterShowing()) return;   // no discovery (nor its book) under a chapter card; it waits
-    const d = C.focus && C.stats.short.det;
+    const d = C.focus && C.shipDet();   // (a twin ship: its whole's morph)
     const known = d && d.name && discovered.find(x => x.name === d.name);
     if (known && !Number.isFinite(known.hue) && Number.isFinite(d.hue)) { known.hue = d.hue; saveInventory(); }   // put in unseen: its colour now
     // a new discovery; or a known morph, whose picture is retaken quietly after SNAPSHOT_STEPS (once
@@ -851,7 +855,7 @@
   const SNAP_CELLS = C.ZOOM.edge / 6;   // 64 cells
   function snapshot() {
     try {
-      const f = C.focus, WS = C.WS, n = Math.round(SNAP_CELLS * WS), W = C.BW * WS, H = C.BH * WS;
+      const f = C.ship(), WS = C.WS, n = Math.round(SNAP_CELLS * WS), W = C.BW * WS, H = C.BH * WS;
       if (!f) return null;
       const x0 = Math.round((f.col + 0.5) * WS - n / 2), y0 = Math.round((f.row + 0.5) * WS - n / 2);
       const cv = document.createElement('canvas');
@@ -1218,7 +1222,7 @@
       let touched = false;
       return () => {
         if (C.masking) touched = true;
-        const d = C.stats.short.det;
+        const d = C.shipDet();
         return touched && !!C.focus && !!d && d.name !== 'limus';
       };
     },

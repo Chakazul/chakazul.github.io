@@ -20,7 +20,7 @@
 
 const Creatures = (function () {
   const NB8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
-  const DEFAULTS = { threshold: 0.05, saddle: 0.8, minArea: 0 };
+  const DEFAULTS = { threshold: 0.05, saddle: 0.8, minArea: 0, wholeSaddle: null };
 
   // Basin labels per block (the peak's block index), -1 for background (step 1).
   function basins(P, BW, BH, thr) {
@@ -77,12 +77,16 @@ const Creatures = (function () {
     for (let b = 0; b < n; b++) if (lab[b] >= 0) lab[b] = find(lab[b]);
   }
 
-  // blk: Float32Array of BW*BH*4. opts: { threshold, saddle, minArea (cells) }.
-  // Returns { comps, labels, total }:
+  // blk: Float32Array of BW*BH*4. opts: { threshold, saddle, minArea (cells), wholeSaddle }.
+  // Returns { comps, labels, total, wholes }:
   //   comps[i] = { mass, col, row, radius }  (radius = radius of gyration, cells)
   //   labels[b] = index into comps, or -1 (background, or a basin smaller than minArea)
+  //   wholes[k] = { mass, col, row, radius, parts: [comp indices] }: with wholeSaddle (below
+  //   saddle), the comps merged again across saddles >= wholeSaddle x the lower peak, kept where two
+  //   or more join (a twin, a trio: one creature of several parts); radius: of the circle around
+  //   them all. Merging only joins comps, so every whole is made of comps.
   function find(blk, BW, BH, B, W, H, opts) {
-    const { threshold, saddle, minArea } = { ...DEFAULTS, ...opts };
+    const { threshold, saddle, minArea, wholeSaddle } = { ...DEFAULTS, ...opts };
     const n = BW * BH;
     const P = new Float32Array(n);
     let total = 0;
@@ -127,9 +131,42 @@ const Creatures = (function () {
       }
       const idx = comps.length;
       for (const b of members) labels[b] = idx;
-      comps.push({ mass: m, col: ((cx % W) + W) % W, row: ((cy % H) + H) % H, radius: Math.sqrt(r2 / m) });
+      comps.push({ mass: m, col: ((cx % W) + W) % W, row: ((cy % H) + H) % H, radius: Math.sqrt(r2 / m), peak: id });
     }
-    return { comps, labels, total };
+    const wholes = wholeSaddle != null && wholeSaddle < saddle ? findWholes(P, lab, BW, BH, comps, wholeSaddle, W, H) : [];
+    return { comps, labels, total, wholes };
+  }
+
+  // The comps grouped by a second merge at wholeSaddle (on a copy of the merged labels; a comp's
+  // label is its peak block), groups of two or more as wholes: mass-weighted CoM (unwrapped around
+  // the first part) and the radius of the circle around the parts (each part 2 x its radius).
+  function findWholes(P, lab, BW, BH, comps, wholeSaddle, W, H) {
+    const lab2 = Int32Array.from(lab);
+    mergeShallow(P, lab2, BW, BH, wholeSaddle);
+    const groups = new Map();
+    comps.forEach((c, i) => {
+      const g = lab2[c.peak];
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(i);
+    });
+    const out = [];
+    for (const parts of groups.values()) {
+      if (parts.length < 2) continue;
+      const c0 = comps[parts[0]];
+      let m = 0, sx = 0, sy = 0;
+      for (const i of parts) {
+        const c = comps[i];
+        m += c.mass; sx += c.mass * (c0.col + wrapD(c.col - c0.col, W)); sy += c.mass * (c0.row + wrapD(c.row - c0.row, H));
+      }
+      const col = sx / m, row = sy / m;
+      let radius = 0;
+      for (const i of parts) {
+        const c = comps[i];
+        radius = Math.max(radius, Math.hypot(wrapD(c.col - col, W), wrapD(c.row - row, H)) + 2 * c.radius);
+      }
+      out.push({ mass: m, col: ((col % W) + W) % W, row: ((row % H) + H) % H, radius, parts });
+    }
+    return out;
   }
 
   const wrapD = (d, n) => d - n * Math.round(d / n);

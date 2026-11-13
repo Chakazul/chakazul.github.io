@@ -68,10 +68,15 @@ const MorphDetect = (function () {
   // The model of a long history (StatsChart.log): per morph its reference points, kernel widths
   // (as 1 / width), whether it is fuzzy, and its mean hue. null if it has fewer than two morphs
   // (nothing to choose between).
-  function build(long) {
+  // level: 'part' (the default: objects found at the merge saddle, single morphs) or 'whole' (twins
+  // and trios recorded as one: core.js wholes); each level's pieces make their own model, so a part
+  // is only compared with single morphs and a whole with twins. A model may have one morph (e.g.
+  // HGMLH8's parts: metamorpha alone, its twins recorded as wholes): then it names what fits it.
+  function build(long, level = 'part') {
     // keyed by name, "~" before a fuzzy one: a fuzzy piece named like a precise morph stays apart
     const by = {}, fuzzy = {};
     long.segs.forEach((sg, i) => {
+      if ((sg.level || 'part') !== level) return;
       const end = i + 1 < long.segs.length ? long.segs[i + 1].start : long.len;
       const key = (sg.fuzzy ? '~' : '') + sg.morph;
       // samples since the piece's gap: find where it started, to skip the warm-up
@@ -84,7 +89,7 @@ const MorphDetect = (function () {
       if (sg.fuzzy) fuzzy[key] = true;
     });
     const names = Object.keys(by).filter(m => by[m].length >= MIN_N);
-    if (names.length < 2) return null;
+    if (names.length < 1) return null;
     const morphs = names.map(key => {
       const name = key.replace(/^~/, ''), pts = by[key], stride = Math.max(1, pts.length / REF_MAX), ref = [];
       for (let s = 0; s < pts.length; s += stride) ref.push(feat(pts[Math.floor(s)]));

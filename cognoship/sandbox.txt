@@ -4,14 +4,15 @@
 [music:1,2,3,4:3]
 
 [add_allow_species:Aquarium originale:5N7KKM:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos]
-[add_allow_species:A. novus:GDNQYX:rectus,gyrans,tardus,lithos,paragyrans,antigyrans]
+[add_allow_species:A. novus:GDNQYX:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,pararectus,rectogyrans]
 [add_allow_species:A. vorticosus:Z18A9R:gyrans,tardus,lithos,paragyrans,antigyrans,transgyrans,trias]
 [add_allow_species:A. multiplicans:PJ1EF7:rectus,tachus,lithos]
 [add_allow_species:A. explodens:XEH4YR:rectus,tachus,cor]
 [add_allow_species:A. virgatus:KZ2BLD:rectus,virgatus,gyrans]
+[add_allow_species:A. saltans:KH97WU:limus,gyrans,impetus,antigyrans]
 [add_allow_species:A. sinuosus:HAESRE:zigzag,lithos,antigyrans,paragyrans]
-[add_allow_species:A. metamorpha:HGMLH8:metamorpha,tardus,tachus]
-[add_allow_species:A. replicans:VT049W:gyrans,rectus,tachus,lithos,paralimus,paragyrans,pararectus]
+[add_allow_species:A. metamorpha:HGMLH8:metamorpha,paratardus,paratachus]
+[add_allow_species:A. replicans:VT049W:gyrans,rectus,tachus,lithos,paralimus,paragyrans,rectogyrans]
 [add_allow_species:Cilium immunitatis:G6G6CR:rectus,limus,tardus,lithos,munitus]
 
 # run each time a species is chosen (after its [species] and [allow_morph])

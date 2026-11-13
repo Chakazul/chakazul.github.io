@@ -69,7 +69,8 @@ const Core = (function () {
   // >= 0.8 x the lower peak, at least a disk of radius R/4 (the values of ~/github/complexity).
   const MIN_AREA_UNIT = Math.PI * (R / 4) ** 2;
   const DETECT = { threshold: num('thr', 0.1, 0.01, 1), saddle: num('saddle', 0.9, 0.1, 2),
-                   minArea: num('area', 1, 0, 10) * MIN_AREA_UNIT };   // mutable: the lab's tuning sliders
+                   minArea: num('area', 1, 0, 10) * MIN_AREA_UNIT,   // mutable: the lab's tuning sliders
+                   wholeSaddle: num('wsaddle', 0.6, 0.1, 2) };   // the second merge, for wholes (opt.wholes)
   // Morph detection (detect.js): none, the focus only (Focused: a name box at the top of the
   // ship view), or every object (Every, the default: also its circle in its morph's hue and its
   // name in the world view).
@@ -150,6 +151,11 @@ const Core = (function () {
                 // focusCircle: a yellow circle around the followed creature in the world view (as
                 // Detect: Every draws it), inside its frame, also when the other circles are off
                 focusCircle: () => false,
+                // wholes: a second merge at DETECT.wholeSaddle finds wholes (twins, trios: creatures
+                // of several parts, creatures.js); each is tracked and named against the morphs
+                // recorded as wholes, and drawn as one circle with its name (its parts' names hidden)
+                // once named WHOLE_SHOW times in a row (the lab; not yet the game)
+                wholes: () => false,
                 // worldFrame: the world view framed as the ship panel, all four corners rounded alike
                 worldFrame: () => false,
                 // zoomDrag(off, e): the pointer of a press zoomPress took moves (off as zoomPress's)
@@ -233,7 +239,8 @@ const Core = (function () {
 
   // Rotation taking view (right, down) to board (col, row). Heading-up puts heading at "up".
   function viewAngle() {
-    const h = viewMode === 'vel' ? kin.heading : viewMode === 'axis' ? kin.axisHeading : null;
+    const sw = shipWhole(), k = sw ? sw.kin : kin;   // a twin ship: its heading (no axis of its own)
+    const h = viewMode === 'vel' || (viewMode === 'axis' && sw) ? k.heading : viewMode === 'axis' ? kin.axisHeading : null;
     return h === null ? 0 : h + Math.PI / 2;
   }
   function rot(v, phi = viewAngle()) {
@@ -253,12 +260,12 @@ const Core = (function () {
   // legacy pattern has its own rule settings, so it counts as a species with one morph.
   const speciesOf = p => p.logic === 'legacy' ? p.id : p.rule;
   const SPECIES_NAMES = { '5N7KKM': 'Aquarium originale', 'VT049W': 'Aquarium replicans', 'G6G6CR': 'Cilium immunitatis',
-    'Z18A9R': 'Aquarium vorticosus', 'KH97WU': 'Aquarium dancing', 'GDNQYX': 'Aquarium novus',
+    'Z18A9R': 'Aquarium vorticosus', 'KH97WU': 'Aquarium saltans', 'GDNQYX': 'Aquarium novus',
     'HGMLH8': 'Aquarium metamorpha', 'PJ1EF7': 'Aquarium multiplicans', 'KZ2BLD': 'Aquarium virgatus',
     'XEH4YR': 'Aquarium explodens', 'HAESRE': 'Aquarium sinuosus' };
-  // Picker order, as sandbox.txt lists them (KH97WU, not in it, after the other Aquariums); others go last
-  const SPECIES_ORDER = ['5N7KKM', 'GDNQYX', 'Z18A9R', 'PJ1EF7', 'XEH4YR', 'KZ2BLD', 'HAESRE', 'HGMLH8',
-    'VT049W', 'KH97WU', 'G6G6CR'];
+  // Picker order, as sandbox.txt lists them; others go last
+  const SPECIES_ORDER = ['5N7KKM', 'GDNQYX', 'Z18A9R', 'PJ1EF7', 'XEH4YR', 'KZ2BLD', 'KH97WU', 'HAESRE', 'HGMLH8',
+    'VT049W', 'G6G6CR'];
   const speciesName = p => p.logic === 'legacy' ? p.name : `${SPECIES_NAMES[p.rule] || p.rule} (${p.rule})`;
   const morphName = p => p.logic === 'legacy' ? 'rectus' : p.name.replace(p.rule + ' ', '');
   const BOOM = / \u{1F4A5}$/u;   // the self-replicating morphs' emoji: shown in the picker, not recorded
@@ -283,11 +290,12 @@ const Core = (function () {
     // merge saddle per species (aquarium233.js rules[code].detect), unless ?saddle= is given
     if (stats.species !== speciesOf(pattern)) {
       stats.recLeft = 0; hooks.record();   // a recording in progress is discarded with the long history
-      stats.short.clear(); stats.long.clear(); tracks = []; stats.species = speciesOf(pattern);
+      stats.short.clear(); stats.long.clear(); tracks = []; wholeTracks = []; stats.species = speciesOf(pattern);
       hooks.species();
       loadSavedStats(stats.species);
     }
     if (!q.has('saddle')) DETECT.saddle = AQUARIUM233.rules[pattern.rule]?.detect?.saddle ?? 0.9;
+    if (!q.has('wsaddle')) DETECT.wholeSaddle = AQUARIUM233.rules[pattern.rule]?.detect?.wholeSaddle ?? 0.6;
     hooks.pattern();
   }
 
@@ -296,7 +304,7 @@ const Core = (function () {
     SimGL.seed(f, Math.floor(BH / 2 - f.h / 2), Math.floor(BW / 2 - f.w / 2));
     steps = 0; spawnMass = null; status = 'alive'; stepAcc = 0;
     focus = null; autoFocus = true;
-    resetKinematics(); tracks = []; stats.short.clear();   // a new world: no short histories
+    resetKinematics(); tracks = []; wholeTracks = []; stats.short.clear();   // a new world: no short histories
     analyze(0);
   }
 
@@ -353,7 +361,7 @@ const Core = (function () {
     stopRecord();
     steps = 0; spawnMass = null; status = 'alive'; stepAcc = 0;
     focus = null; focusIdx = -1; autoFocus = true; masking = null;
-    resetKinematics(); tracks = []; stats.short.clear();
+    resetKinematics(); tracks = []; wholeTracks = []; stats.short.clear();
     hooks.change();
   }
 
@@ -365,8 +373,9 @@ const Core = (function () {
     for (let i = 0; i < n; i++) {
       let tool = null;
       if (off) {
-        const col = focus.col + kin.vel[0] * dt * i + off[0];
-        const row = focus.row + kin.vel[1] * dt * i + off[1];
+        const sh = ship();
+        const col = sh.col + sh.kin.vel[0] * dt * i + off[0];
+        const row = sh.row + sh.kin.vel[1] * dt * i + off[1];
         tool = { col, row, r: maskR, ch: channel, action };
       }
       SimGL.step(tool);
@@ -378,7 +387,7 @@ const Core = (function () {
   // Find the creatures, follow the focus, update velocity and heading. n = steps since last call.
   function analyze(n) {
     const blk = SimGL.readBlocks();
-    found = Creatures.find(blk, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH, DETECT);
+    found = Creatures.find(blk, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH, opt.wholes() ? DETECT : { ...DETECT, wholeSaddle: null });
 
     // No "Exploded" check: a board full of copies just keeps running.
     if (found.comps.length === 0) { status = 'dissolved'; if (opt.pauseWhenEmpty()) running = false; hooks.change(); }
@@ -403,7 +412,7 @@ const Core = (function () {
         focus = { col: c.col, row: c.row, mass: c.mass, radius: c.radius };
       }
     }
-    if (n > 0 && tracking()) trackObjects(T);
+    if (n > 0 && tracking()) { trackObjects(T); if (opt.wholes()) trackWholes(T); }
     if (!focus) { if (n > 0) recordStats(); return; }   // no focus: the short history still drains
 
     // 'vel' heading: the long-averaged, turn-lag corrected heading (see updateKinematics). Near
@@ -456,7 +465,8 @@ const Core = (function () {
   // the long one: a gap in the line. A change of species clears both.
   const stats = { short: StatsChart.ring(), long: StatsChart.log(), species: null,
                   recLeft: 0, shortGap: false, longGap: false,   // recLeft: steps still to record
-                  recName: '', recFuzzy: false };   // the morph name being recorded; fuzzy (detect.js)
+                  recName: '', recFuzzy: false,   // the morph name being recorded; fuzzy (detect.js)
+                  level: 'part' };   // what Record records: the focus ('part'), or the whole it is part of ('whole')
   const NO_SAMPLE = { t: NaN, mass: NaN, mR: NaN, mG: NaN, mB: NaN, speed: NaN, omega: NaN };
   const REC_STEPS = 300;   // one Record records this many steps of the focus
   window.cognoshipStats = stats;   // for poking at it from the console: .short / .long .get(key, j)
@@ -469,7 +479,11 @@ const Core = (function () {
     const s = sampleOf(focusIdx, kin);
     stats.short.push(s, stats.shortGap); stats.shortGap = false;
     if (stats.recLeft > 0) {
-      stats.long.push(s, stats.longGap, stats.recName, stats.recFuzzy);
+      // level 'whole' (the lab's Record: Whole): the whole the focus is part of, from its track;
+      // while it has none (the parts apart), nothing is recorded and the next sample starts a piece
+      const w = stats.level === 'whole' ? focusWhole() : null;
+      if (stats.level === 'whole' && !w) { stats.longGap = true; return; }
+      stats.long.push(w ? w.last : s, stats.longGap, stats.recName, stats.recFuzzy, stats.level);
       stats.longGap = false;
       if (--stats.recLeft === 0) hooks.record();
     }
@@ -564,7 +578,84 @@ const Core = (function () {
       tracks.push(tr);
     });
   }
-  function setEveryObject(on) { everyObject = on; if (!tracking()) tracks = []; }
+  function setEveryObject(on) { everyObject = on; if (!tracking()) { tracks = []; wholeTracks = []; } }
+
+  // Wholes (opt.wholes): tracked as the other objects (greedy, nearest predicted position first,
+  // within TRACK_GATE), each with its own kinematics and short history, named against the morphs
+  // recorded as wholes (detectMorphs). A whole shows (its circle and name, its parts' names
+  // hidden) once named WHOLE_SHOW classifications in a row, and goes once not named WHOLE_SHOW in a
+  // row: hysteresis, so a twin's label does not flicker, and a passing touch (no name) never shows.
+  const WHOLE_SHOW = 3;
+  let wholeTracks = [];   // { col, row, kin, hist, miss, wi (this scan's whole, or -1), last (its latest sample), streak, label, det }
+  function sampleOfWhole(w, k) {
+    const ch = channelMasses(), m = 1 / (R * R), s = { t: steps * dt, mass: w.mass * m, mR: 0, mG: 0, mB: 0, speed: k.speed / R, omega: Math.abs(k.omega) };
+    for (const i of w.parts) { s.mR += ch[3 * i] * m; s.mG += ch[3 * i + 1] * m; s.mB += ch[3 * i + 2] * m; }
+    return s;
+  }
+  function trackWholes(T) {
+    const ws = found.wholes, used = new Uint8Array(ws.length), pairs = [];
+    wholeTracks.forEach((tr, a) => {
+      tr.wi = -1;
+      const pc = tr.col + tr.kin.vel[0] * T, pr = tr.row + tr.kin.vel[1] * T;
+      ws.forEach((w, b) => {
+        const d = Math.hypot(wrapD(w.col - pc, BW), wrapD(w.row - pr, BH));
+        if (d < TRACK_GATE) pairs.push([d, a, b]);
+      });
+    });
+    pairs.sort((x, y) => x[0] - y[0]);
+    const done = new Uint8Array(wholeTracks.length);
+    for (const [, a, b] of pairs) {
+      if (done[a] || used[b]) continue;
+      done[a] = used[b] = 1;
+      const tr = wholeTracks[a], w = ws[b];
+      if (T > 0) updateKinematics([wrapD(w.col - tr.col, BW) / T, wrapD(w.row - tr.row, BH) / T], T, tr.kin);
+      if (tr.kin.moving || tr.kin.heading === null) tr.kin.heading = tr.kin.slowHeading;   // (as the focus's: a ship's heading)
+      tr.col = w.col; tr.row = w.row; tr.miss = 0; tr.wi = b;
+      tr.last = sampleOfWhole(w, tr.kin);
+      tr.hist.push(tr.last, false);
+    }
+    wholeTracks.forEach((tr, a) => { if (!done[a]) { tr.miss++; tr.last = null; tr.hist.push(NO_SAMPLE, false); } });
+    wholeTracks = wholeTracks.filter(tr => tr.miss < TRACK_MISS_MAX);
+    ws.forEach((w, b) => {
+      if (used[b]) return;
+      const tr = { col: w.col, row: w.row, kin: newKinematics(), hist: StatsChart.ring(), miss: 0, wi: b, streak: 0, label: null, det: null };
+      tr.last = sampleOfWhole(w, tr.kin);
+      tr.hist.push(tr.last, false);
+      wholeTracks.push(tr);
+    });
+  }
+  // The whole track the focus is part of this scan, or null
+  function focusWhole() {
+    if (focusIdx < 0 || !found || !found.wholes) return null;
+    for (const tr of wholeTracks) if (tr.wi >= 0 && found.wholes[tr.wi]?.parts.includes(focusIdx)) return tr;
+    return null;
+  }
+  // The ship: the whole the focus is part of while that whole is shown (a twin, a trio: named
+  // WHOLE_SHOW times in a row), else the focus. The ship view centres on it and turns with its
+  // heading, its arrow and the world view's frame are its, and the tool and the page's presses are
+  // placed relative to it; the focus (a part) is still what is tracked, followed and recorded.
+  // { col, row, radius (of its circle), mass, kin, whole (its track, or null) }, or null.
+  function shipWhole() {
+    if (!opt.wholes() || !focus) return null;
+    const tr = focusWhole();
+    return tr && tr.label && shownLabel(tr.labelDet) ? tr : null;
+  }
+  function ship() {
+    const tr = shipWhole();
+    if (tr) { const w = found.wholes[tr.wi]; return { col: w.col, row: w.row, radius: w.radius, mass: w.mass, kin: tr.kin, whole: tr }; }
+    return focus ? { col: focus.col, row: focus.row, radius: 2 * focus.radius, mass: focus.mass, kin, whole: null } : null;
+  }
+  // The ship's morph: its whole's (as shown), else the focus's
+  function shipDet() { const tr = shipWhole(); return tr ? tr.labelDet : stats.short.det; }
+  // After a whole track is classified: the hysteresis of its shown label
+  function showWhole(tr) {
+    const name = (tr.det && tr.det.name) || null;
+    if (name) tr.streak = tr.streak > 0 && tr.pending === name ? tr.streak + 1 : 1;   // named the same again
+    else tr.streak = tr.streak < 0 ? tr.streak - 1 : -1;
+    tr.pending = name;
+    if (tr.streak >= WHOLE_SHOW) { tr.label = name; tr.labelDet = tr.det; }
+    else if (tr.streak <= -WHOLE_SHOW) { tr.label = null; tr.labelDet = null; }
+  }
 
   // Velocity filters, all fed by v = the focus CoM's displacement / T since the last frame.
   //   Arrow: a short exponential average of v. Averaging a turning velocity makes it trail the
@@ -726,17 +817,17 @@ const Core = (function () {
       if (k > 0) { const ms = (performance.now() - t0) / k; stepMs = stepMs > 0 ? 0.85 * stepMs + 0.15 * ms : ms; }
     } else if (masking && focus && action !== 0) {
       // paused: erase / draw still act, at once (the mask has nothing to act on without a step)
-      const off = toolOffset();
-      SimGL.paint({ col: focus.col + off[0], row: focus.row + off[1], r: maskR, ch: channel, action });
+      const off = toolOffset(), sh = ship();
+      SimGL.paint({ col: sh.col + off[0], row: sh.row + off[1], r: maskR, ch: channel, action });
     }
     if (n === 0) analyze(0);
     if (detectMode !== 'none' && (n > 0 || md.dirty || stats.long.len !== md.len)) detectMorphs();
-    const p = focus ? viewAngle() : 0, c = Math.cos(p), s = Math.sin(p);
+    const p = focus ? viewAngle() : 0, c = Math.cos(p), s = Math.sin(p), sh = ship();
     SimGL.render({
       canvasW: layout.w, canvasH: layout.h, worldScale: WS,
       zoom: zoomRect(),
       rot: [c, s, -s, c],
-      focus: focus ? [focus.col, focus.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
+      focus: sh ? [sh.col, sh.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
       ...starView(),   // the star field (opt.stars: the lab's Stars button)
     });
     drawOverlay();
@@ -749,15 +840,23 @@ const Core = (function () {
   // tracks DETECT_PER_FRAME per frame in turn.
   function detectMorphs() {
     md.dirty = false;
-    if (stats.long.len !== md.len) { md.model = MorphDetect.build(stats.long); md.len = stats.long.len; }
+    if (stats.long.len !== md.len) {
+      md.model = MorphDetect.build(stats.long, 'part'); md.wmodel = MorphDetect.build(stats.long, 'whole'); md.len = stats.long.len;
+    }
     stats.short.det = focus ? MorphDetect.classify(md.model, stats.short) : null;
+    const fw = opt.wholes() ? focusWhole() : null;   // the whole the focus is part of: every time, as the focus
+    if (fw) { fw.det = fw.hist.det = MorphDetect.classify(md.wmodel, fw.hist); showWhole(fw); }
     if (detectMode !== 'every') return;
-    for (let q = 0; q < Math.min(DETECT_PER_FRAME, tracks.length); q++) {
-      const tr = tracks[md.next++ % tracks.length];
-      tr.hist.det = MorphDetect.classify(md.model, tr.hist);
+    // parts and wholes in turn, DETECT_PER_FRAME a frame; each against its own level's morphs
+    const all = opt.wholes() ? tracks.concat(wholeTracks) : tracks;
+    for (let q = 0; q < Math.min(DETECT_PER_FRAME, all.length); q++) {
+      const tr = all[md.next++ % all.length];
+      if (tr === fw) continue;   // (done above)
+      if (tr.wi === undefined) tr.hist.det = MorphDetect.classify(md.model, tr.hist);
+      else { tr.det = tr.hist.det = MorphDetect.classify(md.wmodel, tr.hist); showWhole(tr); }
     }
   }
-  function setDetectMode(m) { detectMode = m; if (!tracking()) tracks = []; md.dirty = true; }
+  function setDetectMode(m) { detectMode = m; if (!tracking()) { tracks = []; wholeTracks = []; } md.dirty = true; }
   // The detection result of object k of this scan: the focus's, or that of the track on it.
   function detOf(k, isF) {
     if (isF) return stats.short.det;
@@ -892,6 +991,13 @@ const Core = (function () {
     // mouse (hovered()) brighter. Detect: Every also draws each circle thick in its morph's mean
     // hue (in place of yellow / white) and writes the morph's name above it (neither if the morph is unknown).
     const detEvery = detectMode === 'every';
+    // wholes (opt.wholes): the ones shown (named, WHOLE_SHOW in a row) hide their parts' names
+    const shownWholes = [], inShown = new Set();
+    if (opt.wholes() && found.wholes) for (const tr of wholeTracks) {
+      const w = tr.wi >= 0 && found.wholes[tr.wi];
+      if (!w || !tr.label || !shownLabel(tr.labelDet)) continue;   // (named, and a name the page shows)
+      shownWholes.push([w, tr]); for (const i of w.parts) inShown.add(i);
+    }
     if (opt.circlesAll() || detEvery) {
       const hv = hovered();
       ctx.save();
@@ -901,7 +1007,7 @@ const Core = (function () {
         const isF = focus && Math.hypot(wrapD(c.col - focus.col, BW), wrapD(c.row - focus.row, BH)) < 0.5;
         const isH = hv && hv.i === k;
         const r = Math.max(3, 2 * c.radius * WS);
-        const det = detEvery ? detOf(k, isF) : null, lab = shownLabel(det);
+        const det = detEvery && !inShown.has(k) ? detOf(k, isF) : null, lab = shownLabel(det);   // (a part of a shown whole: no name)
         // (with its name above it: the copies reach that far up)
         for (const [x, y] of wrapCopies((c.col + 0.5) * WS, (c.row + 0.5) * WS, lab ? r + 16 : r)) {
           ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
@@ -916,16 +1022,39 @@ const Core = (function () {
           }
         }
       }
+      // the wholes: every one dashed while tuning (opt.circlesAll), so the twin saddle's effect shows;
+      // a shown one as one circle in its morph's hue, its name above
+      if (opt.wholes() && found.wholes) {
+        if (opt.circlesAll()) {
+          ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5;
+          for (const w of found.wholes)
+            for (const [x, y] of wrapCopies((w.col + 0.5) * WS, (w.row + 0.5) * WS, w.radius * WS)) {
+              ctx.beginPath(); ctx.arc(x, y, w.radius * WS, 0, 2 * Math.PI); ctx.stroke();
+            }
+          ctx.setLineDash([]);
+        }
+        for (const [w, tr] of shownWholes) {
+          const r = Math.max(3, w.radius * WS), lab = shownLabel(tr.labelDet), hue = tr.labelDet ? tr.labelDet.hue : NaN;
+          for (const [x, y] of wrapCopies((w.col + 0.5) * WS, (w.row + 0.5) * WS, r + 16)) {
+            ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
+            ctx.strokeStyle = hueFill(hue, 1); ctx.lineWidth = 3; ctx.stroke();
+            ctx.font = ital() + '600 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(lab, x, y - r - 2);
+            ctx.fillStyle = '#fff'; ctx.fillText(lab, x, y - r - 2);
+          }
+        }
+      }
       ctx.restore();
     }
 
     // zoom frame around the focus in the world view (rotated with the view), as the ship panel's
     // border; across the board's edge it wraps round: a copy on each side it crosses (up to four
     // near a corner)
+    const sh = ship();   // (a twin ship: its whole)
     if (focus) {
       const h = ZOOM_CELLS / 2, corners = [[-h, -h], [h, -h], [h, h], [-h, h]].map(v => {
         const b = rot(v);
-        return [(focus.col + 0.5 + b[0]) * WS, (focus.row + 0.5 + b[1]) * WS];
+        return [(sh.col + 0.5 + b[0]) * WS, (sh.row + 0.5 + b[1]) * WS];
       });
       ctx.save();
       ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
@@ -938,7 +1067,7 @@ const Core = (function () {
         }
       // opt.focusCircle: the followed creature's circle (unless the circles above drew it already)
       if (opt.focusCircle() && !(opt.circlesAll() || detEvery)) {
-        const x = (focus.col + 0.5) * WS, y = (focus.row + 0.5) * WS, r = Math.max(3, 2 * focus.radius * WS);
+        const x = (sh.col + 0.5) * WS, y = (sh.row + 0.5) * WS, r = Math.max(3, sh.radius * WS);
         ctx.strokeStyle = 'rgba(255,212,0,.9)'; ctx.lineWidth = 1.5;
         for (const dx of [-BW * WS, 0, BW * WS])
           for (const dy of [-BH * WS, 0, BH * WS]) {
@@ -956,7 +1085,7 @@ const Core = (function () {
       ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
       ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2; ctx.setLineDash(ACTION_DASH[action].map(x => x * 2 / 3));
       const r = Math.max(2, maskR * WS);
-      for (const [x, y] of wrapCopies((focus.col + 0.5 + off[0]) * WS, (focus.row + 0.5 + off[1]) * WS, r)) {
+      for (const [x, y] of wrapCopies((sh.col + 0.5 + off[0]) * WS, (sh.row + 0.5 + off[1]) * WS, r)) {
         ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.stroke();
       }
       ctx.restore();
@@ -976,7 +1105,7 @@ const Core = (function () {
       ctx.save();
       ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
       ghost = opt.drawGhost(ctx, ring ? [cx + ring[0] * CELL_PX, cy + ring[1] * CELL_PX] : null,
-                            [cx, cy], CELL_PX, viewAngle(), focus);
+                            [cx, cy], CELL_PX, viewAngle(), sh);
       ctx.restore();
     }
     if (ring && focus && !ghost) {
@@ -991,11 +1120,12 @@ const Core = (function () {
     }
 
     // velocity arrow, from the zoom centre, in view space
-    if (focus && kin.speed >= SPEED_MIN) {
-      const v = unrot(kin.vel);
-      let len = kin.speed * ARROW_T * CELL_PX;
+    const sk = sh && sh.kin;   // the ship's motion (a twin's: its whole's)
+    if (focus && sk.speed >= SPEED_MIN) {
+      const v = unrot(sk.vel);
+      let len = sk.speed * ARROW_T * CELL_PX;
       len = Math.min(len, ZOOM.edge / 2 - 14);
-      const ux = v[0] / kin.speed, uy = v[1] / kin.speed;
+      const ux = v[0] / sk.speed, uy = v[1] / sk.speed;
       const ex = cx + ux * len, ey = cy + uy * len;
       ctx.strokeStyle = '#ffd400'; ctx.fillStyle = '#ffd400'; ctx.lineWidth = 4; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex - ux * 10, ey - uy * 10); ctx.stroke();
@@ -1024,10 +1154,10 @@ const Core = (function () {
     // Detect: the focus's morph in a box at the top of the ship view, under the channel patches (or
     // at its bottom, above the controls' strip: opt.nameBoxLow)
     if (detectMode !== 'none' && focus && opt.nameBox()) {
-      const lab = shownLabel(stats.short.det), txt = lab || '???';
+      const lab = shownLabel(shipDet()), txt = lab || '???';   // (a twin ship: its whole's name)
       ctx.font = (lab ? ital() : '') + '600 22px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       // a known morph's colour dot before its name (opt.nameDot; as the game's morph book)
-      const det = stats.short.det, dot = lab && opt.nameDot(), D = 13, G = 10;
+      const det = shipDet(), dot = lab && opt.nameDot(), D = 13, G = 10;
       const tw = ctx.measureText(txt).width, w = tw + 24 + (dot ? D + G : 0), bx = cx - w / 2, by = opt.nameBoxLow() ? PATCH.bottom - 34 - 10 : ZOOM.y + 16;
       ctx.fillStyle = 'rgba(40,40,46,.75)';
       ctx.beginPath();
@@ -1197,7 +1327,7 @@ const Core = (function () {
   // The board cell [col, row] under the mouse, in either view, or null
   function pointerCell() {
     if (worldHover) return worldHover;
-    if (hover && focus) { const b = rot(hover); return [focus.col + b[0], focus.row + b[1]]; }
+    if (hover && focus) { const b = rot(hover), sh = ship(); return [sh.col + b[0], sh.row + b[1]]; }
     return null;
   }
   // Drop the held tool and the hover ring (e.g. when something covers the ship view).
@@ -1237,7 +1367,7 @@ const Core = (function () {
     // the end-of-run banner's second line
     banner: 'Reset or Add to try again',
     // helpers
-    deg, wrapD, viewAngle, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass,
+    deg, wrapD, viewAngle, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass, focusWhole, ship, shipDet,
     // actions
     start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt, pointerCell,
     pickChannel, setLayout, logicalPerCss,
@@ -1248,7 +1378,7 @@ const Core = (function () {
   const rw = { channel: [() => channel, v => { channel = v; }], action: [() => action, v => { action = v; }] };
   const ro = { running: () => running, status: () => status, steps: () => steps, dt: () => dt, pattern: () => pattern,
                focus: () => focus, focusIdx: () => focusIdx, kin: () => kin, spawnMass: () => spawnMass,
-               found: () => found, masking: () => masking, tracks: () => tracks, speedIdx: () => speedIdx,
+               found: () => found, masking: () => masking, tracks: () => tracks, wholeTracks: () => wholeTracks, speedIdx: () => speedIdx,
                maskR: () => maskR, viewMode: () => viewMode, zoomIdx: () => zoomIdx, CELL_PX: () => CELL_PX,
                ZOOM_CELLS: () => ZOOM_CELLS, detectMode: () => detectMode, everyObject: () => everyObject,
                msPerStep: () => msPerStep, simSteps: () => simSteps, driftSec: () => driftSec, stepMs: () => stepMs };
