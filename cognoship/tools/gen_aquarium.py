@@ -6,7 +6,7 @@ Usage: python3 tools/gen_aquarium.py [path/to/Lenia/Python/found/233.json]
 Takes the entries from 5N7KKM to HAESRE (file lines 2-76: 5N7KKM to GDNQYX, then HGMLH8, PJ1EF7,
 KZ2BLD, XEH4YR, HAESRE), skips "G6G6CR metamorpha beaked" and "VT049W gyrotachus"
 (its own kernels: a different species), renames VT049W's first "para" to "paralimus", KZ2BLD's
-unnamed second entry to "virgatus" and its "gyrans tachus" to "gyrans", HGMLH8's "parapedes" to
+unnamed second entry to "virgatus" and its "gyrans tachus" to "limus", HGMLH8's "parapedes" to
 "tardus" and "para" to "tachus", numbers a repeated name
 within a code ("auctus", "auctus 2"), and writes one pattern per entry: id "CODE-name", display
 name "CODE name". The self-replicating forms ("R" in the file, and XEH4YR auctus) get " 💥" after
@@ -37,7 +37,7 @@ POST_RENAME = {('G6G6CR', 'fortified'): 'munitus', ('VT049W', 'para'): 'paragyra
                ('HAESRE', 'anti'): 'antigyrans', ('HAESRE', 'para'): 'paragyrans',
                ('VT049W', 'rectus+gyrans'): 'rectogyrans'}
 BOOM = {('XEH4YR', 'auctus')}   # self-replicating, though not marked R in the file
-RENAME = {('KZ2BLD', ''): 'virgatus', ('KZ2BLD', 'gyrans tachus'): 'gyrans',
+RENAME = {('KZ2BLD', ''): 'virgatus', ('KZ2BLD', 'gyrans tachus'): 'limus',
           ('HGMLH8', 'parapedes'): 'paratardus', ('HGMLH8', 'para'): 'paratachus'}
 
 # Object detection per rule (Cognoship creatures.js), chosen by eye in the lab's Tuning mode:

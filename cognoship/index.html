@@ -25,8 +25,9 @@
   <div class="title-row">
     <h1>Cognoship</h1>
     <nav class="modes" aria-label="Game mode">
-      <a id="mode-story" href="./">Story Mode</a>
-      <a id="mode-sandbox" href="?mode=sandbox">Sandbox Mode</a>
+      <a id="mode-story" href="./">Story</a>
+      <a id="mode-challenge" href="?mode=challenge">Challenge</a>
+      <a id="mode-sandbox" href="?mode=sandbox">Sandbox</a>
     </nav>
     <div class="icons">
       <button id="sound" class="icon" data-label="Music" aria-pressed="false" title="Background music on / off (M)" aria-label="Music">
@@ -50,6 +51,8 @@
       <div class="layer layer-world">
         <!-- the score (energy), at the top of the world view, centred, while the dots are on ([dot:<n>]) -->
         <div id="score" class="score" hidden><span id="score-v">0</span></div>
+        <!-- challenge mode: the time left ([time_limit]), at the top left of the world view -->
+        <div id="timer" class="timer" hidden></div>
         <!-- ?dev=1: test buttons at the top left of the world view (I, O, P), the frame rate at its top right -->
         <div id="dev-fps" class="dev-fps" hidden></div>
         <div id="dev" class="dev" hidden>
@@ -80,10 +83,10 @@
         <!-- below Morphs while a clone is held ([clone:on]): turn it 45 degrees clockwise, flip it; paste it
              where a touch placed it (only then), cancel it -->
         <div id="clone-tools" class="clone-tools" hidden>
-          <button id="clone-rot" title="Turn the clone 45 degrees clockwise">&#8635;</button>
-          <button id="clone-flip" title="Flip the clone left to right">&#8596;</button>
-          <button id="clone-ok" title="Paste the clone where it is placed" hidden>&#10003;</button>
-          <button id="clone-cancel" title="Cancel the clone">&#10007;</button>
+          <button id="clone-rot" title="Turn the clone 45 degrees clockwise (Q)">&#8635;</button>
+          <button id="clone-flip" title="Flip the clone left to right (W)">&#8596;</button>
+          <button id="clone-ok" title="Paste the clone where it is placed (Enter)" hidden>&#10003;</button>
+          <button id="clone-cancel" title="Cancel the clone (Esc)">&#10007;</button>
         </div>
         <!-- the stacked layout: ?dev=1's buttons and stats, left of the ship view at its top, in a column
              (game.js applyLayout moves #dev and #dev-fps in here, and back) -->
@@ -109,7 +112,7 @@
       <div id="success" class="success" hidden><div class="success-box">SUCCESS</div></div>
       <!-- a chapter's title card ([chapter]), over the whole game window -->
       <div id="chapter" class="chapter" hidden>
-        <div class="chapter-box"><div class="chapter-no" id="chapter-no"></div><div class="chapter-title" id="chapter-title"></div></div>
+        <div class="chapter-box"><div class="chapter-no" id="chapter-no"></div><div class="chapter-title" id="chapter-title"></div><div class="chapter-no chapter-stage" id="chapter-stage" hidden></div></div>
       </div>
       <div id="error" class="error" hidden></div>
     </div>

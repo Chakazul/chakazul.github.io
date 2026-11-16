@@ -39,6 +39,11 @@ h1 small{font-size:.5em;font-weight:500;color:var(--muted);letter-spacing:.04em;
   font-size:clamp(22px,3.6vw,38px);font-weight:700;font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;
   text-shadow:0 0 4px #000,0 0 2px #000}
 .score[hidden]{display:none}
+/* challenge mode: the time left ([time_limit]), at the top left of the world view; red in the last 5 s */
+.timer{position:absolute;top:10px;left:14px;z-index:3;pointer-events:none;font-size:clamp(16px,2.4vw,26px);font-weight:700;
+  font-variant-numeric:tabular-nums;color:#fff;white-space:nowrap;text-shadow:0 0 4px #000,0 0 2px #000}
+.timer.low{color:#ff5a4a}
+.timer[hidden]{display:none}
 /* ?dev=1: the test buttons, at the top left of the world view; the frame rate at its top right */
 .dev{position:absolute;left:10px;top:10px;z-index:3;display:flex;gap:6px}
 .dev[hidden],.dev-fps[hidden]{display:none}
@@ -257,13 +262,22 @@ button,select,input{transition:background .25s,border-color .25s}
    the row, centred), above its name in italics: the picture's centre (zoomed in 1.7x, cropped), or
    black (not discovered, or no picture) */
 .book-slot.species .label{font-style:italic}
+.book-slot.challenge .tick{color:var(--new);font-weight:700;font-size:1.2em}   /* a completed challenge: a green tick */
+.book-slot.challenge .info{font-size:.8em;color:var(--muted)}
+/* the species book for a challenge: the challenge's record with each species, a green tick at the left, the best time at the right */
+.book-slot.species{flex-direction:column}   /* the thumbnails on the top row, the tick, name and best time on the bottom one */
+.book-slot.species .crow{display:flex;flex-direction:row;align-items:center;width:100%;gap:.3em;line-height:1.2}
+.book-slot.species .crow .label{flex:1;min-width:0;white-space:nowrap}   /* one line: a wrapped name made the slots taller, and fitBook shrank the thumbnails */
+.book-slot.species .crow .tick{flex:0 0 1.6em;text-align:left;color:var(--new);font-weight:700;font-size:1.1em}
+.book-slot.species .crow .best{flex:0 0 auto;min-width:1.6em;text-align:right;color:var(--muted);white-space:nowrap;font-size:.8em}
 .thumbs{display:flex;justify-content:center;gap:3px;width:100%;max-width:100%}
 .thumb{flex:none;width:calc((100% - 21px) / 8);aspect-ratio:1;background:#000;border-radius:3px;overflow:hidden;box-sizing:border-box;border:1px solid #3c3a48;
   display:flex;align-items:center;justify-content:center}
 .thumb img{display:block;flex:none;width:170%;height:170%;object-fit:cover}
 .thumb.whole img{width:100%;height:100%}   /* a twin or trio: the whole picture (64 cells), not its middle */
 .thumb.unknown{background:var(--raised)}   /* not discovered: the book's own colour (discovered, no picture yet: black) */
-.book-box.wide{width:min(1040px,94%)}   /* the bullet book: names with pictures need the room */
+.book-box.wide{width:min(1040px,94%)}
+.book-box.wide.challenges{width:min(1120px,97%)}   /* the challenge book: room for a tick before the titles */   /* the bullet book: names with pictures need the room */
 .book-box h2{margin:0;font-size:calc(var(--ui-font) * 1.4);font-weight:650;letter-spacing:-.01em}
 .book-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:calc(var(--ui-h) * .25);width:100%}
 .book-slot{display:flex;align-items:center;justify-content:center;gap:.45em;min-height:calc(var(--ui-h) * 1.5);padding:4px 6px;
@@ -314,7 +328,7 @@ button,select,input{transition:background .25s,border-color .25s}
 .msg .mark{position:relative}
 :root.keys .kt[data-key]::after{top:-.7em;right:auto;left:100%;margin-left:1px}   /* a button's badge at the top right of its text (Fire, Respawn, Choose) */
 .kt{position:relative}
-:root.keys .msg .mark[data-key]::after{top:-.75em;right:auto;left:85%}   /* spc, at the top right of ≫ */
+:root.keys .msg .mark[data-key]::after{top:-.75em;right:auto;left:85%}   /* Space, at the top right of ≫ */
 .kbd-slider{transform:translate(-50%,-100%)}   /* centred on the slider's end, just above its track */
 .book-slot.pick:hover{border-color:var(--muted);background:color-mix(in srgb,var(--accent) 10%,var(--raised))}
 /* Game: major actions (Respawn, Choose, a pickable morph in the book): a thick light cyan border */
@@ -363,6 +377,8 @@ button,select,input{transition:background .25s,border-color .25s}
     repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px),   /* brushed lines */
     radial-gradient(120% 90% at 30% 0%,rgba(140,175,255,.35),transparent 60%),           /* top light */
     linear-gradient(160deg,#0d2257 0%,#081639 45%,#0f2a6b 70%,#061031 100%)}             /* dark blue */
+.chapter-stage{margin-top:.35em}
+.chapter-stage[hidden]{display:none}
 .chapter-no{position:relative;font-size:calc(var(--ui-font) * 1.5);letter-spacing:.22em;text-transform:uppercase;color:#aebfe6}
 .chapter-title{position:relative;margin-top:.15em;font-size:calc(var(--ui-font) * 3.2);font-weight:750;letter-spacing:-.01em;line-height:1.2;padding-bottom:.18em;   /* the gradient (background-clip: text) covers only the box: room for the tails of g, y, p */
   color:#e6ecf8;background:linear-gradient(180deg,#ffffff 0%,#dfe7f5 38%,#8f9db8 52%,#e9eef8 70%,#b7c3da 100%);

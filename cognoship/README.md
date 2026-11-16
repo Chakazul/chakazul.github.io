@@ -18,10 +18,15 @@ the side-by-side one.
   world view. Each run starts with nothing discovered.
 - **Sandbox Mode:** free play with everything you have discovered in every run, in any species
   you have reached (the **Species** button).
+- **Challenge Mode:** set tasks to pick from the **Challenges** button, e.g. a courier run to
+  beacons and a target area, with any species you have reached. Completed ones get a green ✓ and
+  a best time. If your ship dissolves (or time or energy runs out) the attempt fails: Respawn, or
+  choose another morph, to try again.
 
 Switch with the links at the top of the page. What you discover (morphs, with their pictures,
-and bullet types) is saved in your browser as you play and shows up in Sandbox Mode. In Sandbox
-Mode, **Hold to clear data** in any book (held for 3 seconds) erases it.
+and bullet types) is saved in your browser as you play and shows up in Sandbox Mode and
+Challenge Mode. In those two, **Hold to clear data** in any book (held for 3 seconds) erases it,
+and the challenges completed.
 
 ## The screen
 
@@ -53,7 +58,7 @@ Mode, **Hold to clear data** in any book (held for 3 seconds) erases it.
   it reads **Create**, you have enough energy for a new type: open it and pick a **?** (it costs
   that energy).
 - **Clone:** when the Morphs button reads **Clone**, pick a discovered morph and place a copy of
-  it (↻ turns it, ↔ flips it). You board the copy: it becomes your ship, and the old one drifts
+  it (↻ or `Q` turns it, ↔ or `W` flips it, `Enter` pastes it, `Esc` cancels). You board the copy: it becomes your ship, and the old one drifts
   on. Paste it away from your ship to switch morph; paste another next to you, and the two may
   become a new twin morph.
 - **Species** (`C`, Sandbox Mode): switch to another species you have reached.
@@ -64,16 +69,16 @@ Mode, **Hold to clear data** in any book (held for 3 seconds) erases it.
 |---|---|
 | Space or a click on the message | Next message, close a chapter card |
 | `Enter` | Pause / play |
-| `Backspace` | Retry: start the current scene again |
+| `Backspace` | Retry: choose a morph, then start the current scene (Challenge Mode: the challenge) again with it |
 | `Q` / `W` | Slower / faster |
-| `1` `2` `3` | Hide the R, G or B channel (the selected one again: recycle) |
+| `1` `2` `3` | Hide the R, G or B channel (the selected one again: recycle; again, where allowed: draw) |
 | `E` | Upward |
 | `R` / `T` | Zoom out / in |
 | `A` | Fire |
 | `D` / `F` | Previous / next bullet type |
 | `S` | Bullet book |
 | `X` | Morph book; Choose when dissolved |
-| `C` | Species book (Sandbox Mode) |
+| `C` | Species book (Sandbox Mode), challenge book (Challenge Mode) |
 | `Z` | Respawn when dissolved |
 | Letters, in a book | Pick that slot (hold Shift to see them) |
 | `Escape` | Close a book |

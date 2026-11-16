@@ -13,8 +13,16 @@ After that, the next step can be either **Phase 2** (design the game on the worl
 research agenda in its own right. Phases 2 and 3 don't depend on each other, and each can feed the
 other later.
 
-Status: Phases 1 and 1b are done and checked in the browser, on desktop and phone (2026-11-04).
-Next: choose Phase 2 or Phase 3.
+Status (revised 2026-11-13):
+- Phases 1 and 1b are done and checked in the browser, on desktop and phone (2026-11-04).
+- Phase 3 was chosen (2026-11-05). Its measuring half is built in the lab (`lab.html`): stats
+  mode, the phase-space chart, long histories, and live morph detection (`detect.js`). Its
+  press-and-outcome half (press records, mask maps, sweep, agent) is not started.
+- A game was built anyway (2026-11-06 to 11-13), in a different shape from §5: a scripted story
+  (`script.txt`, 7 chapters plus a final one, all 11 species) and a sandbox mode (`sandbox.txt`),
+  with the morph book, dots and energy, bullets, cloning, and twins and trios followed as wholes.
+  §7 and §8 mark what of §5 and §8 it covers.
+- Not built: §9's performance work, and most of §8.2's bigger mechanics.
 
 ---
 
@@ -588,11 +596,15 @@ browser.
 **Then choose one: Phase 2 or Phase 3**
 - [x] Decision made: Phase 3 (2026-11-05). Phase 2 stays an option for later.
 
-**Phase 2: the game** (§5)
-- [ ] Pick a concept and its game elements.
-- [ ] Level mask texture in `sim.glsl` (masking walls / nebulae).
-- [ ] Mass-removing hazards.
-- [ ] Goal, scoring and win/lose flow.
+**Phase 2: the game** (§5; built as a story game instead, see the status at the top and §8)
+- [x] Concept: a scripted story (`script.txt`) of chapters, one species each, with goals as
+  `[need:…]` conditions; a sandbox mode (`sandbox.txt`); the morph book as the collection.
+- [ ] Level mask texture in `sim.glsl` (masking walls / nebulae). Still none of §5's level
+  geometry: every world is an open torus.
+- [ ] Mass-removing hazards. Only the player's bullets remove mass; nothing in the world does
+  (see §8.2 items 6 and 7).
+- [x] Goals and flow: `[need:…]` conditions with progress, the SUCCESS box, Dissolved, Retry /
+  Reset from the last checkpoint. Scoring is the energy (dots eaten), spent on bullet patterns.
 
 **Phase 3: the mask map and agent** (§6)
 
@@ -628,10 +640,14 @@ data) and used in the browser during development; README "Stats mode" has the de
   loaded with the species (skipped at another R or dt); new recordings add pieces to it.
 - [ ] Post-press trajectories: mark presses (channel, tool, offset) on the recorded history, and
   record the aftermath of each press.
-- [ ] Windowed features over the pulse period (mean and amplitude), so a steady form is a blob,
-  not a loop (§6.1).
-- [ ] Forms defined by clustering, with live form labels (§6.1). Until then, the morph label on a
-  recording is the picker's morph, not a detected one.
+- [x] ~~Windowed features over the pulse period~~ Superseded: `detect.js` scores the last 50
+  samples against each morph's cloud by kernel density, ignoring their order, so the pulse's loop
+  doesn't matter.
+- [x] Live form labels (§6.1), done differently: supervised, not clustered. Morphs are named from
+  recorded long histories (`detect.js`: kernel density + softmax, fuzzy morphs, per-species merge
+  saddles; offline 91% of windows named, 99.3% of them right), and twins and trios are named as
+  wholes (2026-11-13). Unsupervised clustering to *discover* new forms (§6.1's "unnamed form #n")
+  is not built.
 - [ ] Press records (state, action, outcome) and JSON import/export (§6.2).
 - [ ] Mask maps derived per form and channel; overlay and map panel in the game UI (§6.3).
 - [ ] Active sweep button.
@@ -639,7 +655,7 @@ data) and used in the browser during development; README "Stats mode" has the de
 - [ ] Research (§6.4): learned co-pilot.
 - [ ] Research (§6.4): CARL-like agent that steers by masking, compared with players' maps.
 
-## 8. Suggestions: more game mechanics and the rest of the story (2026-11-09, not built)
+## 8. Suggestions: more game mechanics and the rest of the story (2026-11-09; status 2026-11-13)
 
 A design pass over the game as it stands (mechanics in `game.js`, the script in `script.txt`,
 the species in `aquarium233.js`, the lab's tools). The premises for the unused species come
@@ -653,53 +669,61 @@ each wants a short lab session before it is scripted.
 | 1 Metamorphosis | 5N7KKM | masking, morphs, the morph book |
 | 2 You are not alone | 5N7KKM | dots / energy, the gun, bullet types |
 | 3 Brave new world | GDNQYX | clone, recycle |
-| 4 Megastructure | Z18A9R | building up an object count (unfinished: ends at "We will") |
+| 4 Megastructure | Z18A9R, PJ1EF7, XEH4YR | object count, survive a swarm, find all morphs |
+| 5 Interstellar Evolution | KZ2BLD, KH97WU, HAESRE, HGMLH8 | find a morph, engineer twin morphs |
+| 6 The Rise of Self-Replicators | VT049W | dissolve every object with Paraptera bullets |
+| Final: Cosmic Immune System | G6G6CR | make red mass (`[need:mass:r:50]`) by cooperation |
 
-Unused: none since 2026-11-13 (the story has all 11, A. saltans KH97WU last added).
-
-Typos in `script.txt` to fix: "techonologies", "wheels or levels" (levers?), "speices", "This
-supermassive black releases" (black hole).
+Done 2026-11-13: the story uses all 11 species and has an ending (credits, then sandbox mode).
+The typos listed here earlier are fixed.
 
 ### 8.2 New mechanics
 
-Roughly from cheap (reusing what exists) to bigger:
+Roughly from cheap (reusing what exists) to bigger. Status 2026-11-13 in **bold brackets**.
 
-1. **Time goals:** `[need:survive:<s>]`, and `[need:hold:<morph>:<s>]` (stay that morph for
+1. **[Half built: `[need:survive_time]`; `hold` not built.]** **Time goals:** `[need:survive:<s>]`, and `[need:hold:<morph>:<s>]` (stay that morph for
    s seconds; hard with unstable morphs, a good test of steering). The first is already wanted
    in the chapter 5 notes. Both are small additions next to the existing conditions.
-2. **Beacons:** `[beacon:<x>,<y>]` and `[need:reach]`, a target marked in the world view.
+2. **[Not built.]** **Beacons:** `[beacon:<x>,<y>]` and `[need:reach]`, a target marked in the world view.
    Steering by masking is the core skill, yet no chapter asks the player to go anywhere. A row
    of beacons makes a race or an escort.
-3. **A cap on objects:** `[need:object_max:<n>:<s>]` (at most n objects for s seconds), the
+3. **[Built as `[need:max_object]` and `[need:object:0]` (chapter 6).]** **A cap on objects:** `[need:object_max:<n>:<s>]` (at most n objects for s seconds), the
    opposite of chapter 4. It suits the replicating species: thin out an outbreak with bullets
    and recycling, which gives the gun a real job.
-4. **Energy as a currency:** firing, cloning and recycling cost energy (the score goes down).
+4. **[Partly: only bullet patterns cost energy (`[new_bullet:<n>]`); firing and cloning are free.]** **Energy as a currency:** firing, cloning and recycling cost energy (the score goes down).
    Dots become fuel rather than points, and the player chooses between shooting, cloning and
    saving.
-5. **Lab tools as technology:** Draw ("synthesis", adding mass, the partner of recycling),
+5. **[Not built.]** **Lab tools as technology:** Draw ("synthesis", adding mass, the partner of recycling),
    Detect: Every ("scanner": names every creature, a help for finding morphs), the mask-radius
    slider ("sensor jammer" upgrade), body-axis view ("gyroscope"). Each unlocks by
    `[need:energy:…]`, as the second bullet type does.
-6. **Radiation that hurts:** in chapter 4 the gamma bursts are only told and shown (the orange
+6. **[Not built: radiation is still only the background.]** **Radiation that hurts:** in chapter 4 the gamma bursts are only told and shown (the orange
    background). Let them slowly wear down creatures in the open, but not those near big
    clusters, so the megastructure really shelters the ship. The bullets channel already has the
    wear-down mechanism to reuse.
-7. **Hostile creatures:** morphs that home on the ship (Carlman's ghosts are the model), or
+7. **[Not built.]** **Hostile creatures:** morphs that home on the ship (Carlman's ghosts are the model), or
    creatures firing bullets of their own. Bigger work, but it turns "you are not alone" into a
    real threat.
-8. **Docking:** `[need:merge:<morph>]`, reaching a pair morph by joining another creature
+8. **[Done another way: twins and trios are built by cloning and named as wholes, goals by `[need:discover_morph]` (chapters 3 and 5).]** **Docking:** `[need:merge:<morph>]`, reaching a pair morph by joining another creature
    (KH97WU *impetus+gyrans*, 5N7KKM *lithos+gyrans*); detection already names composite
    morphs. Cooperation as a mechanic, the opposite of shooting.
-9. **The stats chart as a "spectrometer":** a late chapter sets a target in the lab's phase
+9. **[Not built.]** **The stats chart as a "spectrometer":** a late chapter sets a target in the lab's phase
    space (e.g. hold this spin rate). Niche, but true to the research side of the project.
 
 ### 8.3 Finishing chapter 4
+
+*Status 2026-11-13: chapter 4 is finished more simply: `[need:object:50:min]`, then "Shield in
+operation. We survived." The burst-and-survive payoff below is not built; it needs 8.2.6.*
 
 The megastructure line (`[need:object:60:min]`) wants a payoff: build to 60 objects (mostly cloned
 *lithos*, the still discs), then a gamma burst (`[clear_world:radiation]` with a stronger pulse,
 using 8.2.6), then `[need:survive_time:30]`, then "The shield holds." Build, defend, survive.
 
 ### 8.4 Chapters for the unused species
+
+*Status 2026-11-13: superseded. Every species is now in the story (table in 8.1), mostly as
+discovery scenes in chapters 4 and 5 rather than as the chapters below. The ideas that need
+beacons, hold or hostile creatures are still open.*
 
 | Species | What it's known for | Goal idea | New mechanic |
 |---|---|---|---|
@@ -717,7 +741,7 @@ Suggested order after chapter 4: HAESRE (pure steering), KH97WU (cooperation), V
 rises and each chapter mostly adds one mechanic; most of the goals need only new conditions
 (time goals, the object cap, beacons, docking), not new systems.
 
-## 9. Performance: next steps (2026-11-11, not built)
+## 9. Performance: next steps (2026-11-11; still not built 2026-11-13, FFT mode now the default)
 
 Measured with `?dev=1` (fps / steps per s / ms per step, a step's time including its analysis and
 the GPU wait), after the per-frame step cap and FFT mode (`?fft=1`):
@@ -745,3 +769,317 @@ convolution was not the only cost. Plan:
    - **FFT mode's ~100 draw calls a step:** fold `fftmul` into the first inverse pass, and use a
      real-to-complex FFT (half the work).
    - **Dots stepping every other step:** ~4-5% (their 9% of the direct step).
+
+## 10. Evolution in the lab (2026-11-13, not built)
+
+**Why.** The ten species after *A. originale* (5N7KKM) were evolved from it by rounds of rule
+mutation, selected by eye for metamorphosis, twins and trios, replication and so on. The
+transgyrans tuning (MORPH.md, `output/transgyrans/tune/`) was one such round, done offline:
+mutate, run from known morphs, measure, select. The aim here is to do it in the lab, where it can
+be watched, and to let it *discover* species whose morphs differ in shape, behaviour and
+combinations (twins, trios).
+
+**How far the species are from originale** (`aquarium233.js`, 15 kernels each). Of 60 values
+(`m`, `s`, `h`, `r` per kernel), 56-60 differ, by a median of 5-15 % (max 25-76 %). 1-7 kernels
+also have changed ring weights `b` (e.g. `1,1/4` → `1,1/3,0`). Channel wiring `c` never changes,
+and T stays 1. So a mutation must cover the kernel's shape (`r`, `b`), not only growth (`m`, `s`,
+`h`). Steps of 1-3 % (as in the transgyrans tuning) fine-tune a species; reaching a new one took
+many rounds of ~5 %.
+
+### 10.1 The engine: a mosaic of experiments
+
+The world view becomes a grid of tiles. Each tile is its own small torus with its own rule, and
+the ship view shows one tile (click a tile to pick it).
+
+- **Per-tile torus.** In `sim.glsl` a tap's cell wraps within its tile:
+  `q = o + mod(p − o + off, tile)`, with o the tile's origin. Same cost as now. Check with a node
+  emulation that one tile matches a single board of that size.
+- **Per-tile rule.** Growth (`m`, `s`, `h`) comes from a small parameter texture, fetched once per
+  cell, not per tap, so it is nearly free. Kernel shape (`r`, `b`) differs per tile too, so the
+  tap table gets 5 rows *per tile*. The tap offsets are the union over tiles (out to the largest
+  `r`), and a tile's weights are 0 beyond its own reach. Each tap is still read once. Normalisation
+  is per tile.
+- **Direct convolution only, at first.** FFT mode (the default since 2026-11-11) convolves the
+  whole board with one kernel spectrum. Per tile it would need batched per-tile FFTs and a
+  spectrum per tile. Leave that until the direct mosaic is measured.
+- **Tile size.** At R = 18 a gyrans is ~40-70 cells across, so 128² holds a single morph and 192²
+  a collision. The present 384×256 board gives 6 tiles of 128², and a larger lab board gives more.
+  How many tiles a laptop and a phone can run is §9's step 1 question: measure the sim pass alone
+  first.
+- **Per-tile detection.** `blocks.glsl` already maps the board. `Creatures.find` runs on each
+  tile's block sub-grid with the tile's own wrap, and each tile keeps its own tracks and stats.
+- **Batch speed.** In experiment mode the lab can skip drawing the tiles it isn't showing, run as
+  many steps per frame as fit, and detect only every few steps after the settling time.
+- **Offline is still the bulk path.** Large sweeps (the transgyrans search ran ~1,500 runs of
+  3,000 steps) remain faster in numpy with multiprocessing. The lab is for watching, for small
+  sweeps, and for picking what to keep. Both write the same experiment JSON (10.4).
+
+### 10.2 Experiments
+
+Each experiment is a list of tiles, each with (rule, seed, steps), plus how to score the outcome.
+
+1. **Mutation sweep (morph response).** Take species S and morph M. In each tile, mutate the rule:
+   - systematic: one parameter over a grid of factors (e.g. ×0.97 … ×1.03), as `tune.py` did;
+   - random: every value × (1 + σ·N(0,1)), with an occasional `b` change.
+
+   Run from M and classify the outcome against M's own stats: unchanged (Δspeed, Δturn, Δmass
+   within the detection widths), drifted (same shape, different speed or turn: "slightly changes
+   direction or rotation"), became known morph X, became something unknown, split, died, exploded.
+   The result is a map: parameter × factor, coloured by outcome. Reproducing the transgyrans
+   result (kernel 3 `m` ×0.985 makes the crossing last) is the first test, since its answer is
+   known.
+2. **Collisions.** Two morphs A and B (B can be A) under one rule. Grid or random over the impact
+   offset (perpendicular to A's heading), the relative angle, mirroring, and B's phase in its
+   pulse. For phase, run B alone first in its own tile for k·Δ steps, then paste it, using
+   `clone.js`'s rotate/mirror paste. Outcome: the objects at the end and their names. Of most
+   interest: a new whole (twin or trio, named or not), a new single morph, or annihilation.
+3. **Seeds** (what a tile starts from, for either of the above):
+   - a morph of the species (the long history's pattern);
+   - a morph of *another* species, transplanted (same R; it is often unstable and changes);
+   - a random soup: a disc ~1.5 R across with noise per channel, as Lenia's random search did.
+     Most soups die or explode, and the survivors show what the rule settles into on its own.
+
+### 10.3 Measuring outcomes, and the trap of a mutated rule
+
+Detection (`detect.js`) names morphs against the long histories, which were recorded under the
+species' *unmutated* rule. A mutation of a few percent moves every morph's mass and speed out of
+the 3 % widths, so everything reads "???". "Unknown" would then mean "drifted", not "new". The
+fix is to rebuild the references per variant:
+
+- **Step 1 under a new rule, always:** run each known morph of the parent alone (experiment 1 with
+  no further mutation) and record its settled stats as that variant's reference: "gyrans under
+  variant v". Morphs that die or change go in the variant's profile (10.4) too.
+- **New morph:** a creature whose stats settle (low variance over a window, as Record expects)
+  but that fits none of the variant's references. It becomes a candidate: its pattern (cropped,
+  RLE), its stats piece, and a thumbnail. Candidates from different tiles are compared with each
+  other (the same kernel density) so that duplicates merge. Wholes work the same way, using the
+  twin saddle.
+- **The player names it.** A candidate shows in the ship view. Record (Part / Whole) with a name
+  adds it to the variant's long history, as now. Automatic finds stay "candidate #n" until
+  checked by eye.
+
+### 10.4 Variants, profiles and selection (the evolution loop)
+
+- **A variant** is a parent code plus tweaks, in `tools/rule_tweaks.json`'s format (kernel, key,
+  value, was, why), so a kept variant goes through `gen_aquarium.py` like the transgyrans fix.
+  It gets a new 6-character code and a "parent" field. The lineage back to 5N7KKM is kept.
+- **A profile** per variant, from its experiments:
+  - how many distinct steady morphs (known + candidates);
+  - the mix of still and moving morphs;
+  - spontaneous morph changes per 1,000 steps (metamorphosis);
+  - the object count's growth (replication);
+  - the wholes found by collisions (twins, trios);
+  - the share of seeds that survive (a filter: below ~50 % the variant is dropped, not ranked).
+- **Selection**, in increasing automation:
+  1. *Interactive* (Picbreeder-like, closest to how the species were found): the mosaic shows 6-12
+     variants of the current parent, each with its profile as badges. You keep one or a few, and
+     the next generation mutates those.
+  2. *Novelty / MAP-Elites:* bin variants by two profile axes (e.g. morph count × replication
+     rate, or still/moving × wholes found) and keep the best per bin. Running unattended, it fills
+     a map of qualitatively different species instead of climbing one score.
+- **Export:** variants, experiments (tiles, seeds, outcomes) and candidates as JSON. They can be
+  imported into the offline tools and back.
+
+### 10.5 Milestones (suggested order)
+
+- [ ] §9 step 1 first: the per-step breakdown, which shows how many tiles a laptop and a phone can run.
+- [ ] E1 Mosaic engine: per-tile torus and per-tile rule in `sim.glsl` (direct mode), per-tile
+  detection and tracks; an Experiment mode in the lab; click a tile to show it in the ship view.
+  Checked by node emulation (one tile = a single board).
+- [ ] E2 Mutation sweep with outcome classes and the parameter × factor map; reproduces the
+  transgyrans result.
+- [ ] E3 Per-variant references (10.3) and new-morph candidates, deduplicated, with Record to name
+  them.
+- [ ] E4 Collisions (offset, angle, mirror, phase) and wholes as outcomes.
+- [ ] E5 Seeds from other species and random soups.
+- [ ] E6 Variants with lineage and profiles; interactive selection; export to `rule_tweaks.json`
+  form and `gen_aquarium.py`.
+- [ ] E7 Unattended novelty / MAP-Elites runs.
+- [ ] Later: per-tile FFT, so the mosaic can use FFT mode too.
+
+## 11. Challenge mode (2026-11-15, not built)
+
+### 11.1 The brief (paraphrased)
+
+A third mode beside story and sandbox: a list of challenges to choose from at the start, each
+marked with a green tick once completed. Some challenges allow any species, others name one. A
+run starts from any discovered morph. Morph data syncs with the central inventory, read and
+write, as in sandbox mode, but the energy collected does not sync (a run's energy is its own, as
+in a story run). Challenges:
+
+- **Courier** (any species).
+  - A sequence of beacons, each a pattern in the dots channel (e.g. *Heptadentium scintillans*).
+    Eating one puts the next one somewhere else.
+  - Goal: after the beacons (zero or more), park in a small goal area as a still morph (e.g.
+    *lithos*).
+  - The world is much larger than the board. The world view scrolls with the player at its
+    centre, and the star field is fixed to the world. Objects are pasted and removed on demand,
+    just outside the screen.
+  - Variants: a time limit (e.g. 30 s); an energy cost (e.g. 1 per mask press, with dots and
+    beacons refilling it); erasing fields; masking fields; hostile morphs.
+- **Docking** (named species). Dock the ship on one still morph or a group of them, e.g. as a
+  *gyrans* circling a *lithos*. Goal: detected as a fuzzy *circumgyrans*. Candidates: 5N7KKM or
+  HAESRE *circumgyrans* (gyrans + lithos), perhaps KH97WU *gyrans + impetus*.
+- **Black hole** (any species). The world has erasing fields, as walls or a black hole. Needs
+  experiments.
+- **Nebula** (any species). The world has masking fields, as nebulae, guardrails or a funnel.
+  Needs experiments.
+- **Fight** (any species). Against one or a group of hostile morphs ("bots"). Still or rotating
+  bots fire bullets at random; moving bots head for the player, bumping and/or firing. Goal:
+  survive the attacks, or remove every bot with bullets. A boss fight: one exceptionally hard bot.
+  Needs experiments.
+
+### 11.2 What exists to build on
+
+- **The script language.** A challenge is a script block in a `challenges.txt`, using the
+  `[on_choose_species]` block mechanism, `[need:…]` conditions with progress, `[dot]`,
+  `[min_morph]`, `[put_player]`, `[bullet]`, `[clear_world]`. Most of a challenge is script,
+  not code.
+- **Sandbox's inventory handling.** Sandbox mode reads and writes the central inventory and
+  syncs energy. Challenge mode is the same with energy kept per run, as a story run does.
+- **Static fields come almost free.** `sim.glsl` already hides the bullets channel from the
+  convolution, per tap (`uBulletMode == 2`, mask), or erases mass under it (mode 1). A static
+  *field* texture (erase strength, mask strength, per channel) uses the same lines, read once
+  per tap or per cell. This is §5's level mask texture, still open in §7.
+- **Bullets** already erase whatever creature they hit, the ship included, so bots can reuse
+  `Bullets.fire` from another position and angle.
+- **Detection** already names fuzzy morphs and wholes (twins and trios), which is what docking
+  needs.
+
+### 11.3 Comments and open questions
+
+1. **The large scrolling world is the hard part, and it isn't needed to try the courier
+   challenge.** A bigger board costs GPU time in proportion to its area, and the 384×256 board
+   already takes 18-37 ms a step (§9). The brief's on-demand idea fits the torus well: keep the
+   board, keep a world offset for the player, and map world positions to board positions modulo
+   the board size. Then:
+   - the view draws the board centred on the player (an offset in `draw.glsl`), with the stars at
+     world positions;
+   - a band on the far side of the torus, opposite the player, is the *seam*. Each step it is
+     cleared of creatures, dots and bullets, and things that come into range are pasted just
+     inside it;
+   - the seam must stay off-screen and at least a kernel reach (R) from anything visible,
+     because cells within R of it feel the wrap. So the view shows a little less than the board:
+     the board minus ~1.5 R on each side, slightly zoomed. The world view's canvas size doesn't
+     change.
+
+   Suggestion: build the courier on the present torus first, with beacons and a goal area. Judge
+   whether it is fun, and only then add scrolling as a variant ("deep space").
+2. **Beacons.** *Heptadentium scintillans* doesn't exist yet. A beacon in the dots channel has to
+   be a soliton of the dots' rule (Carlman's, μ 0.38, σ 0.07), and a 7-fold twinkling one has to
+   be found first: a lab or numpy search. Fallback: a ring of 7 ordinary dots, which looks
+   similar and costs nothing. A beacon should also be marked on the screen (a pointer at the
+   view's edge when it is out of sight), since steering is slow.
+3. **Parking** is §8.2's `hold` condition with a place added:
+   `[need:park:<morph>:<x>,<y>,<r>:<s>]`, meaning inside the circle, named that morph, for s
+   seconds. It needs a goal-area overlay. *Lithos* is the obvious morph; *tardus* is a harder
+   variant.
+4. **Challenges need failure, which the story doesn't have.** The story only waits for success,
+   and Dissolved offers Retry. Challenges need: a timer shown as a countdown (`[time_limit:<s>]`),
+   a ship lost (as now), and the energy running out (with mask costs). Each ends in "Failed" with
+   Retry, and in success with the tick. Store the best time beside the tick, so a done challenge
+   can still be improved.
+5. **Energy cost of masking.** Charge per second of mask held rather than per press, so a long
+   hold isn't free. The energy shows already; it needs a "can't mask" state at 0.
+6. **Fields** (black hole, nebula). Experiments for the lab, before the challenges are designed:
+   - A **mask field** should repel by agnosiophobia (§6.4's observation): a guardrail or funnel
+     that steers without killing. Test full and partial strength (0.3-1) and per-channel fields:
+     a red-only nebula may push differently from a green one.
+   - An **erase field** kills on contact. A radial gradient (weak at the edge, strong in the
+     middle) makes a black hole that drains slowly at its edge. That is a readable danger, and the
+     same thing as §8.2.6's radiation. Erasing doesn't *pull*, so a black hole needs another
+     mechanism if it should attract: e.g. a mask field on the side away from it, pushing the ship
+     inward. Worth testing.
+   - The lab needs a way to paint fields (a brush like Draw) to run these experiments.
+7. **Docking.** *Circumgyrans* has to be recorded first, as a fuzzy whole for 5N7KKM and HAESRE
+   (perhaps KH97WU), with a twin saddle that keeps the pair as one. Then the goal is
+   `[need:hold:circumgyrans:<s>]`, so a single pass doesn't count. Check in the lab that it is a
+   real attractor and not a passing state, as transgyrans was before its rule tweak (MORPH.md).
+8. **Fights.** All creatures share one rule, so a bot is a morph of the *player's* species.
+   That's fair, but it means bumping can merge the two into a twin instead of hurting the ship.
+   That is itself a mechanic, but not "damage". Suggested order:
+   - *turrets*: still or rotating morphs (lithos, gyrans) firing at random, reusing
+     `Bullets.fire` from their position. Cheap, and immediately a dodging challenge;
+   - *hunters*: moving morphs steered by the game with masks, using a simple feedback controller
+     (mask the side away from the target, since a mask pushes). This is a small version of
+     §6.4's agent and wants the mask maps' turn zones, so §6.2 pays off here;
+   - *boss*: a large morph or a whole (trias) with a fast gun and more mass to wear down.
+   Bots need bullets marked by owner, so their shots don't count as the player's and the
+   friendly-fire rules are clear. Bot names and their health (mass) show in the world view.
+9. **"Any species" challenges vary in difficulty with the species.** Fix the species where a
+   challenge depends on a morph (parking needs a still morph; most species have *lithos*, but
+   not XEH4YR or PJ1EF7's set). Otherwise list the allowed species per challenge.
+10. **The challenge list** is a book like the species book: one slot per challenge, with a tick,
+    best time, species, and a short description; locked challenges are greyed (e.g. docking
+    needs the morphs discovered).
+
+### 11.4 Decisions (the user's review, 2026-11-15)
+
+These replace the comments in 11.3 where they differ.
+
+- **The script vocabulary** (sample in `challenge.txt`):
+  - `[challenge:<name>:<n>]`: the challenge's printed name, stage n;
+  - `[allow_species:all|<ids>]`: which species the player may choose;
+  - `[clear_world:scroll]`: reserved for the scrolling world;
+  - `[dot:<pattern>:<how>]`: put a named pattern (e.g. Heptadentium) in the dots channel instead
+    of the round dots, once, with no respawn when eaten;
+  - `[need:clear_dot]`: the dots channel is empty (mass below a small epsilon);
+  - `[target:<how>]`: a target area, a small square the size of HAESRE *antigyrans*, with a dotted
+    orange border;
+  - `[need:stay_target:<s>]`: the ship stays inside the target for s seconds, counted as
+    `[need:survive_time]` is.
+- **Parking isn't checked by morph.** `[need:stay_target]` is enough: any morph that can stay in
+  the narrow target long enough will do.
+- **Heptadentium** comes from `Lenia/Python/animals.json` (2D7s *H. scintillans*: R 18, T 10, b
+  1,5/6, m 0.22, s 0.025, exponential kernel, Gaussian growth). It doesn't have to share the
+  dots channel with the round dots: the channel takes one rule at a time, the dots' or the
+  pattern's.
+- **Docking:** 5N7KKM and HAESRE *circumgyrans* are already recorded as fuzzy patterns.
+- **Hijacking is allowed.** Merging with a bot into a twin, or dying in a bump while the focus
+  passes to the bot (this already happens in story mode during `[need:survive_time]`), is
+  emergent play. The player only has to survive, not to stay the same creature.
+- **Bots' guns lock the bullets channel's colour** (e.g. G), so the player can't switch to a
+  colour that affects them less. Options to try: only bots fire (Fire off), both fire, or they
+  fire in separate channels (costs performance).
+- **Hunter steering by a recorded "sweet spot"**, not a learned agent. In the lab, record per
+  morph a mask offset and a hold time that turn it, short enough not to change its morph. When the
+  bot wants to turn towards the player, the game presses a mask there for that time. It doesn't
+  have to be accurate, since the bot keeps correcting.
+- **"All species" means the player decides,** even with a species that supposedly can't do it.
+  Emergent play is welcome.
+- **Order:** C1 framework, C7 Heptadentium, C2 courier, C4 docking, C5 fight, C6 scrolling,
+  C3 fields (needs the most lab work).
+
+### 11.5 Milestones (in the order of 11.4)
+
+- [x] C1 Framework (2026-11-15, node syntax checks only, not yet played): `?mode=challenge`,
+  `challenge.txt`, the challenge book (ticks, best times), species chosen per `[allow_species]`,
+  inventory synced without energy, completion recorded. Then (the user's review, 2026-11-15): titles
+  *Courier #1*, card CHALLENGE / name / STAGE n, SUCCESS only at a challenge's end, Hold to clear
+  completion & best time, fail states ("Failed": ship dissolved, `[time_limit]`, energy out
+  under `[mask_cost]`, with `[energy]`), the retry book ("Choose a morph to retry", from Morphs,
+  Retry, Choose; no cloning), and in every mode a retry puts the player's last morph in place of
+  the script's. Still open: locks.
+- [x] C7 *Heptadentium scintillans* in the dots channel under its own rule (ring weights and the
+  exponential kernel core in the dots' taps), `[dot:Heptadentium:<how>]` (2026-11-15; numpy: stays
+  put, mass within 1 % at R 18; not yet seen on the GPU).
+- [ ] C2 Courier on the present torus: Heptadentium beacons (`[dot:<pattern>]`,
+  `[need:clear_dot]`), `[target]` and `[need:stay_target]` (built 2026-11-15, not yet played);
+  variants: `[time_limit]`, `[mask_cost]` (built, not yet used in `challenge.txt`).
+- [x] C4 Docking (2026-11-15, node checks only, not yet played): `[min_morph:<n>:<morph>=<k>]` puts
+  groups (k copies packed with a 3-cell gap, random angles), `[need:stay_morph:circumgyrans:<s>]`.
+- [ ] C5 Fight: turrets (gun colour locked), then hunters (lab-recorded sweet spot and hold time), then a boss.
+  Built (2026-11-15, node checks only, not yet played): `[put_hostile:<n>:<morphs>:<how>:<bullet>]`
+  turrets (bots of the player's species, aimed shots every 1.5-4 s) firing in a separate hostile
+  bullets field (white, masking G, bots included: erasing bullets, and masking all three, barely hurt), bots
+  tracked by place (what a bot turns into, splits into or merges with stays hostile; hijacked: the
+  player's), a red circle and the morph's name on each (twins and trios as one, and firing as one,
+  as the player's twin ship), `[need:clear_hostile]`; tokens may span lines. The boss for now: a
+  *trias* with a strong bullet (Heptapteryx), splitting into three bots. Still open: hunters, health shown.
+- [x] C6 Scrolling world (2026-11-16, node checks only, not yet played): `[clear_world:scroll]`, the
+  seam scheme of 11.3.1 without the zoom (the user's choice: the view shows the whole board, following
+  the ship; the seam along its edges, a 6-cell band cleared each frame); an object whose body touches
+  an edge is taken away and [min_morph] puts its replacement on the opposite edge (round dots too);
+  `extended` placement for beacons and the target (kept by world point off the board, yellow arrows).
+- [ ] C3 Field texture in `sim.glsl` (mask and erase, per channel, with strength), a field brush
+  in the lab, and the experiments of 11.3.6; then the nebula and black-hole challenges.

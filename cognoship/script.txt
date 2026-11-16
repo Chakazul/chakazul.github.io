@@ -1,30 +1,33 @@
 # script file for story mode, see README-MORE.md for syntax
 [next_msg:Click here or {:Space} to continue:≫:⧗]
-[speed:1][gun:off][new_bullet:off][clone:off][erase:off][morph_book:off]
+[speed:1][gun:off][new_bullet:off][clone:off][erase:off][draw:off][morph_book:off]
 [morph_book_action:clear_put][retry_action:clear_put]
 #[bullet:all:Orbium]
 
-Welcome to Cognoship.
+[stars:0:3:2]
+[clear_world:empty]
+This is the story of the Cognoship.
 
 [music:1:1]
 [chapter:1:Metamorphosis]
 
 # masking
+[stars]
 [species:Aquarium originale:5N7KKM]
 #[merge:0.6]
 [clear_world][put_player:limus]
-You are travelling in a spaceship.
+You are traveling in a spaceship.
 Alone.
-Near the _Proxima Centauri_ exoplanet system, 4 light years from Earth.
+Near the _Proxima Centauri_ exoplanet system, 4 light-years from Earth.
 With recursive self-improvement technology, we can travel far, far away.
 
 We can't control the ships with buttons or levers, though.
 The ship is made from _Lenium_, a new type of agentic material.
 Thankfully, _Lenium_ actively senses and reacts to its surroundings.
 So we can steer the ship by blocking parts of its *cognitive field*.
-In the panel, try clicking on the ship to block its senses.[need:first_touch]
+In the panel, try clicking on the ship to mask its senses.[need:first_touch]
 Nice! You can now steer the ship, and even change its shape.
-At the top, choose which of the {R}{G}{B} colors you want to intervene.
+At the top, choose which color {R:1} {G:2} {B:3} you want to mask.
 
 # morphs
 [new_scene]
@@ -36,22 +39,22 @@ Much better.
 [morph_book:on]
 A *morph* is a specific shape and behavior of your ship.
 This morph is called _limus_.
-Try to change it into another morph. (Hint: gently pat its side)[need:discover_morph:gyrans]
+Try to change it into another morph. (Hint: pat the side of its tail)[need:discover_morph:gyrans]
 Congrats! You discovered a new morph.
-The ship can be respawn in another morph only after it dissolves.
+The ship can be respawned in another morph after it dissolves.
 Dissolve the ship violently. Then bring it back.[need:respawn]
-_Lenium_ recyled. Ship restored.
+_Lenium_ recycled. Ship restored.
 
 [new_scene]
 [upward:off]
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:tardus]
 This morph is _tardus_.
-Try to discover the hidden morph. (Hint: briefly pat its tail)[need:discover_morph:lithos]
+Try to discover the hidden morph. (Hint: gently push its tail)[need:discover_morph:lithos]
 Nice, you are gentle and patient.
 Also try out the other controls in the panel.
 On a keyboard, hold {:Shift} to show their keys.
-Now embark for the _Sirius A_ star system, 9 light years away.
+Now embark for the _Sirius A_ star system, 9 light-years away.
 
 
 [chapter:2:You Are Not Alone]
@@ -59,22 +62,23 @@ Now embark for the _Sirius A_ star system, 9 light years away.
 [morph_book_action:put][retry_action:put]
 
 # dots
-[allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos]
+[allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos,circumgyrans]
 #[discover_morph:limus,tardus]
 [clear_world][put_player:limus]
 [dot:5][min_morph:6:paragyrans,paratardus,lithos+gyrans:far]
 Other ships appear, and so do *energy* packets.
-Steer your ship to collect 50 energy. {Speed:W} up may help.[need:energy:50]
+Steer your ship to collect 30 energy. {Speed:Q}{:W} changes may help.[need:energy:30]
 
 # bullets
 [gun:on]
 Enough energy for the *Lenium gun*!
-[new_bullet:50]
+[new_bullet:30]
 [bullet:Orbium:Orbium]
 {Fire:A} to fire _Lenium_ bullets.
 They disrupt other ships' cognitive fields.
 This _Orbium_ type bullet is relatively weak, though.
-Collect 50 more energy, then {Create:S} a new bullet type.[need:create_bullet]
+Collect 30 more energy, then {Create:S} a new bullet type.[need:create_bullet]
+[new_bullet:50]
 Switch bullet type using {Bullets:S} or {◀:D} {▶:F}.
 Each bullet type has unique effects.
 Now we are leaving the _Orion Arm_.
@@ -85,10 +89,10 @@ Now we are leaving the _Orion Arm_.
 
 # species
 [species:Aquarium novus:GDNQYX]
-[allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans]
+[allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,pararectus,rectogyrans]
 [clear_world][put_player:rectus]
 [dot:3][min_morph:10:rectus,gyrans,tardus,lithos,paragyrans,antigyrans:far]
-_Scutum-Centaurus Arm_ of the Milky Way, 10,000 light years from home.
+_Scutum-Centaurus Arm_ of the Milky Way, 10,000 light-years from home.
 To survive the interstellar medium, our ship evolved into a new *species*.
 From _Aquarium originale_ evolved into _A. novus_.
 New species, new morph possibilities.
@@ -115,7 +119,7 @@ When you are ready, we will head to the Galactic Center.
 [allow_morph:gyrans,tardus,lithos,paragyrans,antigyrans,transgyrans,trias]
 [clear_world:radiation][put_player:lithos]
 [dot:1]
-The Galactic Center of the Milky Way, 27,000 light years from home.
+The Galactic Center of the Milky Way, 27,000 light-years from home.
 Here sits _Sagittarius A*_, a supermassive black hole.
 This gargantuan black hole releases massive bursts of radiation.
 We need to construct megastructure shields to survive.
@@ -164,10 +168,10 @@ Here are some of our Leniologists' favorite species.
 
 [new_scene]
 [species:Aquarium virgatus:KZ2BLD]
-[allow_morph:rectus,virgatus,gyrans]
+[allow_morph:rectus,virgatus,limus]
 [clear_world][put_player:rectus]
-[dot:5][min_morph:5:rectus,gyrans:far]
-_Small Magellanic Cloud_, 200,000 light years from home.
+[dot:5][min_morph:5:rectus,limus:far]
+_Small Magellanic Cloud_, 200,000 light-years from home.
 The striped species _Aquarium virgatus_.
 Find morph _virgatus_.[need:discover_morph:virgatus]
 Next species...
@@ -177,17 +181,17 @@ Next species...
 [allow_morph:limus,gyrans,impetus,antigyrans]
 [clear_world][put_player:limus]
 [dot:5][min_morph:3:gyrans,impetus,antigyrans]
-_Andromeda Galaxy_, 2,500,000 light years from home.
+_Andromeda Galaxy_, 2,500,000 light-years from home.
 The dancing species _Aquarium saltans_.
 Find morph _impetus_.[need:discover_morph:impetus]
 Next species...
 
 [new_scene]
 [species:Aquarium sinuosus:HAESRE]
-[allow_morph:zigzag,lithos,antigyrans,paragyrans]
+[allow_morph:zigzag,lithos,antigyrans,paragyrans,circumgyrans]
 [clear_world][put_player:zigzag]
 [dot:5][min_morph:4:antigyrans,paragyrans:far]
-_Triangulum Galaxy_, 3,000,000 light years from home.
+_Triangulum Galaxy_, 3,000,000 light-years from home.
 The zigzagging species _Aquarium sinuosus_.
 Engineer twin morph _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
 Next species...
@@ -197,37 +201,39 @@ Next species...
 [allow_morph:metamorpha,paratardus,paratachus]
 [clear_world][put_player:metamorpha]
 [dot:5][min_morph:3:metamorpha]
-_Virgo Cluster_, 53,800,000 light years from home.
+_Virgo Cluster_, 53,800,000 light-years from home.
 The shapeshifting species _Aquarium metamorpha_.
 Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus]
 Next species...
 
 
 [music:4,1,2,3:4]
-[chapter:6:The Rise of Self-Replicators]
+[chapter:6:Rise of the Self-Replicators]
 
 # erase swarm (very hard)
 [stars:270]
 [species:Aquarium replicans:VT049W]
 [allow_morph:gyrans,rectus,tachus,lithos,paralimus,paragyrans,rectogyrans]
-[clear_world][put_player:gyrans][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
-[dot:3]
+[clear_world:gray][put_player:gyrans][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
+#[dot:3]
 We have arrived at a distant, ancient galaxy.
 Our ships have been overengineering themselves.
 And finally, they go out of control.
-A so-called Gray Goo incident.
+They relentlessly copy themselves, consume every star and planet, ...
+... and turn all matter into a bland, worthless, paperclip-like gray mass.
+A so-called *Gray Goo* incident.
 To deal with these self-replicating machines, ...
-[bullet:Paraptera:Paraptera]
-[bullet_limit:15]
-you are equipped with the powerful bullet, _Paraptera_.
+[bullet:Paraptera,Heptapteryx:Paraptera]
+[bullet_limit:50]
+... you are equipped with powerful bullets, _Paraptera_ & _Heptapteryx_.
 {Fire:A} to suppress their growth.
 Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
+
+[new_scene]
 [clear_world:empty]
 Peace has been restored. Thank you for your service.
 
-
-#[jump_here]
 
 [gun:off]
 [chapter:final:Cosmic Immune System]
@@ -235,29 +241,50 @@ Peace has been restored. Thank you for your service.
 # immune system
 [species:Cilium immunitatis:G6G6CR]
 [allow_morph:rectus,limus,tardus,lithos,munitus]
-[clear_world][put_player:rectus]
-[min_morph:10:rectus,limus]
+[clear_world][put_player:lithos]
+[min_morph:3:lithos]
 To prevent future Gray Goo events, we accelerated our evolution.
 At the edge of the universe, a new genus _Cilium_ was born.
-They could serve as the nascent immune system of a healthy universe.
-"These morphs may release a red substance that neutralizes Gray Goo, ...
-if only they work together," Leniologists suspect.
-Produce the red substance.[need:mass:r:50]
+They are peaceful creatures, and they move differently.
+[draw:if:G6G6CR]
+{R:1} twice to enter draw mode. Add red mass to make _Cilium_ move.[need:discover_morph:rectus,limus]
+That's correct. _Cilium_ are propelled by red devices on their membranes.
+
+[new_scene]
+[clear_world][put_player:rectus]
+[min_morph:15:rectus,limus]
+_Cilium_ could serve as the nascent immune system of a healthy universe.
+"_They may release plenty of red mass that neutralizes Gray Goo,_ ...
+_... if only they work together_," Leniologists suspect.
+Produce an abundance of red mass.[need:mass:r:50]
 The immune system works! Cooperation triumphs.
 Red Goo and Gray Goo are now perfectly balanced.
 
+
+#[jump_here]
+
 [new_scene]
-[stars:0]
+[stars:0:3:2]
 [clear_world:empty]
 The universe remains a peaceful place.
 
 _Lenium_ was discovered by scientist Chan in the early 21st century.
 The *cognitive masking* capability of _Lenium_ was discovered ...
 by scientists Cool, Hartl, Levin and Petti, shortly after.
-Music: _Long Way_ by Rexlambo, _A Few Jumps Away_ by Arthur Vyncke, ...
-_Out of the Skies, Under the Earth_ by Chris Zabriskie, ...
-_Billions and Billions_ by Stellardrone.
-Gameplay inspired by _FTL_ and _Asteroids_.
+
+[new_scene]
+[stars:90:3:2]
+[clear_world:empty]
+
+*Credits*
+👾 Game design: Bert Chan.
+💻 Programming: Bert Chan, Claude Opus 🤖.
+🧪 Testing: Jesse Cool, Lainey Chan.
+🎼 Music: _Long Way_ by Rexlambo ...
+🎼 Music: _A Few Jumps Away_ by Arthur Vyncke ...
+🎼 Music: _Out of the Skies, Under the Earth_ by Chris Zabriskie ...
+🎼 Music: _Billions and Billions_ by Stellardrone.
+👾 Gameplay inspired by _FTL_ 🚀 and _Asteroids_ 🌠.
 
 Your discovered morphs and bullets will be added to Sandbox Mode.
 Thank you for your participation.

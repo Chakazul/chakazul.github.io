@@ -143,6 +143,9 @@ const Core = (function () {
                 worldGhost: () => null,
                 // patchErase: the selected channel's patch toggles erase (no action patches)
                 patchErase: () => false,
+                // patchDraw: the selected channel's patch also toggles draw (adds mass), after erase if
+                // that is on: mask -> erase -> draw -> mask
+                patchDraw: () => false,
                 // frameColor: the world view's frame around the followed creature (null: as the panel border)
                 frameColor: () => null,
                 // emptyView: with nothing followed, the ship view shows the world's centre (unrotated)
@@ -161,6 +164,27 @@ const Core = (function () {
                 // zoomDrag(off, e): the pointer of a press zoomPress took moves (off as zoomPress's)
                 zoomDrag: () => {},
                 drawGhost: () => false,
+                // marks: the page's areas in the world, [{ col, row, w, h, color, dash }]: a rectangle
+                // (board-aligned, w x h cells, centred on cell col, row) outlined in both views, the
+                // world view's copies wrapping round its edges, the ship view's turned with the view;
+                // or { col, row, r, color, dash, label, labelColor }: a circle of radius r cells, label (if any)
+                // above it, as the lab's names
+                marks: () => [],
+                // viewShift: the world view's top-left board cell [col, row] (the game's scrolling world
+                // follows the ship), or null: [0, 0]
+                viewShift: () => null,
+                // viewInset: cells of black inside the world view's edges (the scrolling world: R), 0: none
+                viewInset: () => 0,
+                // pointers: [{ dx, dy, color, blink }]: things out of the world view, at (dx, dy) cells from its
+                // middle (board frame): an arrow at the view's edge points to each (blink: pulsing slowly)
+                pointers: () => [],
+                // spotOk(col, row, reach): whether putPattern may put a creature of that reach (cells) there
+                spotOk: () => true,
+                // center: where putPattern's center is ([col, row]), or null: the board's centre
+                center: () => null,
+                // detectNear: [[col, row], ...]: with Detect: Focused, the objects (parts and wholes)
+                // tracked within 2 R of these are named too (the game's bots), DETECT_PER_FRAME a frame
+                detectNear: () => [],
                 nameBox: () => true,
                 noFocusText: () => ['No creature selected.', 'Click a creature on the left to follow it.'] };
   // morphLabel(det): the name shown for a detected (known) morph, or null to show it as unknown
@@ -313,19 +337,24 @@ const Core = (function () {
   //   'random': rotated by a random angle, at the emptiest of 24 random candidates (least mass
   //     within the form's half-size + R of its centre), as the lab's Add;
   //   'far': as 'random', but of the empty candidates (mass within EMPTY_TOL of the least) the one
-  //     farthest from the focus (as 'random' if there is no focus).
+  //     farthest from the focus (as 'random' if there is no focus);
+  //   [col, row]: rotated by a random angle, there (the page chose the spot);
+  //   { place(w, h) }: rotated by a random angle, its centre where place puts a w x h box.
   // focusNew: true = follow the new creature (the lab's Add); false = only if nothing is followed;
   // 'never' = never (the game's [min_morph]: a lost ship stays lost until Respawn).
   const EMPTY_TOL = 1;   // cell mass: "empty" is at most this much more than the emptiest candidate
   function putPattern(how = 'random', focusNew = true) {
     let f = Rule.formCells(pattern.cells, pattern.R, R), best;
-    if (how === 'center') best = [BW / 2, BH / 2];
+    if (how === 'center') best = opt.center() || [BW / 2, BH / 2];
+    else if (Array.isArray(how)) { f = Rule.rotate(f, Math.random() * 2 * Math.PI); best = how; }
+    else if (how && how.place) { f = Rule.rotate(f, Math.random() * 2 * Math.PI); best = how.place(f.w, f.h); }   // the page places it by its turned box
     else {
       f = Rule.rotate(f, Math.random() * 2 * Math.PI);
       const reach = Math.max(f.w, f.h) / 2 + R, B = SimGL.BLOCK, blk = SimGL.readBlocks();
       const cands = [];
       for (let k = 0; k < 24; k++) {
-        const col = Math.random() * BW, row = Math.random() * BH;
+        let col, row, tries = 0;
+        do { col = Math.random() * BW; row = Math.random() * BH; } while (!opt.spotOk(col, row, reach) && ++tries < 50);   // (the page's: e.g. away from the scrolling world's seam)
         let m = 0;
         for (let by = 0; by < SimGL.BH; by++)
           for (let bx = 0; bx < SimGL.BW; bx++) {
@@ -350,6 +379,7 @@ const Core = (function () {
       if (i >= 0) setFocus(i);
     }
     hooks.change();
+    return best;   // where it went: [col, row] of its middle
   }
   const addPattern = () => putPattern('random', true);   // the lab's Add
 
@@ -642,8 +672,32 @@ const Core = (function () {
   }
   function ship() {
     const tr = shipWhole();
-    if (tr) { const w = found.wholes[tr.wi]; return { col: w.col, row: w.row, radius: w.radius, mass: w.mass, kin: tr.kin, whole: tr }; }
-    return focus ? { col: focus.col, row: focus.row, radius: 2 * focus.radius, mass: focus.mass, kin, whole: null } : null;
+    if (tr) { const w = found.wholes[tr.wi]; return { col: w.col, row: w.row, radius: w.radius, reach: wholeReach(w), mass: w.mass, kin: tr.kin, whole: tr }; }
+    return focus ? { col: focus.col, row: focus.row, radius: 2 * focus.radius, reach: focus.radius, mass: focus.mass, kin, whole: null } : null;
+  }
+  // A whole's reach, as a part's radius (where a bullet is fired from): the farthest part's
+  // distance from the whole's centre plus its radius
+  function wholeReach(w) {
+    let r = 0;
+    for (const i of w.parts) { const c = found.comps[i]; r = Math.max(r, Math.hypot(wrapD(c.col - w.col, BW), wrapD(c.row - w.row, BH)) + c.radius); }
+    return r;
+  }
+  // The objects as shown: every whole shown (named, WHOLE_SHOW times in a row) as one, the other
+  // parts on their own: [{ col, row, radius (its circle's), reach (wholeReach / the part's radius),
+  // parts: indices into found.comps, label: its shown name or null, whole: its track or null }]
+  function objects() {
+    const out = [], inShown = new Set();
+    if (opt.wholes() && found.wholes) for (const tr of wholeTracks) {
+      const w = tr.wi >= 0 && found.wholes[tr.wi];
+      if (!w || !tr.label || !shownLabel(tr.labelDet)) continue;
+      out.push({ col: w.col, row: w.row, radius: w.radius, reach: wholeReach(w), parts: w.parts, label: shownLabel(tr.labelDet), whole: tr });
+      for (const i of w.parts) inShown.add(i);
+    }
+    found.comps.forEach((c, k) => {
+      if (inShown.has(k)) return;
+      out.push({ col: c.col, row: c.row, radius: 2 * c.radius, reach: c.radius, parts: [k], label: shownLabel(detOf(k, k === focusIdx)), whole: null });
+    });
+    return out;
   }
   // The ship's morph: its whole's (as shown), else the focus's
   function shipDet() { const tr = shipWhole(); return tr ? tr.labelDet : stats.short.det; }
@@ -752,7 +806,12 @@ const Core = (function () {
   // clock time, smooth, not step by step; slowed with the steps when a frame hits its cap), so they
   // keep pace with the creatures; while paused (or no species yet), at the speed-1 rate in real time,
   // so they still drift.
-  const star = { angle: 0, speed: 1, bright: 1, off: [0, 0], t: 0, last: null };
+  // follow (setStarsFollow; 0: off): the drift opposite the ship's motion (as if flying past the
+  // stars), the middle layer (draw.glsl: 1.5 x the drift speed) at the ship's speed times follow,
+  // the dots (dots.js) at that speed too; fv: the ship's velocity reversed, cells per game second,
+  // smoothed (FOLLOW_EMA per frame), so the heading's jitter and turns don't jerk the stars
+  const star = { angle: 0, speed: 1, bright: 1, off: [0, 0], t: 0, last: null, follow: 0, fv: [0, 0] };
+  const FOLLOW_EMA = 0.08;
   const SWAY_PERIOD = 2 * Math.PI / 0.3;   // s (draw.glsl STAR_SWAY_W)
   function driftTick() {
     const now = performance.now() / 1000, real = star.last === null ? 0 : Math.min(0.25, now - star.last);
@@ -761,14 +820,35 @@ const Core = (function () {
     driftSec = real;   // while playing, frame() sets it from the steps' rate
     star.t = (star.t + starSec) % (100 * SWAY_PERIOD);
   }
-  function setStars(angle = 0, speed = 1, bright = 1) { Object.assign(star, { angle, speed, bright }); }
+  function setStars(angle = 0, speed = 1, bright = 1) { Object.assign(star, { angle, speed, bright, follow: 0 }); }
+  // the drift follows the ship (opposite its motion) at its speed times k (0: as setStars set it); bright as setStars
+  function setStarsFollow(k, bright = 1) { Object.assign(star, { follow: k, bright }); }
   // the drift's unit direction (board x right, y down) and speed factor (the dots follow it too)
-  function starDrift() { const a = star.angle * Math.PI / 180; return { dir: [-Math.cos(a), -Math.sin(a)], speed: star.speed }; }
+  // (cells: the dots' drift, cells per game second, when following the ship; else theirs times speed)
+  const MID_LAYER = 1.5;   // draw.glsl's middle layer speed
+  function starDrift() {
+    if (star.follow > 0) {
+      const v = Math.hypot(star.fv[0], star.fv[1]) * star.follow;
+      return { dir: v > 1e-6 ? [star.fv[0], star.fv[1]].map(x => x * star.follow / v) : [-1, 0], speed: v / MID_LAYER, cells: v };
+    }
+    const a = star.angle * Math.PI / 180;
+    return { dir: [-Math.cos(a), -Math.sin(a)], speed: star.speed };
+  }
   function starView() {
-    const a = star.angle * Math.PI / 180, dir = [-Math.cos(a), -Math.sin(a)];
-    star.off[0] = (star.off[0] + dir[0] * star.speed * starSec) % (10 * BW);
-    star.off[1] = (star.off[1] + dir[1] * star.speed * starSec) % (10 * BH);
-    return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: dir, starSpeed: star.speed, starBright: star.bright };
+    let rate = 1;   // the stars go by real time: game seconds per real second
+    if (star.follow > 0) {   // the ship's velocity, cells per game second, reversed and smoothed
+      const sh = ship(), k = sh && sh.kin;
+      const v = running && k && k.speed >= SPEED_MIN ? [-Math.cos(k.velAng) * k.speed * STEPS_PER_S, -Math.sin(k.velAng) * k.speed * STEPS_PER_S] : [0, 0];
+      star.fv = [star.fv[0] + FOLLOW_EMA * (v[0] - star.fv[0]), star.fv[1] + FOLLOW_EMA * (v[1] - star.fv[1])];
+      rate = running ? SPEEDS[speedIdx] : 0;
+    }
+    const { dir } = starDrift(), speed = starDrift().speed * rate;
+    star.off[0] = (star.off[0] + dir[0] * speed * starSec) % (10 * BW);
+    star.off[1] = (star.off[1] + dir[1] * speed * starSec) % (10 * BH);
+    // (following the ship: no sway, whose offset scales with the drift's speed and turns with its
+    // direction, draw.glsl: the stars would jump as the ship turns, slows or the game pauses)
+    if (star.follow > 0) return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: [-1, 0], starSpeed: 0, starBright: star.bright };
+    return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: dir, starSpeed: speed, starBright: star.bright };
   }
 
   // The ship view's square on the canvas, and its px per cell: (x0, y0, edge, px per cell)
@@ -796,8 +876,11 @@ const Core = (function () {
     let n = 0;
     driftTick();
     if (!ruleLoaded) {   // started empty, no species yet (the game's script loads one)
-      SimGL.render({ canvasW: layout.w, canvasH: layout.h, worldScale: WS, zoom: zoomRect(),
-                     rot: [1, 0, 0, 1], focus: [0, 0, 0], ...starView() });
+      // (opt.emptyView, the game's [clear_world:empty]: the ship view shows the world's centre, its
+      // stars, as it does with a species loaded)
+      VS = opt.viewShift() || [0, 0]; VI = opt.viewInset() * WS;
+      SimGL.render({ canvasW: layout.w, canvasH: layout.h, worldScale: WS, worldOff: VS, worldInset: VI / WS, zoom: zoomRect(),
+                     rot: [1, 0, 0, 1], focus: opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0], ...starView() });
       drawOverlay(); hooks.frame(); requestAnimationFrame(frame);
       return;
     }
@@ -823,8 +906,9 @@ const Core = (function () {
     if (n === 0) analyze(0);
     if (detectMode !== 'none' && (n > 0 || md.dirty || stats.long.len !== md.len)) detectMorphs();
     const p = focus ? viewAngle() : 0, c = Math.cos(p), s = Math.sin(p), sh = ship();
+    VS = opt.viewShift() || [0, 0]; VI = opt.viewInset() * WS;
     SimGL.render({
-      canvasW: layout.w, canvasH: layout.h, worldScale: WS,
+      canvasW: layout.w, canvasH: layout.h, worldScale: WS, worldOff: VS, worldInset: VI / WS,
       zoom: zoomRect(),
       rot: [c, s, -s, c],
       focus: sh ? [sh.col, sh.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
@@ -846,9 +930,14 @@ const Core = (function () {
     stats.short.det = focus ? MorphDetect.classify(md.model, stats.short) : null;
     const fw = opt.wholes() ? focusWhole() : null;   // the whole the focus is part of: every time, as the focus
     if (fw) { fw.det = fw.hist.det = MorphDetect.classify(md.wmodel, fw.hist); showWhole(fw); }
-    if (detectMode !== 'every') return;
+    let all = opt.wholes() ? tracks.concat(wholeTracks) : tracks;
+    if (detectMode !== 'every') {   // only those near the page's points (opt.detectNear)
+      const pts = opt.detectNear();
+      if (!pts.length) return;
+      all = all.filter(tr => pts.some(([c, r]) => Math.hypot(wrapD(tr.col - c, BW), wrapD(tr.row - r, BH)) < 2 * R));   // (a whole's centre: up to ~2 R from a part's)
+      if (!all.length) return;
+    }
     // parts and wholes in turn, DETECT_PER_FRAME a frame; each against its own level's morphs
-    const all = opt.wholes() ? tracks.concat(wholeTracks) : tracks;
     for (let q = 0; q < Math.min(DETECT_PER_FRAME, all.length); q++) {
       const tr = all[md.next++ % all.length];
       if (tr === fw) continue;   // (done above)
@@ -901,6 +990,15 @@ const Core = (function () {
     if (ctx.roundRect) ctx.roundRect(1, 1, PX - 2, CH - 2, r - 1); else ctx.rect(1, 1, PX - 2, CH - 2);
     ctx.stroke();
   }
+  // The world view's shift (the scrolling world: opt.viewShift, the cell at its top-left; else 0, 0),
+  // set each frame; a board cell's middle in the world view (px), wrapped into it; and the board
+  // cell under world-view point p (px), wrapped into the board
+  let VS = [0, 0], VI = 0;   // VI: the black stripe inside the world view's edges, px (opt.viewInset)
+  // clip to the world view (inside its black stripe, if any)
+  const worldClip = () => { ctx.beginPath(); ctx.rect(VI, VI, PX - 2 * VI, CH - 2 * VI); ctx.clip(); };
+  const wxp = col => ((((col + 0.5 - VS[0]) % BW) + BW) % BW) * WS;
+  const wyp = row => ((((row + 0.5 - VS[1]) % BH) + BH) % BH) * WS;
+  const worldCell = p => [(((p[0] / WS - 0.5 + VS[0]) % BW) + BW) % BW, (((p[1] / WS - 0.5 + VS[1]) % BH) + BH) % BH];
   // The world wraps round: the offsets (px) at which to draw a circle at (x, y), radius r, so that
   // every part of it within the world view shows (x, y taken into the view first)
   function wrapCopies(x, y, r) {
@@ -946,8 +1044,10 @@ const Core = (function () {
     for (const bottom of patchRows()) {
       for (let i = 0; i < 3; i++) {
         const r = patchRect(i, bottom), sel = bottom ? i === action : i === channel;
-        // erase on the selected channel patch (opt.patchErase, the game's recycle): striped, "-G"
-        const striped = !bottom && sel && action === 1 && opt.patchErase();
+        // erase on the selected channel patch (opt.patchErase, the game's recycle): striped, "-G";
+        // draw (opt.patchDraw): cross-hatched, "+G"
+        const striped = !bottom && sel && ((action === 1 && opt.patchErase()) || (action === 2 && opt.patchDraw()));
+        const hatched = striped && action === 2;
         ctx.globalAlpha = sel ? 1 : 0.4;
         ctx.fillStyle = CH_COLORS[bottom ? channel : i];
         if (striped) {
@@ -956,6 +1056,7 @@ const Core = (function () {
           ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, r.w, r.h);
           ctx.strokeStyle = CH_COLORS[i]; ctx.lineWidth = 7;
           for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y + r.h); ctx.lineTo(r.x + d + r.h, r.y); ctx.stroke(); }
+          if (hatched) for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y); ctx.lineTo(r.x + d + r.h, r.y + r.h); ctx.stroke(); }
           ctx.restore();
         } else ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.globalAlpha = 1;
@@ -966,7 +1067,7 @@ const Core = (function () {
         ctx.fillStyle = sel ? '#000' : 'rgba(0,0,0,.75)';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = bottom ? '700 17px system-ui, sans-serif' : '700 22px system-ui, sans-serif';
-        const label = bottom ? ACTIONS[i] : (striped ? '\u2212' : '') + CH_NAMES[i];
+        const label = bottom ? ACTIONS[i] : (striped ? (hatched ? '+' : '\u2212') : '') + CH_NAMES[i];
         if (striped) {   // on the stripes: dark text in a light halo
           ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.strokeText(label, r.x + r.w / 2, r.y + r.h / 2);
         }
@@ -1001,7 +1102,7 @@ const Core = (function () {
     if (opt.circlesAll() || detEvery) {
       const hv = hovered();
       ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();   // (never into the ship view)
+      worldClip();   // (never into the ship view)
       ctx.setLineDash([]);
       for (const [k, c] of found.comps.entries()) {
         const isF = focus && Math.hypot(wrapD(c.col - focus.col, BW), wrapD(c.row - focus.row, BH)) < 0.5;
@@ -1009,7 +1110,7 @@ const Core = (function () {
         const r = Math.max(3, 2 * c.radius * WS);
         const det = detEvery && !inShown.has(k) ? detOf(k, isF) : null, lab = shownLabel(det);   // (a part of a shown whole: no name)
         // (with its name above it: the copies reach that far up)
-        for (const [x, y] of wrapCopies((c.col + 0.5) * WS, (c.row + 0.5) * WS, lab ? r + 16 : r)) {
+        for (const [x, y] of wrapCopies(wxp(c.col), wyp(c.row), lab ? r + 16 : r)) {
           ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
           ctx.strokeStyle = lab ? hueFill(det.hue, 1)   // a known morph: thick, in its hue
             : isF ? 'rgba(255,212,0,.9)' : isH ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.45)';
@@ -1028,14 +1129,14 @@ const Core = (function () {
         if (opt.circlesAll()) {
           ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5;
           for (const w of found.wholes)
-            for (const [x, y] of wrapCopies((w.col + 0.5) * WS, (w.row + 0.5) * WS, w.radius * WS)) {
+            for (const [x, y] of wrapCopies(wxp(w.col), wyp(w.row), w.radius * WS)) {
               ctx.beginPath(); ctx.arc(x, y, w.radius * WS, 0, 2 * Math.PI); ctx.stroke();
             }
           ctx.setLineDash([]);
         }
         for (const [w, tr] of shownWholes) {
           const r = Math.max(3, w.radius * WS), lab = shownLabel(tr.labelDet), hue = tr.labelDet ? tr.labelDet.hue : NaN;
-          for (const [x, y] of wrapCopies((w.col + 0.5) * WS, (w.row + 0.5) * WS, r + 16)) {
+          for (const [x, y] of wrapCopies(wxp(w.col), wyp(w.row), r + 16)) {
             ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
             ctx.strokeStyle = hueFill(hue, 1); ctx.lineWidth = 3; ctx.stroke();
             ctx.font = ital() + '600 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
@@ -1054,10 +1155,10 @@ const Core = (function () {
     if (focus) {
       const h = ZOOM_CELLS / 2, corners = [[-h, -h], [h, -h], [h, h], [-h, h]].map(v => {
         const b = rot(v);
-        return [(sh.col + 0.5 + b[0]) * WS, (sh.row + 0.5 + b[1]) * WS];
+        return [wxp(sh.col) + b[0] * WS, wyp(sh.row) + b[1] * WS];
       });
       ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
+      worldClip();
       ctx.setLineDash([]);
       ctx.strokeStyle = opt.frameColor() || PANEL_BORDER; ctx.lineWidth = 2;
       for (const dx of [-BW * WS, 0, BW * WS])
@@ -1067,7 +1168,7 @@ const Core = (function () {
         }
       // opt.focusCircle: the followed creature's circle (unless the circles above drew it already)
       if (opt.focusCircle() && !(opt.circlesAll() || detEvery)) {
-        const x = (sh.col + 0.5) * WS, y = (sh.row + 0.5) * WS, r = Math.max(3, sh.radius * WS);
+        const x = wxp(sh.col), y = wyp(sh.row), r = Math.max(3, sh.radius * WS);
         ctx.strokeStyle = 'rgba(255,212,0,.9)'; ctx.lineWidth = 1.5;
         for (const dx of [-BW * WS, 0, BW * WS])
           for (const dy of [-BH * WS, 0, BH * WS]) {
@@ -1077,15 +1178,90 @@ const Core = (function () {
       ctx.restore();
     }
 
+    // the page's marks (opt.marks), in both views
+    for (const mk of opt.marks()) {
+      if (mk.r) {   // a circle, its label above it (as the lab's names), in both views
+        const label = (x, y, r, px) => {
+          if (!mk.label) return;
+          ctx.setLineDash([]);
+          ctx.font = ital() + `600 ${px}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(mk.label, x, y - r - 2);
+          ctx.fillStyle = mk.labelColor || mk.color; ctx.fillText(mk.label, x, y - r - 2);
+        };
+        ctx.save();
+        worldClip();
+        const rw = Math.max(3, mk.r * WS);
+        for (const [x, y] of wrapCopies(wxp(mk.col), wyp(mk.row), rw + 20)) {
+          ctx.strokeStyle = mk.color; ctx.lineWidth = 2; ctx.setLineDash(mk.dash || []);
+          ctx.beginPath(); ctx.arc(x, y, rw, 0, 2 * Math.PI); ctx.stroke();
+          label(x, y, rw, 14);
+        }
+        ctx.restore();
+        if (!focus) continue;
+        const v = unrot([wrapD(mk.col - sh.col, BW), wrapD(mk.row - sh.row, BH)]), rz = mk.r * CELL_PX;
+        const x = cx + v[0] * CELL_PX, y = cy + v[1] * CELL_PX;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
+        ctx.strokeStyle = mk.color; ctx.lineWidth = 2.5; ctx.setLineDash((mk.dash || []).map(d => d * 2));
+        ctx.beginPath(); ctx.arc(x, y, rz, 0, 2 * Math.PI); ctx.stroke();
+        label(x, y, rz, 18);
+        ctx.restore();
+        continue;
+      }
+      const hw = mk.w / 2, hh = mk.h / 2, box = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+      const outline = pts => { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.stroke(); };
+      ctx.save();
+      ctx.strokeStyle = mk.color; ctx.lineWidth = 1.5; ctx.setLineDash(mk.dash || []);
+      worldClip();
+      for (const [x, y] of wrapCopies(wxp(mk.col), wyp(mk.row), Math.hypot(hw, hh) * WS))
+        outline(box.map(([a, b]) => [x + a * WS, y + b * WS]));
+      ctx.restore();
+      if (!focus) continue;
+      const d = [wrapD(mk.col - sh.col, BW), wrapD(mk.row - sh.row, BH)];   // from the ship, board frame
+      ctx.save();
+      ctx.strokeStyle = mk.color; ctx.lineWidth = 2.5; ctx.setLineDash((mk.dash || []).map(x => x * 2));
+      ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
+      outline(box.map(([a, b]) => { const v = unrot([d[0] + a, d[1] + b]); return [cx + v[0] * CELL_PX, cy + v[1] * CELL_PX]; }));
+      ctx.restore();
+    }
+
+    // the page's pointers (opt.pointers): an arrow at the world view's edge towards each thing out of it
+    const ptrs = opt.pointers();
+    if (ptrs.length) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();   // (in the black stripe too: opt.viewInset)
+      ctx.setLineDash([]);
+      const L = 44, M = VI > 0 ? Math.max(8, (VI - L) / 2) : 36;   // arrow length; the tip's inset from the edge (px): in the middle of the black stripe, if any
+      const pulse = 0.3 + 0.7 * (0.5 + 0.5 * Math.cos(2 * Math.PI * performance.now() / 1600));   // blink: a slow pulse, 1.6 s
+      for (const pt of ptrs) {
+        const len = Math.hypot(pt.dx, pt.dy);
+        if (!(len > 0)) continue;
+        const ux = pt.dx / len, uy = pt.dy / len;
+        const t = Math.min(Math.abs(ux) > 1e-6 ? (PX / 2 - M) / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-6 ? (CH / 2 - M) / Math.abs(uy) : Infinity);
+        const x = PX / 2 + ux * t, y = CH / 2 + uy * t;   // the tip
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - L * ux - 0.55 * L * uy, y - L * uy + 0.55 * L * ux);
+        ctx.lineTo(x - 0.6 * L * ux, y - 0.6 * L * uy);
+        ctx.lineTo(x - L * ux + 0.55 * L * uy, y - L * uy - 0.55 * L * ux);
+        ctx.closePath();
+        ctx.globalAlpha = pt.blink ? pulse : 1;
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.stroke();
+        ctx.fillStyle = pt.color; ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
     // tool outline, in both views (dashed = mask, solid = erase, dotted = draw)
     // (in the world view only, wrapping round its edges)
     const off = toolOffset();
     if (off) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
+      worldClip();
       ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2; ctx.setLineDash(ACTION_DASH[action].map(x => x * 2 / 3));
       const r = Math.max(2, maskR * WS);
-      for (const [x, y] of wrapCopies((sh.col + 0.5 + off[0]) * WS, (sh.row + 0.5 + off[1]) * WS, r)) {
+      for (const [x, y] of wrapCopies(wxp(sh.col + off[0]), wyp(sh.row + off[1]), r)) {
         ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.stroke();
       }
       ctx.restore();
@@ -1094,8 +1270,8 @@ const Core = (function () {
     const wg = opt.worldGhost(worldHover);
     if (wg) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, PX, CH); ctx.clip();
-      for (const [x, y] of wrapCopies((wg.at[0] + 0.5) * WS, (wg.at[1] + 0.5) * WS, wg.r)) wg.draw(ctx, x, y);
+      worldClip();
+      for (const [x, y] of wrapCopies(wxp(wg.at[0]), wyp(wg.at[1]), wg.r)) wg.draw(ctx, x, y);
       ctx.restore();
     }
     // ship view: the tool circle follows the pointer while it hovers, filled while pressed
@@ -1181,7 +1357,7 @@ const Core = (function () {
     // end-of-run banner over the world
     const over = opt.over(), bn = over && opt.banner();
     if (bn) {   // laid out by the page: the box fits the text
-      const t = bn.title, s = bn.line || 0, msg = 'Dissolved';
+      const t = bn.title, s = bn.line || 0, msg = bn.text || 'Dissolved';   // (bn.text: the page's, e.g. the game's "Failed")
       const x = bn.inShip ? PX + PW / 2 : PX / 2, maxW = bn.inShip ? PW - 24 : PX - 24;
       ctx.font = `600 ${t}px system-ui, sans-serif`;
       let w = ctx.measureText(msg).width + 1.2 * t;
@@ -1245,12 +1421,12 @@ const Core = (function () {
     const p = canvasPoint(e);
     if (p[0] < 0) return;   // (the stacked canvas's band)
     if (p[0] < PX) {
-      if (e.button === 0 && opt.worldPress([p[0] / WS - 0.5, p[1] / WS - 0.5], e)) {   // taken by the page
+      if (e.button === 0 && opt.worldPress(worldCell(p), e)) {   // taken by the page
         pageDrag = e.pointerId; dragWorld = true; ui.setPointerCapture(e.pointerId); e.preventDefault(); return;
       }
       // world view: focus the creature under (or near) the click
       if (!opt.clickFocus()) return;
-      const i = Creatures.pick(found, p[0] / WS - 0.5, p[1] / WS - 0.5, CLICK_GATE, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH);
+      const i = Creatures.pick(found, ...worldCell(p), CLICK_GATE, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH);
       if (i >= 0) setFocus(i);
       return;
     }
@@ -1276,7 +1452,9 @@ const Core = (function () {
   // patches), the selected channel's patch again toggles erase (its "recycle") on and off, and
   // another channel goes back to mask.
   function pickChannel(i) {
-    if (opt.patchErase()) action = i === channel && action === 0 ? 1 : 0;
+    // the actions the patch cycles through: mask, then erase (opt.patchErase), then draw (opt.patchDraw)
+    const cycle = [0].concat(opt.patchErase() ? [1] : [], opt.patchDraw() ? [2] : []);
+    if (cycle.length > 1) action = i === channel ? cycle[(cycle.indexOf(action) + 1) % cycle.length] ?? 0 : 0;
     channel = i;
   }
   // Tooltip over the tool patches (they are drawn on the canvas, so the canvas title changes).
@@ -1289,7 +1467,8 @@ const Core = (function () {
           `Mask (4): pressing on the ship view hides the ${CH_WORDS[channel]} channel there from the creature's senses`,
           `Erase (5): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 0`,
           `Draw (6): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 1`][i]
-          : opt.patchErase() ? `${CH_NAMES[i]} (${i + 1}): mask the ${CH_WORDS[i]} channel; again: erase it (recycle), striped`
+          : opt.patchErase() || opt.patchDraw() ? `${CH_NAMES[i]} (${i + 1}): mask the ${CH_WORDS[i]} channel; again: ` +
+              [opt.patchErase() && 'erase it (recycle), striped', opt.patchDraw() && 'draw it (add mass), cross-hatched'].filter(Boolean).join('; again: ')
           : `${CH_NAMES[i]} (${i + 1}): act on the ${CH_WORDS[i]} channel`;
     }
     return '';
@@ -1302,10 +1481,10 @@ const Core = (function () {
     if (masking && e.pointerId === masking.id) masking.view = viewOffset(p);
     if (pageDrag === e.pointerId) {
       if (!dragWorld) opt.zoomDrag(rot(viewOffset(p)), e);
-      else if (p[0] >= 0 && p[0] < PX && p[1] < CH) opt.worldDrag([p[0] / WS - 0.5, p[1] / WS - 0.5], e);
+      else if (p[0] >= 0 && p[0] < PX && p[1] < CH) opt.worldDrag(worldCell(p), e);
     }
     hover = e.pointerType === 'mouse' && inZoom(p) ? viewOffset(p) : null;
-    worldHover = e.pointerType === 'mouse' && p[0] >= 0 && p[0] < PX ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
+    worldHover = e.pointerType === 'mouse' && p[0] >= 0 && p[0] < PX ? worldCell(p) : null;
   });
   // (opt.keepHover(el): keep the ship-view hover point when the pointer moves onto el, e.g. a
   // button over the view)
@@ -1322,11 +1501,11 @@ const Core = (function () {
   function hoverAt(e) {
     const p = canvasPoint(e), mouse = e.pointerType === 'mouse';
     hover = mouse && inZoom(p) ? viewOffset(p) : null;
-    worldHover = mouse && p[0] >= 0 && p[0] < PX && p[1] < CH ? [p[0] / WS - 0.5, p[1] / WS - 0.5] : null;
+    worldHover = mouse && p[0] >= 0 && p[0] < PX && p[1] < CH ? worldCell(p) : null;
   }
-  // The board cell [col, row] under the mouse, in either view, or null
-  function pointerCell() {
-    if (worldHover) return worldHover;
+  // The board cell [col, row] under the mouse, in either view (shipOnly: the ship view only), or null
+  function pointerCell(shipOnly = false) {
+    if (worldHover && !shipOnly) return worldHover;
     if (hover && focus) { const b = rot(hover), sh = ship(); return [sh.col + b[0], sh.row + b[1]]; }
     return null;
   }
@@ -1334,6 +1513,8 @@ const Core = (function () {
   function clearPointer() { masking = null; hover = null; }
 
   // ---- actions (the page's buttons and keys call these) ---------------------------------
+  // creatures put in by the page itself (SimGL.add, e.g. the game's groups): alive again, as putPattern
+  function revive() { if (status !== 'alive') { status = 'alive'; running = true; } }
   function setRunning(on) { if (status === 'alive' || !on) wantRun = running = on; hooks.change(); }
   function togglePlay() { if (status === 'alive') wantRun = running = !running; hooks.change(); }
   function reset() { spawn(); running = wantRun; hooks.change(); }
@@ -1367,12 +1548,12 @@ const Core = (function () {
     // the end-of-run banner's second line
     banner: 'Reset or Add to try again',
     // helpers
-    deg, wrapD, viewAngle, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass, focusWhole, ship, shipDet,
+    deg, wrapD, viewAngle, objects, wxp, wyp, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass, focusWhole, ship, shipDet,
     // actions
     start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt, pointerCell,
     pickChannel, setLayout, logicalPerCss,
-    setDetectMode, setEveryObject, setRunning, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
-    setZoom, setMaskR, setStars, starDrift,
+    setDetectMode, setEveryObject, setRunning, revive, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
+    setZoom, setMaskR, setStars, setStarsFollow, starDrift,
   };
   // live state, read through getters (and set where a page may change it directly)
   const rw = { channel: [() => channel, v => { channel = v; }], action: [() => action, v => { action = v; }] };

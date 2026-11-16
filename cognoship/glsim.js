@@ -17,6 +17,12 @@
 //  Bullets channel (setBullets): another single-channel field, of gliders (bulletsim.glsl), which
 //  takes mass out of the creatures (or masks them, sim.glsl) while they wear it down;
 //  readBulletBlocks() gives its coarse mass map, so the page can count and find the bullets.
+//  Hostile bullets channel (setHostile): a second field of the same kind, the bots' (challenge
+//  mode's [put_hostile]), under its own rule (the same bulletsim.glsl), with its own options (as
+//  setBullets'), drawn in white. The creatures' step sees it through the bullets' own path
+//  (effBullets): alone, in place of the bullets' field, with its own mode and channels (the
+//  bullets' settings, bullets.js Hostile); with the bullets' field, the two added
+//  (bulletmix.glsl).
 //
 //  Board state is a ping-pong pair of RGBA32F textures (rgb = channels). Needs
 //  EXT_color_buffer_float, as Carlman does.
@@ -24,7 +30,7 @@
 
 const SimGL = (function () {
   const SHADER_DIR = './shaders/';
-  const NAMES = ['vertex', 'sim', 'reduce', 'com', 'blocks', 'draw', 'dotsim', 'dotsites', 'bulletsim', 'blocksum'];
+  const NAMES = ['vertex', 'sim', 'reduce', 'com', 'blocks', 'draw', 'dotsim', 'dotsites', 'bulletsim', 'blocksum', 'bulletmix', 'seamclear'];
   const GRID = 16;    // reduce.glsl output is GRID x GRID
   const BLOCK = 4;    // blocks.glsl block edge
 
@@ -54,6 +60,9 @@ const SimGL = (function () {
   let bulletsIdle = true;
   let bul = { mode: 1, ch: [1, 1, 1], wearCh: [1, 1, 1], hit: 0.2, wear: 0.05, sub: 2 };
   let bblkTex = null, bblkFbo = null, BBW = 0, BBH = 0, bblkBuf = null;
+  // hostile bullets channel: as the bullets', with its own pair, rule and options (hit, wear, sub)
+  const hos = { tex: [], fbo: [], cur: 0, on: false, idle: true, tapTex: null, tapCount: 0, rule: null,
+                opt: { hit: 0.2, wear: 0.03, sub: 3, mode: 2, ch: [0, 1, 0], wearCh: [0, 1, 0] } };
   // Plug-ins (fftsim.js, FFT mode, on unless ?fft=0): ext.step(tool) replaces the creatures' sim pass (it must write the
   // next board into stateFbo[1 - cur]; step() then flips cur, steps the dots and bullets);
   // ext.rule(taps) follows setRule. Both null: the direct convolution (sim.glsl) as ever.
@@ -162,6 +171,10 @@ const SimGL = (function () {
     bblkTex = makeTex(BBW, BBH);
     bblkFbo = makeFbo([bblkTex]);
     bblkBuf = new Float32Array(BBW * BBH * 4);
+    hos.tex = [makeTex(W, H), makeTex(W, H)];
+    hos.fbo = hos.tex.map(t => makeFbo([t]));
+    mixTex = makeTex(W, H);
+    mixFbo = makeFbo([mixTex]);
     siteTex = makeTex(MAX_SITES, 1);
     siteOutTex = makeTex(MAX_SITES, 1);
     siteOutFbo = makeFbo([siteOutTex]);
@@ -202,8 +215,8 @@ const SimGL = (function () {
 
   // ---- board ----------------------------------------------------------------------------
   function clear() {
-    bulletsIdle = true;
-    for (const f of stateFbo.concat(dotFbo, bulFbo)) {
+    bulletsIdle = true; hos.idle = true;
+    for (const f of stateFbo.concat(dotFbo, bulFbo, hos.fbo)) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, f);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -243,12 +256,16 @@ const SimGL = (function () {
   }
 
   // ---- dots channel ---------------------------------------------------------------------
-  // rule: { R, mu, sigma, dt }: one kernel of the standard Lenia shell, quad4 core, beta [1],
-  // normalised, taps below 1e-7 dropped (as Carlman's kernelData), and a Gaussian growth.
+  // rule: { R, mu, sigma, dt, betas, core }: one kernel of the standard Lenia shell (default:
+  // quad4 core, beta [1], as Carlman's kernelData; a pattern such as Heptadentium: its own rings
+  // and the exp core), normalised, taps below 1e-7 dropped, and a Gaussian growth.
   // The classic Lenia kernel: rings b (betas) over r = distance / R, each a quad4 bump
   // (Lenia/Python Board kernel, kn = 1), normalised, taps below 1e-7 dropped.
-  function shellTaps(R, betas = [1]) {
-    const quad4 = r => { const q = 4 * r * (1 - r); return q * q * q * q; };
+  // core: the ring's profile, 'quad4' (polynomial, (4r(1-r))^4) or 'exp' (exponential bump,
+  // exp(4 - 1/(r(1-r))): animals.json's kn = 1, LeniaF's kn = 2)
+  function shellTaps(R, betas = [1], core = 'quad4') {
+    const quad4 = core === 'exp' ? r => (r > 0 && r < 1 ? Math.exp(4 - 1 / (r * (1 - r))) : 0)
+                                 : r => { const q = 4 * r * (1 - r); return q * q * q * q; };
     const B = betas.length;
     const KS = 2 * R + 1, taps = [];
     let sum = 0;
@@ -266,7 +283,7 @@ const SimGL = (function () {
   }
   function setDotRule(rule) {
     if (dotTapTex) gl.deleteTexture(dotTapTex);
-    ({ tex: dotTapTex, count: dotTapCount } = shellTaps(rule.R));
+    ({ tex: dotTapTex, count: dotTapCount } = shellTaps(rule.R, rule.betas, rule.core));
     dotRule = rule;
   }
   function clearFbos(fbos) {
@@ -308,34 +325,40 @@ const SimGL = (function () {
   }
   function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); bulletsIdle = false; }
   function clearBullets() { clearFbos(bulFbo); bulletsIdle = true; }
-  function stepBullets() {
+  // f: { tex, fbo, cur, tapTex, tapCount, rule, wear, wearCh, sub }: f.cur is updated
+  function stepField(f) {
     const p = prog.bulletsim;
     gl.useProgram(p);
     gl.viewport(0, 0, W, H);
     gl.uniform2i(loc(p, 'uSize'), W, H);
-    gl.uniform1i(loc(p, 'uTapCount'), bulTapCount);
-    gl.uniform1f(loc(p, 'uMu'), bulRule.mu);
-    gl.uniform1f(loc(p, 'uSigma'), bulRule.sigma);
-    gl.uniform1f(loc(p, 'uDt'), bulRule.dt);
-    gl.uniform1f(loc(p, 'uWear'), bul.wear);
-    gl.uniform3fv(loc(p, 'uWearCh'), bul.wearCh);
-    for (let i = 0; i < bul.sub; i++) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, bulFbo[1 - bcur]);
-      bindTex(0, bulTex[bcur], p, 'uField');
+    gl.uniform1i(loc(p, 'uTapCount'), f.tapCount);
+    gl.uniform1f(loc(p, 'uMu'), f.rule.mu);
+    gl.uniform1f(loc(p, 'uSigma'), f.rule.sigma);
+    gl.uniform1f(loc(p, 'uDt'), f.rule.dt);
+    gl.uniform1f(loc(p, 'uWear'), f.wear);
+    gl.uniform3fv(loc(p, 'uWearCh'), f.wearCh);
+    for (let i = 0; i < f.sub; i++) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f.fbo[1 - f.cur]);
+      bindTex(0, f.tex[f.cur], p, 'uField');
       bindTex(1, state[cur], p, 'uState');
-      bindTex(2, bulTapTex, p, 'uTaps');
+      bindTex(2, f.tapTex, p, 'uTaps');
       draw4();
-      bcur = 1 - bcur;
+      f.cur = 1 - f.cur;
     }
+  }
+  function stepBullets() {
+    const f = { tex: bulTex, fbo: bulFbo, cur: bcur, tapTex: bulTapTex, tapCount: bulTapCount, rule: bulRule, wear: bul.wear, wearCh: bul.wearCh, sub: bul.sub };
+    stepField(f);
+    bcur = f.cur;
   }
   // The bullets' coarse mass map: BBW x BBH sums over BUL_BLOCK x BUL_BLOCK cells, row-major
   // (row 0 = board row 0), one float per block.
-  function readBulletBlocks() {
+  function readBulletBlocks(tex = bulTex[bcur]) {
     const p = prog.blocksum;
     gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, bblkFbo);
     gl.viewport(0, 0, BBW, BBH);
-    bindTex(0, bulTex[bcur], p, 'uField');
+    bindTex(0, tex, p, 'uField');
     gl.uniform2i(loc(p, 'uSize'), W, H);
     gl.uniform1i(loc(p, 'uBlock'), BUL_BLOCK);
     draw4();
@@ -345,6 +368,51 @@ const SimGL = (function () {
     return out;
   }
   function setBulletColor(rgb) { bulRGB = rgb; }
+
+  // ---- hostile bullets channel --------------------------------------------------------------
+  // rule: as setBulletRule's. opts: as setBullets' ({ mode: 1 erase | 2 mask, ch, wearCh, hit, wear, sub }) (on) or null (off); on or off empties it.
+  function setHostileRule(rule) {
+    if (hos.tapTex) gl.deleteTexture(hos.tapTex);
+    ({ tex: hos.tapTex, count: hos.tapCount } = shellTaps(rule.R, rule.betas));
+    hos.rule = rule;
+  }
+  function setHostile(opts) {
+    const was = hos.on;
+    hos.on = !!opts;
+    if (opts) hos.opt = { ...hos.opt, ...opts };
+    if (was !== hos.on) clearHostile();
+  }
+  function putHostile(flat, h, w, row0, col0) { putField(hos.tex[hos.cur], flat, h, w, row0, col0); hos.idle = false; }
+  function clearHostile() { clearFbos(hos.fbo); hos.idle = true; }
+  const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle;
+  // The bullets as the creatures' step sees them (sim.glsl / the FFT path: uBullets, uBulletMode,
+  // uBulletCh, uBulletHit), set at the start of each step: null (none flying); the bullets' field
+  // alone; the hostile field alone (its own mode and channels); or both, added into mixTex, with the
+  // bullets' mode and channels. So the bots' bullets act exactly as the player's.
+  let mixTex = null, mixFbo = null, eff = null;
+  function effBullets() {
+    const pa = bulletsOn && !!bulTapTex && !bulletsIdle, ha = hostileActive();
+    if (!pa && !ha) return null;
+    if (!ha) return { tex: bulTex[bcur], mode: bul.mode, ch: bul.ch, hit: bul.hit };
+    if (!pa) return { tex: hos.tex[hos.cur], mode: hos.opt.mode, ch: hos.opt.ch, hit: hos.opt.hit };
+    const p = prog.bulletmix;
+    gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, mixFbo);
+    gl.viewport(0, 0, W, H);
+    bindTex(0, bulTex[bcur], p, 'uA');
+    bindTex(1, hos.tex[hos.cur], p, 'uB');
+    draw4();
+    return { tex: mixTex, mode: bul.mode, ch: bul.ch, hit: bul.hit };
+  }
+  function stepHostile() {
+    const f = { tex: hos.tex, fbo: hos.fbo, cur: hos.cur, tapTex: hos.tapTex, tapCount: hos.tapCount, rule: hos.rule,
+                wear: hos.opt.wear, wearCh: hos.opt.wearCh, sub: hos.opt.sub };
+    stepField(f);
+    hos.cur = f.cur;
+  }
+  const readHostileBlocks = () => readBulletBlocks(hos.tex[hos.cur]);
+  // the dots channel's coarse mass map (as readBulletBlocks: BBW x BBH, in the field's own frame)
+  const readDotBlocks = () => readBulletBlocks(dotTex[dcur]);
   // The dots step, on the board the creatures' step just wrote (state[cur]).
   function stepDots() {
     const p = prog.dotsim;
@@ -421,11 +489,13 @@ const SimGL = (function () {
   // tool: null, or { col, row, r, ch, action }: absolute circle centre in board cells;
   // action 0 = occlude (mask), 1 = erase (set to 0), 2 = draw (set to 1) inside the circle.
   function step(tool) {
+    eff = effBullets();
     if (ext.step) {   // a plug-in's sim pass (fftsim.js)
       ext.step(tool);
       cur = 1 - cur;
       if (dotsOn && dotTapTex) stepDots();
       if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
+      if (hostileActive()) stepHostile();
       return;
     }
     const p = prog.sim;
@@ -451,14 +521,15 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uMaskR'), tool ? tool.r : 0);
     gl.uniform3f(loc(p, 'uMaskCh'), tool && tool.ch === 0 ? 1 : 0, tool && tool.ch === 1 ? 1 : 0, tool && tool.ch === 2 ? 1 : 0);
     gl.uniform1f(loc(p, 'uReach'), reach);
-    bindTex(2, bulTex[bcur], p, 'uBullets');
-    gl.uniform1i(loc(p, 'uBulletMode'), bulletsOn && bulTapTex && !bulletsIdle ? bul.mode : 0);
-    gl.uniform3fv(loc(p, 'uBulletCh'), bul.ch);
-    gl.uniform1f(loc(p, 'uBulletHit'), bul.hit);
+    bindTex(2, eff ? eff.tex : bulTex[bcur], p, 'uBullets');
+    gl.uniform1i(loc(p, 'uBulletMode'), eff ? eff.mode : 0);
+    gl.uniform3fv(loc(p, 'uBulletCh'), eff ? eff.ch : bul.ch);
+    gl.uniform1f(loc(p, 'uBulletHit'), eff ? eff.hit : bul.hit);
     draw4();
     cur = 1 - cur;
     if (dotsOn && dotTapTex) stepDots();
     if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
+    if (hostileActive()) stepHostile();
   }
 
   // Coarse map: BW x BH texels of (mass, sum m*dx, sum m*dy, potential) per BLOCK x BLOCK
@@ -508,7 +579,7 @@ const SimGL = (function () {
     return comBuf;
   }
 
-  // view: { canvasW, canvasH, worldScale, zoom: [x0, y0, edge, pxPerCell], rot: mat2 (column-
+  // view: { canvasW, canvasH, worldScale, worldOff: [col, row] the world view's top-left cell (the scrolling world; default 0, 0), worldInset: cells of black inside its edges (default 0), zoom: [x0, y0, edge, pxPerCell], rot: mat2 (column-
   // major, view (right, down) -> board (col, row)), focus: [col, row, on],
   //   stars: star field on, time: seconds (star sway), starOff: [x, y] drift (cells, at unit
   //   layer speed), starDir: [x, y] unit drift direction, starSpeed, starBright: 1 = default }
@@ -522,12 +593,16 @@ const SimGL = (function () {
     bindTex(2, bulTex[bcur], p, 'uBullets');
     gl.uniform1f(loc(p, 'uBulletsOn'), bulletsOn ? 1 : 0);
     gl.uniform3fv(loc(p, 'uBulletRGB'), bulRGB);
+    bindTex(3, hos.tex[hos.cur], p, 'uHostile');
+    gl.uniform1f(loc(p, 'uHostileOn'), hos.on ? 1 : 0);
     gl.uniform1f(loc(p, 'uDotsOn'), dotsOn ? 1 : 0);
     gl.uniform3fv(loc(p, 'uDotRGB'), dotRGB);
     gl.uniform2fv(loc(p, 'uDotOff'), dotOff);
     gl.uniform2i(loc(p, 'uSize'), W, H);
     gl.uniform2f(loc(p, 'uCanvas'), view.canvasW, view.canvasH);
     gl.uniform1f(loc(p, 'uWorldScale'), view.worldScale);
+    gl.uniform2fv(loc(p, 'uWorldOff'), view.worldOff || [0, 0]);
+    gl.uniform1f(loc(p, 'uWorldInset'), (view.worldInset || 0) * view.worldScale);
     gl.uniform4fv(loc(p, 'uZoom'), view.zoom);
     gl.uniformMatrix2fv(loc(p, 'uView'), false, view.rot);
     gl.uniform3fv(loc(p, 'uFocus'), view.focus);
@@ -539,6 +614,32 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uStarBright'), view.starBright ?? 1);
     gl.uniform3fv(loc(p, 'uBg'), bgRGB);
     draw4();
+  }
+
+  // The scrolling world's seam: every field (creatures, dots, bullets, hostile bullets) with the
+  // cells within `band` of column col or row row (round the torus) cleared (seamclear.glsl), each
+  // copied into its other texture of the pair. The dots' field is in its own frame (dotOff).
+  // discs: [[col, row, r], ...] (at most 8): in the creatures' field, also cleared (objects taken away)
+  function clearSeam(col, row, band, discs = []) {
+    const p = prog.seamclear;
+    gl.useProgram(p);
+    gl.viewport(0, 0, W, H);
+    gl.uniform2i(loc(p, 'uSize'), W, H);
+    gl.uniform1f(loc(p, 'uBand'), band);
+    const dv = new Float32Array(24);
+    discs.slice(0, 8).forEach((d, i) => dv.set(d, i * 3));
+    gl.uniform3fv(loc(p, 'uDisc[0]'), dv);
+    const pass = (src, fbo, c, r, n) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      bindTex(0, src, p, 'uSrc');
+      gl.uniform2f(loc(p, 'uSeam'), c, r);
+      gl.uniform1i(loc(p, 'uDiscN'), n);
+      draw4();
+    };
+    pass(state[cur], stateFbo[1 - cur], col, row, Math.min(8, discs.length)); cur = 1 - cur;
+    if (dotsOn) { pass(dotTex[dcur], dotFbo[1 - dcur], col + Math.round(dotOff[0]), row + Math.round(dotOff[1]), 0); dcur = 1 - dcur; }
+    if (bulletsOn && !bulletsIdle) { pass(bulTex[bcur], bulFbo[1 - bcur], col, row, 0); bcur = 1 - bcur; }
+    if (hos.on && !hos.idle) { pass(hos.tex[hos.cur], hos.fbo[1 - hos.cur], col, row, 0); hos.cur = 1 - hos.cur; }
   }
 
   function finish() { gl.finish(); }
@@ -553,13 +654,16 @@ const SimGL = (function () {
     get state() { return state; }, get stateFbo() { return stateFbo; }, get cur() { return cur; },
     get params() { return params; }, get dt() { return dt; }, get gain() { return gain; }, get growthFn() { return growthFn; },
     get reach() { return reach; }, get taps() { return lastTaps; },
-    get bulletsActive() { return bulletsOn && !!bulTapTex && !bulletsIdle; }, get bul() { return bul; }, get bulTex() { return bulTex[bcur]; },
+    // the bullets as this step's creatures see them (effBullets: the player's and the bots' as one)
+    get bulletsActive() { return !!eff; }, get bul() { return eff || bul; }, get bulTex() { return eff ? eff.tex : bulTex[bcur]; },
   };
   let VERTEX_SRC = '', pluginIds = 0;
 
-  return { init, setRule, setUpdate, seed, add, paint, step, readBlocks, readChannelComs, render, finish, BLOCK,
+  return { init, setRule, setUpdate, seed, add, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
+           setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks,
+           get hostileIdle() { return hos.idle; },
            get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },
            get blockChannels() { return blkChanBuf; },

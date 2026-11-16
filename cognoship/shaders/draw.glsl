@@ -19,11 +19,15 @@ uniform vec3  uDotRGB;
 uniform sampler2D uBullets; // bullets channel (R), shown in uBulletRGB over everything where uBulletsOn
 uniform float uBulletsOn;
 uniform vec3  uBulletRGB;
+uniform sampler2D uHostile; // hostile bullets channel (R), shown in white over everything where uHostileOn
+uniform float uHostileOn;
 uniform vec2  uDotOff;      // the dots' drift, cells: board cell p shows dot cell p + uDotOff
 uniform vec3  uFocus;       // (col, row, on): the focused creature's CoM; off = blank zoom view
 uniform ivec2 uSize;        // board (W, H)
 uniform vec2  uCanvas;      // canvas (w, h), px
 uniform float uWorldScale;  // px per cell in the world view
+uniform vec2  uWorldOff;    // the world view's top-left cell (the scrolling world follows the ship; else 0, 0)
+uniform float uWorldInset;  // px: a black stripe inside the world view's edges (the scrolling world; else 0)
 uniform vec4  uZoom;        // (x0, y0, edge, px per cell), top-left origin
 uniform mat2  uView;        // view vector (right, down) -> board vector (col, row)
 uniform float uStars;       // 1 = star field on
@@ -52,6 +56,7 @@ vec3 cellColor(vec2 cell) {
         c = mix(c, uDotRGB, v);
     }
     if (uBulletsOn > 0.5) c = mix(c, uBulletRGB, texelFetch(uBullets, q, 0).r);
+    if (uHostileOn > 0.5) c = mix(c, vec3(1.0), texelFetch(uHostile, q, 0).r);
     return c;
 }
 
@@ -112,7 +117,9 @@ void main() {
 
     float worldW = float(uSize.x) * uWorldScale, worldH = float(uSize.y) * uWorldScale;
     if (s.x < worldW && s.y < worldH) {   // (a stacked canvas has the ship panel below the world)
-        col = withStars(cellColor(s / uWorldScale), s / uWorldScale, uWorldScale);
+        vec2 b = s / uWorldScale + uWorldOff;
+        if (s.x < uWorldInset || s.y < uWorldInset || s.x >= worldW - uWorldInset || s.y >= worldH - uWorldInset) col = vec3(0.0);
+        else col = withStars(cellColor(b), b, uWorldScale);
     } else if (s.x >= uZoom.x && s.x < uZoom.x + uZoom.z && s.y >= uZoom.y && s.y < uZoom.y + uZoom.z) {
         if (uFocus.z > 0.5) {
             vec2 v = (s - uZoom.xy - 0.5 * uZoom.z) / uZoom.w;   // cells, view frame
