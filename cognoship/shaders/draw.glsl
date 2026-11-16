@@ -37,6 +37,7 @@ uniform vec2  uStarDir;     // the drift direction, unit (default (-1, 0): to th
 uniform float uStarSpeed;   // drift and sway speed, 1 = default
 uniform float uStarBright;  // brightness, 1 = default
 uniform vec3  uBg;          // the background behind the board (glsim.js setBackground), black by default
+uniform int   uSky;         // 1: instead a sky (glsim.js setSky): a circular gradient, light cyan at the world view's bottom to dark cyan at its top
 
 out vec4 fragColor;
 
@@ -104,10 +105,19 @@ vec3 stars(vec2 b, float pxPerCell) {
 }
 
 // Stars only show through where the board is (nearly) empty.
+// The sky ([clear_world:sky]): by the cell's place in the world view (the ship view: the same sky
+// round the ship), its distance from a point below the view's bottom middle: light cyan near it,
+// dark cyan at the view's top.
+const vec3 SKY_LIGHT = vec3(0.04, 0.15, 0.25), SKY_DARK = vec3(0.02, 0.05, 0.07);
+vec3 sky(vec2 b) {
+    vec2 sz = vec2(uSize), uv = mod(b - uWorldOff, sz) / sz;   // 0..1 across the world view, y down
+    float d = length((uv - vec2(0.5, 1.35)) * vec2(sz.x / sz.y, 1.0)) / 1.35;   // 0.26 at the bottom middle, 1 at the top middle
+    return mix(SKY_LIGHT, SKY_DARK, smoothstep(0.25, 1.05, d));
+}
 // Stars and the background colour (uBg, black by default) only show where the board is (nearly) empty.
 vec3 withStars(vec3 col, vec2 b, float pxPerCell) {
     float cover = clamp(max(col.r, max(col.g, col.b)) * 4.0, 0.0, 1.0);
-    vec3 under = uBg + (uStars < 0.5 ? vec3(0.0) : stars(b, pxPerCell));
+    vec3 under = (uSky == 1 ? sky(b) : uBg) + (uStars < 0.5 ? vec3(0.0) : stars(b, pxPerCell));
     return col + under * (1.0 - cover);
 }
 

@@ -2082,17 +2082,19 @@
   // At the start of story mode the message bar blinks slowly (style.css .msg.attract), until the player first
   // moves a message on
   const playerNext = () => { if (!byContinue()) return; $('msg').classList.remove('attract'); next(); };
-  // (a book open: a press on the message bar is outside it, so it closes the book, as a click
-  // beside the box does; only that)
-  $('msg').addEventListener('pointerdown', () => { if (book.open) return closeBook(); playerNext(); });
+  // (a book open: a press on the message bar does nothing: the book is closed first, by Close, Esc
+  // or a click beside it, and then the story goes on)
+  $('msg').addEventListener('pointerdown', () => { if (!book.open) playerNext(); });
 
   // ---- background ([clear_world:<bg>]) --------------------------------------------------------
   // black (the default), or radiation: a dark orange behind the board, slowly darkening and
   // brightening again (a period of BG_PERIOD_S)
   // gray: a static dark gray
-  const BACKGROUNDS = ['black', 'radiation', 'gray'], BG_PERIOD_S = 8, GRAY = [0.13, 0.13, 0.14];
+  // sky: a circular gradient, light cyan at the world view's bottom to dark cyan at its top (draw.glsl sky)
+  const BACKGROUNDS = ['black', 'radiation', 'gray', 'sky'], BG_PERIOD_S = 8, GRAY = [0.13, 0.13, 0.14];
   let background = 'black';
   function updateBackground() {
+    if (background === 'sky') return SimGL.setSky();
     if (background === 'gray') return SimGL.setBackground(GRAY);
     if (background !== 'radiation') return SimGL.setBackground([0, 0, 0]);
     const k = 0.45 + 0.15 * Math.sin(2 * Math.PI * performance.now() / 1000 / BG_PERIOD_S);   // 0.3 .. 0.6 of the full orange

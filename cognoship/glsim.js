@@ -465,8 +465,9 @@ const SimGL = (function () {
     return Array.from({ length: n }, (_, i) => siteOut[i * 4]);
   }
   function setDotColor(rgb) { dotRGB = rgb; }
-  let bgRGB = [0, 0, 0];
-  function setBackground(rgb) { bgRGB = rgb; }   // behind the board, where it is empty (draw.glsl uBg)
+  let bgRGB = [0, 0, 0], sky = false;
+  function setBackground(rgb) { bgRGB = rgb; sky = false; }   // behind the board, where it is empty (draw.glsl uBg)
+  function setSky() { sky = true; }   // instead, a sky (draw.glsl sky: light cyan at the world view's bottom, dark cyan at its top)
   function setDotOffset(x, y = 0) { dotOff = [((x % W) + W) % W, ((y % H) + H) % H]; }
 
   // Erase (action 1: set to 0) or draw (2: set to 1) channel ch inside a circle (centre col, row,
@@ -624,6 +625,7 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uStarSpeed'), view.starSpeed ?? 1);
     gl.uniform1f(loc(p, 'uStarBright'), view.starBright ?? 1);
     gl.uniform3fv(loc(p, 'uBg'), bgRGB);
+    gl.uniform1i(loc(p, 'uSky'), sky ? 1 : 0);
     draw4();
   }
 
@@ -671,7 +673,7 @@ const SimGL = (function () {
   let VERTEX_SRC = '', pluginIds = 0;
 
   return { init, setRule, setUpdate, seed, add, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
-           setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, MAX_SITES,
+           setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, setSky, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
            setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks, setBulletMutual,
            get hostileIdle() { return hos.idle; },
