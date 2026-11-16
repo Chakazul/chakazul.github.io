@@ -325,7 +325,9 @@ const SimGL = (function () {
   }
   function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); bulletsIdle = false; }
   function clearBullets() { clearFbos(bulFbo); bulletsIdle = true; }
-  // f: { tex, fbo, cur, tapTex, tapCount, rule, wear, wearCh, sub }: f.cur is updated
+  // f: { tex, fbo, cur, tapTex, tapCount, rule, wear, wearCh, sub, other: the other bullets field's
+  // texture (always one: never this field's own, which the sub-steps write into, a feedback loop
+  // WebGL refuses: the draw dropped), otherWear: whether it wears this one down }: f.cur is updated
   function stepField(f) {
     const p = prog.bulletsim;
     gl.useProgram(p);
@@ -337,6 +339,8 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uDt'), f.rule.dt);
     gl.uniform1f(loc(p, 'uWear'), f.wear);
     gl.uniform3fv(loc(p, 'uWearCh'), f.wearCh);
+    bindTex(3, f.other, p, 'uOther');
+    gl.uniform1f(loc(p, 'uOtherWear'), f.otherWear ? f.wear : 0);   // the other field wears it as the creatures do
     for (let i = 0; i < f.sub; i++) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, f.fbo[1 - f.cur]);
       bindTex(0, f.tex[f.cur], p, 'uField');
@@ -347,7 +351,8 @@ const SimGL = (function () {
     }
   }
   function stepBullets() {
-    const f = { tex: bulTex, fbo: bulFbo, cur: bcur, tapTex: bulTapTex, tapCount: bulTapCount, rule: bulRule, wear: bul.wear, wearCh: bul.wearCh, sub: bul.sub };
+    const f = { tex: bulTex, fbo: bulFbo, cur: bcur, tapTex: bulTapTex, tapCount: bulTapCount, rule: bulRule, wear: bul.wear, wearCh: bul.wearCh, sub: bul.sub,
+                other: hos.tex[hos.cur], otherWear: mutual === 'wear' && hostileActive() };
     stepField(f);
     bcur = f.cur;
   }
@@ -385,6 +390,11 @@ const SimGL = (function () {
   function putHostile(flat, h, w, row0, col0) { putField(hos.tex[hos.cur], flat, h, w, row0, col0); hos.idle = false; }
   function clearHostile() { clearFbos(hos.fbo); hos.idle = true; }
   const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle;
+  // The two bullets fields together ([bullet_mutual]): 'none' (apart), or 'wear': where they
+  // overlap each wears the other down, at its own wear rate per unit of the other's mass (as the
+  // creatures wear them): shots meeting cancel out. One more fetch per cell per bullet step.
+  let mutual = 'none';
+  function setBulletMutual(m) { mutual = m; }
   // The bullets as the creatures' step sees them (sim.glsl / the FFT path: uBullets, uBulletMode,
   // uBulletCh, uBulletHit), set at the start of each step: null (none flying); the bullets' field
   // alone; the hostile field alone (its own mode and channels); or both, added into mixTex, with the
@@ -406,7 +416,8 @@ const SimGL = (function () {
   }
   function stepHostile() {
     const f = { tex: hos.tex, fbo: hos.fbo, cur: hos.cur, tapTex: hos.tapTex, tapCount: hos.tapCount, rule: hos.rule,
-                wear: hos.opt.wear, wearCh: hos.opt.wearCh, sub: hos.opt.sub };
+                wear: hos.opt.wear, wearCh: hos.opt.wearCh, sub: hos.opt.sub,
+                other: bulTex[bcur], otherWear: mutual === 'wear' && bulletsOn && !!bulTapTex && !bulletsIdle };
     stepField(f);
     hos.cur = f.cur;
   }
@@ -662,7 +673,7 @@ const SimGL = (function () {
   return { init, setRule, setUpdate, seed, add, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
-           setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks,
+           setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks, setBulletMutual,
            get hostileIdle() { return hos.idle; },
            get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },

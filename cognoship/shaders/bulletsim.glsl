@@ -20,6 +20,8 @@ uniform float uSigma;       // growth width (polynomial)
 uniform float uDt;
 uniform float uWear;        // bullet mass removed per step per unit of creature mass
 uniform vec3  uWearCh;      // which creature channels wear the bullets (one-hot or all ones)
+uniform sampler2D uOther;   // the other bullets field (the player's or the bots'), R
+uniform float uOtherWear;   // bullet mass removed per step per unit of the other field's ([bullet_mutual:wear]); 0: none
 
 out vec4 fragColor;
 
@@ -36,6 +38,6 @@ void main() {
     g *= g; g *= g;
     float v = texelFetch(uField, p, 0).r + uDt * (2.0 * g - 1.0);
     vec3 a = texelFetch(uState, p, 0).rgb * uWearCh;
-    v = clamp(v - uWear * max(a.r, max(a.g, a.b)), 0.0, 1.0);
+    v = clamp(v - uWear * max(a.r, max(a.g, a.b)) - uOtherWear * texelFetch(uOther, p, 0).r, 0.0, 1.0);
     fragColor = vec4(v, 0.0, 0.0, 1.0);
 }

@@ -481,8 +481,10 @@
   // Respawn puts back. So a morph can be changed without dissolving, and a twin engineered by
   // becoming one half and pasting the other next to it.
   function pasteClone(at) {
+    if (cloneCost && energy < cloneCost) { flash('morphs'); return; }   // [clone_cost]: not enough energy (the clone stays held)
     const H = clone.held;
     Clone.paste(H, at);
+    if (cloneCost) changeEnergy(-cloneCost);
     C.analyze(0);
     const i = C.found ? Creatures.pick(C.found, at[0], at[1], 2 * C.R, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
     if (i >= 0) { C.setFocus(i); playerMorph = H.name; retake = true; cand = null; }
@@ -823,7 +825,7 @@
   // from 0, the time from now
   function freshAttempt() {
     Object.assign(challenge, { failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, t0: C.simSteps });
-    bulletCost = 0;   // ([bullet_cost] too: each challenge sets its own costs)
+    bulletCost = 0; cloneCost = 0;   // ([bullet_cost], [clone_cost] too: each challenge sets its own costs)
     energyHidden = false;   // (and shows the energy, unless [energy:off] again)
     energy = 0; showEnergy();
   }
@@ -1154,6 +1156,7 @@
   // central energy (so two tabs add up).
   let energy = 0, dotsSeen = 0, energyUnsaved = 0;
   let bulletCost = 0;   // [bullet_cost:<n>]: energy per shot of the player's gun
+  let cloneCost = 0;    // [clone_cost:<n>]: energy per clone pasted
   let energyHidden = false;   // [energy:off]: not shown
   function changeEnergy(d) {
     d = Math.max(-energy, d);
@@ -1340,6 +1343,14 @@
       bulletCost = n;
       showEnergy();
     },
+    // clone_cost:<n>|off: each clone pasted costs n energy (shown at the top); with less than n it
+    // can't be pasted (it stays held); 0 or off: free. Challenge mode: reset with each attempt.
+    clone_cost: (v) => {
+      const n = v === 'off' ? 0 : parseFloat(v);
+      if (!(n >= 0)) return console.warn(`script.txt: bad value [clone_cost:${v}], ignored`);
+      cloneCost = n;
+      showEnergy();
+    },
     // dissolve:retry|respawn: (challenge mode) what the ship dissolving does: retry: it fails the
     // challenge ("Failed", then Respawn or Choose start it again); respawn (the default): as in the
     // other modes ("Dissolved", Respawn / Choose put a ship back, by [retry_action])
@@ -1444,11 +1455,16 @@
     // put_player:first: the species' first morph (its first pattern).
     // <morph>=<k>: a group of k, the ship the one nearest the group's centre (the rest are not
     // the player's: Respawn puts back one)
-    put_player: (id, how = 'center') => {
-      const g = groupArg('put_player', id);
-      id = g.id;
+    // <morphs> a list (',' between): the first of them that is a visible morph of the species
+    // (else the first that is a morph of it, else the first, warned)
+    put_player: (ids, how = 'center') => {
+      const cands = String(ids ?? '').split(',').map(x => x.trim()).filter(Boolean).map(x => groupArg('put_player', x));
+      if (!cands.length) return console.warn('script.txt: [put_player] with no morph, ignored');
+      const name = e => e.id === 'first' ? firstMorph() ?? e.id : e.id;
+      const g = cands.find(e => inSpecies(name(e)) && isVisible(name(e))) || cands.find(e => inSpecies(name(e))) || cands[0];
+      if (cands.length > 1 && !(inSpecies(name(g)) && isVisible(name(g)))) console.warn(`script.txt: [put_player:${ids}]: none of these is a visible morph of the species; ${name(g)}`);
+      let id = name(g);
       if (useMorph && inSpecies(useMorph)) id = useMorph;   // a retry: the player's morph (the group's size kept)
-      else if (id === 'first') id = firstMorph() ?? id;
       useMorph = null;
       if (g.k > 1 ? putGroup(id, g.k, how, 'put_player', true) : putMorph('put_player', id, how, true)) playerMorph = id;
     },
@@ -1552,11 +1568,21 @@
     // masks (or erases) the creatures it hits while they wear it down. Options, any order:
     // off, erase|mask, rgb|r|g|b|color_now, wear_color|wear_all (defaults mask, color_now, wear_color).
     gun: (...options) => Bullets.setGun(options),
-    // bullet:<names>[:<name>]: the patterns the gun can fire: add names (separated by commas),
+    // bullet_mutual:none|wear|masking: the player's and the bots' bullets together: apart (none, the
+    // default), or each wearing the other down where they overlap (wear: shots meeting cancel out);
+    // masking: not built yet (as none)
+    bullet_mutual: (v = 'none') => {
+      if (v === 'masking') { console.warn('script.txt: [bullet_mutual:masking] is not built yet: none'); v = 'none'; }
+      if (v !== 'none' && v !== 'wear') return console.warn(`script.txt: unknown option [bullet_mutual:${v}], ignored`);
+      SimGL.setBulletMutual(v);
+    },
+    // bullet:… (the old name): as add_bullet
+    bullet: (...args) => { console.warn('script.txt: [bullet] is now [add_bullet]'); return ACTIONS.add_bullet(...args); },
+    // add_bullet:<names>[:<name>]: the patterns the gun can fire: add names (separated by commas),
     // random (one more at random), all, or clear (none); then equip <name> (added too if not
     // listed). With two or more, ◀ ▶ (D / F) switch between them. The patterns it adds are shown:
     // the bullet book opens and reveals them (not when replayed: [jump_here], Reset, I).
-    bullet: (names = '', equip) => {
+    add_bullet: (names = '', equip) => {
       const before = Bullets.list;
       Bullets.setList(names, equip);
       const added = Bullets.list.filter(n => !before.includes(n));
@@ -2562,7 +2588,7 @@
     if (d > 0) changeEnergy(d); else showEnergy();
   };
   function showEnergy() {
-    $('score').hidden = energyHidden || (!Dots.on && !challenge.maskCost && !challenge.eraseCost && !challenge.drawCost && !bulletCost); $('score-v').textContent = Math.round(energy);
+    $('score').hidden = energyHidden || (!Dots.on && !challenge.maskCost && !challenge.eraseCost && !challenge.drawCost && !bulletCost && !cloneCost); $('score-v').textContent = Math.round(energy);
     const was = bulletNew;
     syncNew();   // [new_bullet:<n>]: one more may be creatable
     if (bulletNew !== was && book.open && book.mode === 'bullet') renderBook();   // "Create or choose bullet" now, or no more
