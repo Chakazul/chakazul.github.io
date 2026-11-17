@@ -116,7 +116,7 @@ When you are ready, we will head to the Galactic Center.
 
 # make swarm
 [species:Aquarium vorticosus:Z18A9R]
-[allow_morph:gyrans,tardus,lithos,paragyrans,antigyrans,transgyrans,trias]
+[allow_morph:gyrans,tardus,lithos,paragyrans,antigyrans,transgyrans,trigyrans,trias]
 [clear_world:radiation][put_player:lithos]
 [dot:1]
 The Galactic Center of the Milky Way, 27,000 light-years from home.
@@ -170,7 +170,7 @@ Here are some of our Leniologists' favorite species.
 [new_scene]
 [stars:135]
 [species:Aquarium virgatus:KZ2BLD]
-[allow_morph:rectus,virgatus,limus]
+[allow_morph:rectus,limus,virgatus]
 [clear_world][put_player:rectus]
 [dot:5][min_morph:5:rectus,limus:far]
 _Small Magellanic Cloud_, 200,000 light-years from home.
@@ -215,7 +215,7 @@ Next species...
 # erase swarm (very hard)
 [stars:270]
 [species:Aquarium replicans:VT049W]
-[allow_morph:gyrans,rectus,tachus,lithos,paralimus,paragyrans,rectogyrans]
+[allow_morph:rectus,gyrans,tachus,lithos,paragyrans,pararectus,rectogyrans,sequerectus]
 [clear_world:gray][put_player:tachus][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
 #[dot:3]
 We have arrived at a distant, ancient galaxy.

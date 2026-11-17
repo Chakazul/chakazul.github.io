@@ -16,10 +16,11 @@
   C.opt.viewLabels = () => false;
   C.opt.actionPatches = () => false;
   C.action = 0;
-  // the R G B patch again (or its key): erase ("recycle"), striped, -R / -G / -B; allowed unless [erase:off]
+  // the R G B patch again (or its key): draw if allowed (below), then erase ("recycle"), striped,
+  // -R / -G / -B, allowed unless [erase:off]: mask -> draw -> erase -> mask
   let eraseOn = true;
   C.opt.patchErase = () => eraseOn;
-  // ... and (after erase, if on) draw: add mass, cross-hatched, +R / +G / +B; allowed by [draw]
+  // ... and (before erase, if on) draw: add mass, cross-hatched, +R / +G / +B; allowed by [draw]
   // (off by default): on, or if the current species is a given one (checked as it changes)
   let drawRule = { on: false, species: null };
   const drawOn = () => drawRule.on && (!drawRule.species || (!!C.pattern && C.speciesOf(C.pattern) === drawRule.species));
@@ -232,10 +233,23 @@
   // Visible morphs: the names the player may see. Every morph is still detected, but one not
   // visible shows as "???" (name box, labels). [species] empties the list, [allow_morph:<ids>]
   // sets it; "all" stands for every morph of the species (also ones detected from the recorded
-  // stats only, as paralimus).
+  // stats only).
   const vis = { all: false, allow: new Set() };
   const isVisible = name => vis.all || vis.allow.has(name);
   C.opt.morphLabel = det => isVisible(det.name) ? det.name : null;   // a fuzzy morph too: no "~"
+  // Hidden morphs ([hide_morph]): still detected and named where visible (name box, world view), but
+  // left out of the morph book (so of respawn, retry and clone picks) and the species book's
+  // thumbnails, and never discovered. Keys "<code>:<name>", or "*:<name>" for every species.
+  const hiddenMorphs = new Set();
+  const curCode = () => C.pattern ? C.speciesOf(C.pattern) : '';
+  const isHidden = (name, code = curCode()) => hiddenMorphs.has(`*:${name}`) || hiddenMorphs.has(`${code}:${name}`);
+  function hideMorphs(morphs = '', code) {   // [hide_morph]'s change to hiddenMorphs
+    const names = morphIds([morphs]);
+    if (names.includes('none')) {
+      for (const k of [...hiddenMorphs]) if (!code || k.startsWith(code + ':')) hiddenMorphs.delete(k);
+    } else for (const n of names) hiddenMorphs.add(`${code || '*'}:${n}`);
+  }
+  let baseHidden = new Set();   // challenge mode: the hidden morphs after its set-up lines (each challenge starts from them)
   // The ship is the one followed: a click on the world view does not switch to another creature.
   C.opt.clickFocus = () => false;
   C.opt.noFocusText = () => [];   // nothing followed: the ship view stays empty
@@ -249,8 +263,13 @@
   // where that fails it ([dissolve:retry]; from the first frame, before challengeFrame calls it)
   const lostFails = () => MODE === 'challenge' && (!!challenge.failed || (!!challenge.cur && challenge.dissolveFails));
   const lostShown = () => (shipLost() && !emptySpace) || !!challenge.failed;   // "Dissolved" (challenge mode: "Failed") and Respawn / Choose show
-  C.opt.over = lostShown;
-  C.opt.emptyView = () => emptySpace;
+  // Autospawn on ([settings]): no "Dissolved", Respawn or Choose while it waits; the ship view stays
+  // on the spot where the ship was last seen, as it was turned (lastShip)
+  const autoLost = () => settingsOn && autospawn && !lostFails();
+  const lostPanel = () => lostShown() && !autoLost();
+  let lastShip = null;   // [col, row, phi] of the ship, each frame it is followed
+  C.opt.over = lostPanel;
+  C.opt.emptyView = () => emptySpace || (autoLost() && shipLost() && lastShip) || false;
   C.opt.pauseWhenEmpty = () => false;   // "Dissolved" does not pause the game
   // morph ids from a token's args: [allow_morph:limus:gyrans] or [allow_morph:limus,gyrans]
   const morphIds = args => args.flatMap(a => a.split(/[,\s]+/)).filter(Boolean);
@@ -296,6 +315,9 @@
     $('book-close').dataset.key = 'Esc';   // only Escape closes a book (its letters pick slots)   // its key badge: the key that closes this book
     // the morph book's species, at its lower right (a morph is only a morph of its species)
     $('book-species').hidden = book.mode !== 'morph' || !C.pattern;
+    $('book-settings').hidden = book.mode !== 'settings';   // ([settings:on]: the settings book, in place of the slots)
+    $('book-grid').hidden = book.mode === 'settings';
+    syncObjects();
     if (C.pattern) {
       const code = document.createElement('i');
       code.textContent = speciesName || C.speciesOf(C.pattern);   // no name: the id
@@ -304,7 +326,7 @@
     // sandbox mode: the species' name goes to the species book
     $('book-species').classList.toggle('link', MODE === 'sandbox');
     $('book-species').title = MODE === 'sandbox' ? 'Choose another species (C)' : '';
-    $('book-clear').hidden = MODE === 'story';
+    $('book-clear').hidden = MODE === 'story' || book.mode === 'settings';
     // the challenge book's: clears the completion (the ticks) and the best times
     // (the species book for a challenge: that challenge's, with every species)
     const recs = book.mode === 'challenge' || (book.mode === 'species' && challenge.pending);
@@ -315,6 +337,7 @@
       : 'Hold for 3 seconds to clear the completion and best time of every challenge';
     if (book.mode === 'bullet') return renderBullets();
     if (book.mode === 'species') return renderSpecies();
+    if (book.mode === 'settings') return setTitle(['Settings']);
     if (book.mode === 'challenge') return renderChallenges();
     allDiscovered();
     // a click on a discovered morph does something: (challenge mode: book.retry, the retry book) restart the challenge with it
@@ -324,7 +347,7 @@
       : canPick ? ['Choose a morph to ', ['respawn', 'choose']]
       : canClone ? ['Choose a morph to ', ['clone', 'clone']] : ['Dissolve to respawn']);   // read-only: how to get a pick
     const grid = $('book-grid');
-    grid.replaceChildren(...visibleList().map((name, slot) => {
+    grid.replaceChildren(...visibleList().filter(n => !isHidden(n)).map((name, slot) => {
       const d = discovered.find(x => x.name === name), el = document.createElement('div');
       el.className = 'book-slot' + (d ? '' : ' empty') + (d && d.name === book.newName ? ' new' : '');
       if (d && d.name === book.newName && book.reveal) revealSlot(el, 0);
@@ -389,14 +412,14 @@
       closeBook(); playerMorph = name;
       if (MODE === 'challenge') return retryChallenge();
       // story, sandbox: the scene again, once the book has zapped out (resetScene waits for none)
-      const go = () => bookShowing() ? requestAnimationFrame(go) : resetScene();
+      const go = () => bookShowing() ? requestAnimationFrame(go) : retryScene();
       return go();
     }
     closeBook();
     // either way the new creature is followed
     if (book.action === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); }   // (not the script's [clear_world]: background and [min_morph] kept)
     else if (book.action === 'put') ACTIONS.put_player(name, 'random');
-    if (book.action !== 'none') { retake = true; cand = null; respawns++; respawned(); }   // its picture may be retaken; [need:respawn]
+    if (book.action !== 'none') { retake = book.action === 'clear_put'; cand = null; respawns++; respawned(); }   // [need:respawn]; its picture may be retaken after clear_put only (put: into a busy world)
     C.setRunning(true);
   }
   // ---- clone mode ([clone:on]) ------------------------------------------------------------
@@ -447,6 +470,7 @@
   // where it is placed (a touch, awaiting ✓), else under the hovering mouse
   C.opt.drawGhost = (ctx, hoverAt, centre, cellPx, phi, focus) => {
     const H = clone.held;
+    if (!H && fieldMode()) { if (hoverAt) drawBrush(ctx, hoverAt[0], hoverAt[1], Field.widthOf(C.fieldTool) / 2 * cellPx); return true; }   // the brush, not the ship tool's circle
     if (!H) return false;
     let x, y;
     if (H.at) {
@@ -464,12 +488,14 @@
   // (a touch dragged: the copy follows it, placed all along)
   C.opt.zoomDrag = (off, e) => {
     const H = clone.held;
+    if (!H && Field.active && C.focus) { const sh = C.ship(); Field.move([sh.col + off[0], sh.row + off[1]]); return; }   // painting the field
     if (!H || !H.at || !C.focus || (e && e.pointerType === 'mouse')) return;
     const sh = C.ship();   // (off is from the ship view's centre: the ship, a twin's whole)
     H.at = [sh.col + off[0], sh.row + off[1]];
   };
   C.opt.zoomPress = (off, e) => {
     const H = clone.held;
+    if (!H && fieldMode() && C.focus) { const sh = C.ship(); Field.begin([sh.col + off[0], sh.row + off[1]], C.channel, C.fieldTool); return true; }
     if (!H || !C.focus) return false;
     const sh = C.ship(), at = [sh.col + off[0], sh.row + off[1]];
     if (e && e.pointerType !== 'mouse') { H.at = at; syncButtons(); return true; }
@@ -487,7 +513,7 @@
     if (cloneCost) changeEnergy(-cloneCost);
     C.analyze(0);
     const i = C.found ? Creatures.pick(C.found, at[0], at[1], 2 * C.R, SimGL.BW, SimGL.BH, SimGL.BLOCK, C.BW, C.BH) : -1;
-    if (i >= 0) { C.setFocus(i); playerMorph = H.name; retake = true; cand = null; }
+    if (i >= 0) { C.setFocus(i); playerMorph = H.name; cand = null; }   // (no retake: a world with the old ship in it)
     clonesPlaced++;   // [need:first_clone]
     endClone();
   }
@@ -503,12 +529,64 @@
     if (at) pasteClone(at);
   }
 
+  // ---- world draw ([world_draw:on], the bullet types Nebula and Antimatter) -------------------
+  // While one of them is in use (fieldMode) the player paints the R G B fields (field.js) with a
+  // press in either view: the R G B patches pick the colour, the selected one again the tool (+
+  // paintbrush, × soft brush, − eraser); the Zoom slider is Width (2 to 32 cells; the soft brush and the
+  // eraser twice that), Fire is Clear (the
+  // selected colour's field emptied), Upward is Undo (the last stroke or Clear; again: redo it).
+  // The bots don't fire meanwhile (their bullets' channel is a field).
+  const fieldMode = () => !!Bullets.field;
+  SimGL.setFieldKeepsDots(MODE === 'challenge');   // challenge mode: the dots (its beacons, to be eaten) stay while drawing
+  C.opt.fieldTools = fieldMode;
+  C.opt.worldPress = at => { if (!fieldMode()) return false; Field.begin(at, C.channel, C.fieldTool); return true; };
+  C.opt.worldDrag = at => Field.move(at);
+  C.opt.pressEnd = () => Field.end();
+  // the brush's outline: in the colour being painted; solid (paintbrush), dotted (soft brush), dashed (eraser)
+  function drawBrush(ctx, x, y, r) {
+    ctx.save();
+    ctx.strokeStyle = C.CH_COLORS[C.channel]; ctx.lineWidth = 2; ctx.setLineDash([[], [2, 4], [6, 4]][C.fieldTool] || []);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(2, r), 0, 2 * Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+  C.opt.worldGhost = hover => fieldMode() && hover
+    ? { at: hover, r: Field.widthOf(C.fieldTool) / 2 * C.WS + 2, draw: (ctx, x, y) => drawBrush(ctx, x, y, Field.widthOf(C.fieldTool) / 2 * C.WS) } : null;
+  Field.hooks.change = () => syncButtons();
+  const doClear = () => { flash('fire'); Field.clear(C.channel); };
+  const doUndo = () => { if (Field.undo()) flash('headup'); };
+  // A small picture of a field type for the bullet book: a soft cloud of the three colours (Nebula),
+  // or a dark disc with a faint violet rim (Antimatter)
+  const fieldPics = new Map();
+  function fieldPic(name) {
+    if (!fieldPics.has(name)) {
+      const n = 32, cv = document.createElement('canvas');
+      cv.width = cv.height = n;
+      const g = cv.getContext('2d');
+      if (name === 'Antimatter') {
+        const gr = g.createRadialGradient(n / 2, n / 2, 2, n / 2, n / 2, n / 2);
+        gr.addColorStop(0, 'rgba(10,6,20,1)'); gr.addColorStop(0.7, 'rgba(30,16,60,1)'); gr.addColorStop(1, 'rgba(140,90,255,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, n, n);
+      } else {
+        for (const [x, y, c] of [[11, 13, '255,59,59'], [21, 12, '59,255,90'], [16, 21, '59,123,255']]) {
+          const gr = g.createRadialGradient(x, y, 0, x, y, 12);
+          gr.addColorStop(0, `rgba(${c},.9)`); gr.addColorStop(1, `rgba(${c},0)`);
+          g.fillStyle = gr; g.fillRect(0, 0, n, n);
+        }
+      }
+      fieldPics.set(name, cv.toDataURL());
+    }
+    const img = new Image();
+    img.src = fieldPics.get(name); img.alt = ''; img.className = 'bpic';
+    img.style.width = img.style.height = '28px';
+    return img;
+  }
+
   // The bullet book shares the morph book's window (book.mode 'bullet'): every bullet pattern by
   // name, 4 to a row (as the morph book); the ones the gun has ([bullet]) can be
   // clicked to switch to them (the one in use with a yellow border), the others are "?".
   // Keys picking a slot, by its place: the books' rows of 4 on the keyboard's rows (morphs: ASDF,
   // ZXCV; bullets: 1234, QWER, ASDF, ZX..).
-  const SLOT_KEYS = { morph: [...'ASDFZXCV'], bullet: [...'1234QWERASDFZXCV'], species: [...'QWERASDFZX'] };
+  const SLOT_KEYS = { morph: [...'ASDFZXCV'], bullet: [...'1234QWERASDFZXCV'], species: [...'QWERASDFZXCV'] };
   // [new_bullet:<n>]: creating a pattern costs n energy (the score): how many more can be created
   // now, with the energy there is (none while it is below n), at most as many as are not listed
   let bulletsCreated = 0;   // patterns created this run ([need:create_bullet])
@@ -562,21 +640,22 @@
   function renderBullets() {
     const create = bulletCredits() > 0;
     setTitle(create ? [['Create', 'create'], ' or ', ['use', 'choose'], ' a bullet type'] : [['Use', 'choose'], ' a bullet type']);
-    const have = Bullets.list;
+    const have = Bullets.list, fields = Bullets.fieldKinds;   // (world draw: Nebula, Antimatter after the patterns, always usable)
     let nNew = 0;
-    $('book-grid').replaceChildren(...Object.keys(Bullets.KINDS).map((name, slot) => {
-      const el = document.createElement('div'), ok = have.includes(name);
+    $('book-grid').replaceChildren(...Object.keys(Bullets.KINDS).concat(fields).map((name, slot) => {
+      const el = document.createElement('div'), isField = fields.includes(name), ok = isField || have.includes(name);
       const current = name === Bullets.kind && !revealing.has(name);   // (yellow once revealed)
       el.className = 'book-slot' + (ok ? ' pick' : ' empty') + (current ? ' current' : '');   // (a new one: revealed, no colour of its own)
       if (newBullets.has(name) && book.reveal) revealSlot(el, nNew++);
       if (name === revealName) revealSlot(el, 0, 0);   // just created: at once
       const label = document.createElement('span');
       label.className = 'label';
-      if (ok) label.append(bulletPic(name), name);   // its stored pattern, small, in white, before the name
+      if (ok) label.append(isField ? fieldPic(name) : bulletPic(name), name);   // its stored pattern, small, in white, before the name
       else label.textContent = '\u00a0';
       el.append(label);
       if (ok) {
-        el.title = `Fire ${name}`; el.onclick = () => { Bullets.select(name); closeBook(); };
+        el.title = isField ? `Draw ${name} on the world (it ${name === 'Nebula' ? 'masks' : 'erases'} the creatures' channels)` : `Fire ${name}`;
+        el.onclick = () => { Bullets.select(name); closeBook(); };
         if (SLOT_KEYS.bullet[slot]) el.dataset.key = SLOT_KEYS.bullet[slot];
       } else if (create) {
         el.classList.add('pick', 'create');
@@ -610,7 +689,7 @@
   // The Species button (C), or the species' name in the morph book: a slot per visible species
   // ([add_allow_species]), in order: a small thumbnail of each of its visible morphs in a row (the
   // centre of its picture if discovered, else black), and its name. The current one has a
-  // yellow border. A click chooses it (chooseSpecies: its [on_choose_species] block sets the world up).
+  // yellow border. A click chooses it (chooseSpecies: its [on_start] block sets the world up).
   // A species' visible morphs: its [add_allow_species] list, or for all, every morph of it (its patterns)
   const speciesMorphs = e => !e.morphs.includes('all') ? e.morphs
     : [...new Set(PATTERNS.filter(p => C.speciesOf(p) === e.id && !p.hidden).map(p => C.morphName(p).replace(C.BOOM, '')))];
@@ -633,12 +712,14 @@
     const ch = challenge.pending;   // challenge mode: the species for this challenge
     setTitle(ch ? [['Choose', 'choose'], ` a species for ${ch.title}`] : [['Choose', 'choose'], ' a species']);
     const cur = C.pattern && C.speciesOf(C.pattern);
+    const hid = ch ? challengeHidden(ch) : null;   // challenge mode: that challenge's hidden morphs (its [hide_morph] tags), not those in force now
+    const hidden = (m, code) => hid ? hid.has(`*:${m}`) || hid.has(`${code}:${m}`) : isHidden(m, code);
     $('book-grid').replaceChildren(...(ch ? challengeSpecies(ch) : visSpecies).map((e, slot) => {
       const found = discoveredBy.get(e.id) || [];
       const el = document.createElement('div'), thumbs = document.createElement('div'), label = document.createElement('span');
       el.className = 'book-slot pick species' + (e.id === cur ? ' current' : '');
       thumbs.className = 'thumbs';
-      for (const m of speciesMorphs(e)) {
+      for (const m of speciesMorphs(e).filter(m => !hidden(m, e.id))) {
         const d = found.find(x => x.name === m), t = document.createElement('div');
         const twin = (AQUARIUM233.rules[e.id]?.wholes || []).includes(m) || WIDE_THUMBS.includes(e.id);   // recorded as a whole (a twin, a trio), or a species of large creatures
         t.className = 'thumb' + (d ? '' : ' unknown') + (twin ? ' whole' : '');   // not discovered: the box's colour (discovered with no picture: black)
@@ -701,7 +782,7 @@
   // ([time_limit] ran out), 'energy' ([mask_cost] took it to 0); deadline: the step [time_limit]
   // ends at (null: none); maskCost: energy per game second of a press ([mask_cost])
   // dissolveFails: [dissolve:retry], a lost ship fails the challenge
-  const challenge = { list: [], cur: null, pending: null, last: null, t0: 0, failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, dissolveFails: false };
+  const challenge = { list: [], cur: null, pending: null, last: null, t0: 0, failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, worldDrawCost: 0, dissolveFails: false };
   // The challenge book's "Hold to clear completion & best time": every record goes (ticks, best times)
   // id: that challenge's records only (with every species); none: every record
   function clearCompletion(id = null) {
@@ -743,7 +824,19 @@
         const a = SCRIPT[i].actions.find(a => a.name === 'allow_species');
         if (a) { c.allow = a.args.flatMap(x => x.split(',')).map(x => x.trim()).filter(Boolean); break; }
       }
+      // its [hide_morph] tags, in order (hide: their args), for its species book's thumbnails
+      c.hide = [];
+      for (let i = c.start; i < c.end; i++) for (const a of SCRIPT[i].actions) if (a.name === 'hide_morph') c.hide.push(a.args);
     });
+  }
+  // The hidden morphs while challenge c is played: the set-up's (baseHidden), then its own [hide_morph] tags
+  function challengeHidden(c) {
+    const saved = new Set(hiddenMorphs);
+    hiddenMorphs.clear(); for (const k of baseHidden) hiddenMorphs.add(k);
+    for (const args of c.hide) hideMorphs(...args);
+    const out = new Set(hiddenMorphs);
+    hiddenMorphs.clear(); for (const k of saved) hiddenMorphs.add(k);
+    return out;
   }
   // The species challenge c allows, of the visible ones ([add_allow_species]), in their order
   const challengeSpecies = c => c.allow.includes('all') ? visSpecies : visSpecies.filter(e => c.allow.includes(e.id));
@@ -824,7 +917,8 @@
   // A new attempt: no failure, no time limit, mask or bullet cost (until the script sets them), the energy
   // from 0, the time from now
   function freshAttempt() {
-    Object.assign(challenge, { failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, t0: C.simSteps });
+    hiddenMorphs.clear(); for (const k of baseHidden) hiddenMorphs.add(k);   // (the hidden morphs as the set-up left them: a challenge's [hide_morph] is its own)
+    Object.assign(challenge, { failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, worldDrawCost: 0, t0: C.simSteps });
     bulletCost = 0; cloneCost = 0;   // ([bullet_cost], [clone_cost] too: each challenge sets its own costs)
     energyHidden = false;   // (and shows the energy, unless [energy:off] again)
     energy = 0; showEnergy();
@@ -846,7 +940,7 @@
       runChallengeDefaults();
       speciesFading = false;
       useMorph = playerMorph;
-      retake = true; cand = null;   // the morph's picture may be retaken, as after a Respawn
+      retake = true; cand = null;   // the morph's picture may be retaken, as at a challenge's start
       if (c.start + 1 < c.end) run(c.start + 1); else completeChallenge();
       sceneHidden = false;
       fadeWorld(0);
@@ -866,9 +960,11 @@
   // Each frame, during a challenge: a lost ship fails it ([dissolve:retry]); [time_limit] runs out; [mask_cost] spends
   // the energy while the player presses (mask or erase), and fails it at 0
   let costSteps = 0;   // C.simSteps when the mask cost was last taken
+  let drawCostAt = 0;   // performance.now() when the world-draw cost was last taken
   function challengeFrame() {
     const c = challenge.cur, now = C.simSteps;
     const dn = now - costSteps; costSteps = now;
+    const t = performance.now(), dtS = drawCostAt ? Math.min(0.25, (t - drawCostAt) / 1000) : 0; drawCostAt = t;
     showTimer();
     if (!c || challenge.failed || chapterShowing() || speciesFading) return;
     if (challenge.dissolveFails && shipLost() && !emptySpace) return failChallenge('lost');
@@ -880,11 +976,17 @@
       if (C.masking && dn > 0 && cost > 0) changeEnergy(-cost * dn / C.STEPS_PER_S);
       if (energy <= 0) return failChallenge('energy');
     }
+    // [world_draw_cost]: a stroke of Nebula / Antimatter's paintbrush or soft brush held (not the
+    // eraser), per real second (drawing works while paused too)
+    if (challenge.worldDrawCost > 0) {
+      if (fieldMode() && Field.active && Field.tool !== 2 && dtS > 0) changeEnergy(-challenge.worldDrawCost * dtS);
+      if (energy <= 0) return failChallenge('energy');
+    }
   }
   // [mask_cost], [erase_cost], [draw_cost]: energy per game second of a press with that action
   function setPressCost(what, v) {
     const n = v === 'off' ? 0 : parseFloat(v);
-    if (!(n >= 0)) return console.warn(`script.txt: bad value [${what}_cost:${v}], ignored`);
+    if (!(n >= 0)) return console.warn(`script.txt: bad value [${what.replace('worldDraw', 'world_draw')}_cost:${v}], ignored`);
     challenge[what + 'Cost'] = n;
     showEnergy();
   }
@@ -904,7 +1006,7 @@
   function completeChallenge() {
     const c = challenge.cur, sec = (C.simSteps - challenge.t0) / C.STEPS_PER_S;
     challenge.cur = null; line = -1; tests = []; progress = null;
-    challenge.deadline = null; challenge.maskCost = challenge.eraseCost = challenge.drawCost = 0;
+    challenge.deadline = null; challenge.maskCost = challenge.eraseCost = challenge.drawCost = challenge.worldDrawCost = 0;
     showSuccess(true);   // (challenge mode: only here, at its end)
     const r = saveRecord(c.id, sec, chosenSpecies);
     newRecord = r.best === sec ? { id: c.id, species: chosenSpecies } : null;   // its species book reveals the slot
@@ -1032,6 +1134,7 @@
     if (book.fromDiscovery && book.newName) book.found.push(book.newName);
     book.fromDiscovery = false; book.newName = null;
     if (book.wasRunning) C.setRunning(true);
+    if (book.mode === 'settings') settingsClosed();
   }
   // "Zap in": ZAP.length frames, one every ZAP_MS, growing and firming up to the box's own size,
   // stack up over the game window, then the box shows, the window dims behind it (not before),
@@ -1086,10 +1189,12 @@
   // Each frame: has the followed ship been a visible morph not discovered yet, without a break, for
   // DISCOVER_STEPS (a game second, in steps: paused time does not count)? A passing detection is
   // not a discovery. A discovered one gets a new picture (after SNAPSHOT_STEPS) only once after each
-  // Respawn or book pick (retake), when the ship is usually alone in a cleared world.
+  // retake: a book pick that clears the world (clear_put), a species chosen (the sandbox's start too), a challenge started or retried,
+  // a sandbox Retry; when the ship is usually alone in a fresh world (not a Respawn, nor boarding a
+  // clone: the world may be chaotic then).
   const DISCOVER_STEPS = C.STEPS_PER_S, SNAPSHOT_STEPS = C.STEPS_PER_S;
   let cand = null, lastStep = 0;   // cand: { name, n: steps } the morph the ship is in now, if it would be new
-  let retake = false;   // set by Respawn and a book pick: the next known morph held gets a new picture
+  let retake = false;   // set by a clear_put book pick, a species chosen, a challenge (re)started, a sandbox Retry: the next known morph held gets a new picture
   function checkDiscovery() {
     const dn = C.simSteps - lastStep;
     lastStep = C.simSteps;
@@ -1099,7 +1204,7 @@
     if (known && !Number.isFinite(known.hue) && Number.isFinite(d.hue)) { known.hue = d.hue; saveInventory(); }   // put in unseen: its colour now
     // a new discovery; or a known morph, whose picture is retaken quietly after SNAPSHOT_STEPS (once
     // the detection has settled), replacing the old one: only once after a Respawn or a book pick
-    if (!book.on || !d || !d.name || !isVisible(d.name)) { cand = null; return; }
+    if (!book.on || !d || !d.name || !isVisible(d.name) || isHidden(d.name)) { cand = null; return; }   // (a hidden morph: never discovered)
     if (known && known.img && !retake) return;   // (one with no picture yet, from [discover_morph], gets it any time)
     if (!cand || cand.name !== d.name) { cand = { name: d.name, n: 0, taken: false }; return; }
     if (cand.taken) return;
@@ -1133,23 +1238,32 @@
   // starts from an empty inventory; a sandbox run starts from the central one (loaded at the start,
   // before sandbox.txt runs), and saves into it as a story run does.
   const INV_KEY = 'cognoship-inventory';
-  // Morphs renamed since (species -> old name -> new): an inventory keeps them under the new name
-  const MORPH_RENAMES = { KZ2BLD: { gyrans: 'limus' } };
-  function renameMorphs(morphs) {
-    for (const [sp, ren] of Object.entries(MORPH_RENAMES)) {
-      const list = morphs[sp];
-      if (!Array.isArray(list)) continue;
-      for (const d of list) if (d && ren[d.name] && !list.some(x => x && x.name === ren[d.name])) d.name = ren[d.name];
-    }
+  // Morphs renamed since, in versions (species -> old name -> new): an inventory keeps them under
+  // the new names. Each version applied once (the inventory's rv: the last one applied; none: 0),
+  // its renames all at once (so a name can pass to another morph: VT049W's rectogyrans became
+  // sequerectus as paralimus became rectogyrans); a name already taken is left as it is.
+  const MORPH_RENAMES = [
+    { KZ2BLD: { gyrans: 'limus' } },                                   // rv 1
+    { VT049W: { rectogyrans: 'sequerectus', paralimus: 'rectogyrans' } },   // rv 2 (2026-11-18)
+  ];
+  function renameMorphs(morphs, rv = 0) {
+    MORPH_RENAMES.slice(rv).forEach(step => {
+      for (const [sp, ren] of Object.entries(step)) {
+        const list = morphs[sp];
+        if (!Array.isArray(list)) continue;
+        const was = list.map(d => d && d.name), now = was.map(n => ren[n] ?? n);
+        list.forEach((d, i) => { if (d && ren[was[i]] && !now.some((n, j) => j !== i && n === now[i])) d.name = now[i]; });
+      }
+    });
     return morphs;
   }
   function loadInventory() {
     try {
       const o = JSON.parse(localStorage.getItem(INV_KEY));
-      if (o && typeof o === 'object') return { morphs: o.morphs && typeof o.morphs === 'object' ? renameMorphs(o.morphs) : {},
-        bullets: Array.isArray(o.bullets) ? o.bullets : [], energy: Number.isFinite(o.energy) ? Math.max(0, o.energy) : 0 };
+      if (o && typeof o === 'object') return { morphs: o.morphs && typeof o.morphs === 'object' ? renameMorphs(o.morphs, Number.isInteger(o.rv) ? o.rv : 0) : {},
+        bullets: Array.isArray(o.bullets) ? o.bullets : [], energy: Number.isFinite(o.energy) ? Math.max(0, o.energy) : 0, rv: MORPH_RENAMES.length };
     } catch (e) {}
-    return { morphs: {}, bullets: [], energy: 0 };
+    return { morphs: {}, bullets: [], energy: 0, rv: MORPH_RENAMES.length };
   }
   // The energy: what the ship has eaten (dots.js counts it: its score's rises), less what bullet
   // patterns cost. energyUnsaved (sandbox only): its change since it was last saved, added to the
@@ -1278,10 +1392,10 @@
   // The visible species ([add_allow_species]), in order: { name, id, morphs: its visible morphs }.
   // For the species chooser to come; nothing reads it yet ([species] loads any species).
   const visSpecies = [];
-  const speciesBlocks = new Map();   // [on_choose_species[:<id>]] blocks: id ('' = any species) -> its lines
+  const speciesBlocks = new Map();   // [on_start[:<id>]] blocks: id ('' = any species) -> its lines
   // A species chosen (the species book, to come; [choose_species:<id>]): load it ([species], with
   // its [add_allow_species] name), make its morphs visible ([allow_morph], its [add_allow_species]
-  // list), then run the actions of its [on_choose_species:<id>] block, or else of the general one, in
+  // list), then run the actions of its [on_start:<id>] block, or else of the general one, in
   // order and at once (no waiting: a block holds actions only).
   function chooseSpecies(id) {
     const e = visSpecies.find(x => x.id === id);
@@ -1290,7 +1404,79 @@
     ACTIONS.allow_morph(e.morphs.join(','));
     for (const L of speciesBlocks.get(id) ?? speciesBlocks.get('') ?? [])
       for (const a of L.actions) ACTIONS[a.name](...a.args);
+    if (settingsOn) applyObjects();   // the Objects slider's [min_morph:<n>], over the block's
+    retake = true; cand = null;   // a fresh world: the morph's picture may be retaken (the sandbox's start too)
   }
+  // ---- settings ([settings:on]) -------------------------------------------------------------
+  // The Settings button (V; the ship view's lower right) opens the settings book: Autospawn, Scroll
+  // and Objects, each kept in the browser across runs.
+  function openSettingsBook() {
+    if (!settingsOn) return;
+    if (book.open && book.mode !== 'settings') closeBook();
+    book.mode = 'settings'; scrollWas = scrollSet;
+    showBook();
+  }
+  $('settings').onclick = openSettingsBook;
+  // Scroll: every [clear_world] makes a scrolling world, as [clear_world:scroll] (off: as the script
+  // says). Changed in the book: as it closes, the species is chosen again (the world afresh, with it).
+  const SCROLL_KEY = 'cognoship-scroll';
+  let scrollSet = false, scrollWas = false, scrollStars = false;   // scrollStars: the setting's [stars:follow] is in force
+  try { scrollSet = localStorage.getItem(SCROLL_KEY) === '1'; } catch (e) {}
+  $('scroll').onclick = () => {
+    scrollSet = !scrollSet;
+    try { localStorage.setItem(SCROLL_KEY, scrollSet ? '1' : '0'); } catch (e) {}
+    syncObjects();
+  };
+  function settingsClosed() {
+    if (scrollSet === scrollWas) return;
+    scrollWas = scrollSet;
+    const id = chosenSpecies ?? (C.pattern && C.speciesOf(C.pattern));
+    if (id && visSpecies.some(e => e.id === id)) pickSpecies(id);
+  }
+  // The Objects slider: [min_morph:<n>], n one of OBJECTS (0: off), run after each
+  // [on_start] block (and at once, on a change), so it overrides the block's count. Only
+  // the count: the morphs and the placing stay the block's (the last [min_morph]'s; none yet: all,
+  // random). Kept in the browser (OBJ_KEY) across runs; until first set, 2.
+  const OBJECTS = [0, 1, 2, 5, 10, 20, 40], OBJ_KEY = 'cognoship-objects';
+  let settingsOn = false, minSpec = { ids: [], how: 'random' };   // minSpec: the last [min_morph]'s morphs and placing
+  let objectsIdx = 2;
+  try { const v = parseInt(localStorage.getItem(OBJ_KEY), 10); if (v >= 0 && v < OBJECTS.length) objectsIdx = v; } catch (e) {}
+  function applyObjects() {
+    const n = OBJECTS[objectsIdx];
+    if (!n) minMorph = null;
+    else if (minMorph) minMorph.n = n;
+    else { minMorph = { n, ids: minSpec.ids, how: minSpec.how, next: 0 }; edgeQueue = []; }
+  }
+  // Autospawn (beside it): once the ship is lost (Respawn shows), Respawn by itself after
+  // AUTOSPAWN_MS, as the button would (not while a book, a card or a fade is up). Kept as Objects.
+  const AUTO_KEY = 'cognoship-autospawn', AUTOSPAWN_MS = 1000;
+  let autospawn = false, lostAt = null;
+  try { autospawn = localStorage.getItem(AUTO_KEY) === '1'; } catch (e) {}
+  function autospawnFrame() {
+    if (!settingsOn || !autospawn || !lostShown() || lostFails()) { lostAt = null; return; }
+    if (book.open || chapterShowing() || speciesFading || resetting) return;
+    const now = performance.now();
+    if (lostAt === null) lostAt = now;
+    if (now - lostAt >= AUTOSPAWN_MS) { lostAt = null; doReset(); }
+  }
+  $('autospawn').onclick = () => {
+    autospawn = !autospawn;
+    try { localStorage.setItem(AUTO_KEY, autospawn ? '1' : '0'); } catch (e) {}
+    syncObjects();
+  };
+  function syncObjects() {
+    $('autospawn').setAttribute('aria-pressed', autospawn);
+    $('scroll').setAttribute('aria-pressed', scrollSet);
+    $('objects').value = objectsIdx;
+    $('objects-v').textContent = OBJECTS[objectsIdx] || 'Off';
+    fillRange($('objects'));
+  }
+  $('objects').oninput = e => {
+    objectsIdx = +e.target.value;
+    try { localStorage.setItem(OBJ_KEY, String(objectsIdx)); } catch (err) {}
+    syncObjects();
+    applyObjects();   // (the world now too, not only the next species chosen)
+  };
   // extended: out of the world view (the scrolling world's beacons and target; creatures, which
   // live on the board, and anything outside a scrolling world: as far)
   const PUT_HOW = ['center', 'random', 'far', 'extended'];
@@ -1300,10 +1486,11 @@
     // add_allow_species:<name>:<id>[:<ids>]: add species <id> (named <name>, as [species]) to the
     // visible species, with its visible morphs <ids> (as [allow_morph]; none given: all). Again:
     // its name and morphs updated.
-    // on_choose_species[:<id>] ... end: a block of lines, taken out of the script's run
+    // on_start[:<id>] ... end (old name: on_choose_species): a block of lines, taken out of the script's run
     // (parseScript), whose actions chooseSpecies runs. No id: for any species; with one: for that
     // species only, instead of the general block.
-    on_choose_species: () => {},
+    on_start: () => {},
+    on_choose_species: () => {},   // (its old name, still read)
     // on_challenge_default ... end: (challenge mode) a block of lines (actions only), taken out of
     // the script's run (parseScript), run at the start of every challenge and of every retry, after
     // its fresh attempt (no costs, energy 0) and before its own lines: e.g. defaults that each
@@ -1334,6 +1521,10 @@
     // (each action its own cost; mask_cost is only the mask's)
     erase_cost: (v) => setPressCost('erase', v),
     draw_cost: (v) => setPressCost('draw', v),
+    // world_draw_cost:<n>|off: (challenge mode) drawing in the world with Nebula or Antimatter
+    // ([world_draw]: the paintbrush or the soft brush, a stroke held; not the eraser, Clear or Undo)
+    // costs n energy per second; 0 or below fails the challenge, as mask_cost; 0 or off: free
+    world_draw_cost: (v) => setPressCost('worldDraw', v),
     // bullet_cost:<n>|off: each shot of the player's gun costs n energy (the energy then shows at the
     // top); with less than n the gun doesn't fire (Fire dimmed); 0 or off: free. Kept until changed
     // (challenge mode: a challenge's start or retry sets it free again, as [mask_cost]).
@@ -1413,6 +1604,12 @@
       vis.allow = new Set(ids.filter(id => id !== 'all'));
       allDiscovered();
     },
+    // hide_morph:<morphs>[:<code>]: these morphs (names, ',' between) stay detected and named (if
+    // visible: [allow_morph], [add_allow_species]), but are left out of the morph book (no respawn,
+    // retry or clone pick of them; e.g. too powerful) and the species book, and are never
+    // discovered; for species <code> only, or with no code every species. none: none hidden (for
+    // <code>, or with no code at all). Kept until changed.
+    hide_morph: (morphs = '', code) => { hideMorphs(morphs, code); if (book.open) renderBook(); },
     // morph_book:on|off: show or hide the Morphs button (off also closes the book)
     morph_book: (state = 'on') => setBook(state !== 'off'),
     // clear_world[:<bg>][:empty][:scroll]: empty the world, with no dots (until [dot:<n>]), no bullets,
@@ -1420,7 +1617,10 @@
     // [clear_world]; scroll: reserved for a scrolling world (not built: an ordinary one)
     clear_world: (...args) => {
       emptySpace = args.includes('empty');
-      startScroll(args.includes('scroll'));   // a scrolling world, or the ordinary torus
+      const setScroll = settingsOn && scrollSet;   // the Scroll setting: a scrolling world, its stars following the ship ([stars:follow:0.1])
+      startScroll(args.includes('scroll') || setScroll);   // a scrolling world, or the ordinary torus
+      if (setScroll) { ACTIONS.stars('follow', '0.1'); scrollStars = true; }
+      else if (scrollStars) { C.setStarsFollow(0); scrollStars = false; }   // (Scroll off again: the stars drift as the script set them)
       let bg = args.find(a => a !== 'empty' && a !== 'scroll') || 'black';
       target = null;
       if (!BACKGROUNDS.includes(bg)) { console.warn(`script.txt: unknown background [clear_world:${bg}], using black`); bg = 'black'; }
@@ -1429,7 +1629,16 @@
       if (Dots.on) { Dots.set(0); Dots.clear(); }   // nor dots (none put back) until a [dot:<n>]; the energy kept
       Bullets.clear();   // nor bullets in flight
       bots = []; Hostile.clear();   // nor bots, nor their bullets
+      Field.reset();   // nor anything drawn ([world_draw])
       C.clearWorld();
+    },
+    // world_draw:on|off: offer the bullet types Nebula and Antimatter (after the patterns in the
+    // bullet book; the gun must be on) or not (the default; off also empties the fields): in use,
+    // the player paints the world's R G B fields instead of firing (see fieldMode)
+    world_draw: (v = 'on') => {
+      if (v !== 'on' && v !== 'off') return console.warn(`script.txt: unknown option [world_draw:${v}], ignored`);
+      if (v === 'off') Field.reset();
+      Bullets.setWorldDraw(v === 'on');
     },
     // put_morph:<id>[:center|random|far]: put morph <id> of the current species into the world:
     // at the centre (default, unrotated), at a random empty spot and angle (the lab's Add), or at
@@ -1507,7 +1716,15 @@
       if (!PUT_HOW.includes(how)) { console.warn(`script.txt: unknown option [min_morph:${n}:${ids}:${how}], using random`); how = 'random'; }
       const entries = ids === 'all' ? [] : morphIds([ids]).map(x => { const g = groupArg('min_morph', x); return { id: g.id, n: g.k }; });
       minMorph = { n: k, ids: entries, how, next: 0 };
+      minSpec = { ids: entries, how };   // (for the Objects slider, [settings])
       edgeQueue = [];
+    },
+    // settings:on|off: the species book's Objects slider (sandbox mode), or not (the default); see applyObjects
+    settings: (v = 'on') => {
+      if (v !== 'on' && v !== 'off') return console.warn(`script.txt: unknown option [settings:${v}], ignored`);
+      settingsOn = v === 'on';
+      if (!settingsOn && book.open && book.mode === 'settings') closeBook();
+      syncButtons();
     },
     // put_hostile:[<n>:]<morphs>[:center|random|far][:<bullet>]: put n bots (default 1) into the
     // world, each a morph picked at random from <morphs> (names, ',' between) of the current
@@ -1691,8 +1908,8 @@
     clone: (v = 'on') => { if (v === 'off') { endClone(true); syncButtons(); } else { clone.on = true; syncButtons(); if (book.open) renderBook(); } },
     // erase:on|off: allow erase ("recycle", the selected R G B patch again) or not (back to masking)
     erase: (v = 'on') => { eraseOn = v !== 'off'; if (!eraseOn && C.action === 1) C.action = 0; },
-    // draw:on|off|if:<species>: allow draw (add mass; the selected R G B patch again, after erase if
-    // that is allowed: mask -> erase -> draw -> mask) or not (the default); if: only while the
+    // draw:on|off|if:<species>: allow draw (add mass; the selected R G B patch again, before erase if
+    // that is allowed: mask -> draw -> erase -> mask) or not (the default); if: only while the
     // species is <species> (its code, e.g. G6G6CR)
     draw: (v = 'on', sp) => {
       if (v === 'if') {
@@ -1898,7 +2115,7 @@
   function showProgress() {
     if (progress) progress.el.textContent = progress.fns.map(f => f()).join(' ');
   }
-  // Then the [on_choose_species[:<id>]] ... [end] blocks are taken out of the script's run (into
+  // Then the [on_start[:<id>]] ... [end] blocks are taken out of the script's run (into
   // speciesBlocks, see chooseSpecies).
   function parseScript(txt) {
     // a tag left open at a line's end ([put_hostile:3:<newline>gyrans,...]) goes on in the next line
@@ -1929,7 +2146,7 @@
     const out = [];
     let block = null;   // the lines of the block being read
     for (const L of lines) {
-      const open = L.actions.find(a => a.name === 'on_choose_species' || a.name === 'on_challenge_default');
+      const open = L.actions.find(a => a.name === 'on_start' || a.name === 'on_choose_species' || a.name === 'on_challenge_default');
       if (open) {
         if (block) console.warn(`script.txt: [${open.name}] inside another block, ignored`);
         else if (open.name === 'on_challenge_default') { block = []; challengeDefaults = block; }
@@ -1937,15 +2154,15 @@
         continue;
       }
       if (L.actions.some(a => a.name === 'end')) {
-        if (!block) console.warn('script.txt: [end] with no [on_choose_species] or [on_challenge_default], ignored');
+        if (!block) console.warn('script.txt: [end] with no [on_start] or [on_challenge_default], ignored');
         block = null;
         continue;
       }
       if (!block) { out.push(L); continue; }
-      if (L.text || L.conds.length) console.warn(`script.txt: a message or condition in a block ([on_choose_species], [on_challenge_default]), ignored: ${L.text}`);
+      if (L.text || L.conds.length) console.warn(`script.txt: a message or condition in a block ([on_start], [on_challenge_default]), ignored: ${L.text}`);
       block.push(L);
     }
-    if (block) console.warn('script.txt: a block ([on_choose_species], [on_challenge_default]) with no [end]: it runs to the end of the file');
+    if (block) console.warn('script.txt: a block ([on_start], [on_challenge_default]) with no [end]: it runs to the end of the file');
     return out;
   }
   // A line with [new_scene] or [chapter] waits while the morph book shows (and zaps out): the
@@ -1977,6 +2194,7 @@
       for (let i = cp; i < cur; i++)
         for (const a of SCRIPT[i].actions) if (!REPLAY_SKIP.has(a.name)) ACTIONS[a.name](...a.args);
       replaying = false;
+      if (MODE === 'sandbox') { retake = true; cand = null; }   // a retried scene: the morph's picture may be retaken
       sceneHidden = false;
       run(cur);
       useMorph = null;
@@ -2141,8 +2359,9 @@
   // ---- the scrolling world ([clear_world:scroll]) -------------------------------------------
   // The board stays a torus, a window on an unbounded world that moves with the ship: the world
   // view (the whole board, as ever) follows the ship, keeping it at its middle (core
-  // opt.viewShift), so the board's wrap, the seam, runs along the view's edges, opposite the ship;
-  // a band there is cleared each frame (glsim clearSeam: creatures, dots, bullets), so nothing
+  // opt.viewShift; smoothly: moveCamera), so the board's wrap, the seam, runs along the view's edges, opposite the ship;
+  // a band there is cleared each frame (glsim clearSeam: creatures, dots, bullets; the bullets also
+  // every bullet step, wider: glsim setBulletSeam; the world-draw fields: field.js), so nothing
   // wraps round to the ship's front. The view has no outside (the board is all there is), so an
   // object (a part, not the ship's) is taken away (a disc round it cleared) as soon as its body
   // (its circle, twice its radius) touches an edge's band, and [min_morph] puts its replacement on
@@ -2282,20 +2501,44 @@
   function startScroll(on) {
     scroll = on ? { cx: 0, cy: 0, bx: C.BW / 2, by: C.BH / 2, ux: 0, uy: 0 } : null;
     edgeQueue = []; fresh = [];
+    if (!on) { SimGL.setBulletSeam(null); Field.clearSeam(null); }   // (the ordinary torus: no seam)
     Dots.setWorld(on ? { toBoard, toWorld, extended: extendedPoint, ok: spotOk, center: () => [scroll.bx, scroll.by], edgeOut, edgeSpot, queuedSpot } : null);
   }
   // Each frame: the camera follows the ship; the objects at an edge are taken away (their
   // replacements queued while [min_morph] runs); the seam is cleared; the target is put on the
   // board (or off it)
+  // The camera (the view's centre, bx, by) follows the ship smoothly, not snapped to it each frame:
+  // the ship's detected centre wobbles (a twin's parts not yet named as one, a part's detection
+  // jumping), and the whole moves the view. Each frame it moves with the ship's smoothed velocity
+  // (core kin.vel, as the arrow: no lag behind a moving ship), then closes CAM_TAU_STEPS of the gap
+  // (game steps: as fast at any speed; also CAM_TAU_S real seconds, so it settles while paused); a
+  // gap over CAM_SNAP R (a respawn elsewhere, a new scene) is jumped at once.
+  const CAM_TAU_STEPS = 20, CAM_TAU_S = 1, CAM_SNAP = 3;
+  let camT = 0, camSteps = 0;
+  function moveCamera(sh) {
+    const now = performance.now(), dtS = camT ? Math.min(0.25, (now - camT) / 1000) : 0, dn = C.simSteps - camSteps;
+    camT = now; camSteps = C.simSteps;
+    let gx = C.wrapD(sh.col - scroll.bx, C.BW), gy = C.wrapD(sh.row - scroll.by, C.BH);
+    let mx, my;
+    if (Math.hypot(gx, gy) > CAM_SNAP * C.R || !scroll.cam) { mx = gx; my = gy; }   // jump (and the first frame)
+    else {
+      const v = sh.kin ? sh.kin.vel : [0, 0], px = v[0] * C.dt * dn, py = v[1] * C.dt * dn;   // the ship's own motion since the last frame
+      gx -= px; gy -= py;
+      const a = 1 - Math.exp(-(dn / CAM_TAU_STEPS + dtS / CAM_TAU_S));
+      mx = px + a * gx; my = py + a * gy;
+    }
+    scroll.cam = true;
+    scroll.cx += mx; scroll.cy += my;
+    scroll.bx = (((scroll.bx + mx) % C.BW) + C.BW) % C.BW; scroll.by = (((scroll.by + my) % C.BH) + C.BH) % C.BH;
+  }
   function scrollFrame() {
     if (!scroll) return;
     const sh = C.ship();
     if (sh && !shipLost()) {
-      scroll.cx += C.wrapD(sh.col - scroll.bx, C.BW); scroll.cy += C.wrapD(sh.row - scroll.by, C.BH);
-      scroll.bx = sh.col; scroll.by = sh.row;
+      moveCamera(sh);
       const k = sh.kin, moving = k && k.speed >= C.SPEED_MIN;
       scroll.ux = moving ? Math.cos(k.velAng) : 0; scroll.uy = moving ? Math.sin(k.velAng) : 0;
-    } else { scroll.ux = scroll.uy = 0; }
+    } else { scroll.ux = scroll.uy = 0; camT = 0; }
     const discs = [];
     fresh = fresh.filter(f => C.simSteps - f[2] < FRESH_S * C.STEPS_PER_S);
     if (C.found) {
@@ -2311,6 +2554,8 @@
       });
     }
     SimGL.clearSeam(scroll.bx + C.BW / 2, scroll.by + C.BH / 2, SEAM_BAND, discs);
+    SimGL.setBulletSeam(scroll.bx + C.BW / 2, scroll.by + C.BH / 2);   // the bullets: cleared there every bullet step too, wider (bulletsim.glsl)
+    Field.clearSeam(scroll.bx + C.BW / 2, scroll.by + C.BH / 2, SEAM_BAND);   // the world-draw fields (field.js)
     if (discs.length) C.analyze(0);   // (gone now: not counted, nor taken again)
     if (target && target.wx !== undefined) {
       const b = toBoard(target.wx, target.wy, target.size / 2 + SEAM_BAND);
@@ -2386,7 +2631,7 @@
   // (none: anywhere), from the object as a whole (its centre and reach: a twin fires as one); not
   // under a card, in a species fade, or after a failure
   function botsFire() {
-    if (!bots.length || !Hostile.on || chapterShowing() || speciesFading || challenge.failed) return;
+    if (!bots.length || !Hostile.on || fieldMode() || chapterShowing() || speciesFading || challenge.failed) return;
     const now = C.simSteps, ship = C.ship();
     for (const o of hostileObjects()) {
       if (now < Math.min(...o.bots.map(b => b.next))) continue;
@@ -2546,7 +2791,7 @@
   // its data-key; a slider gets one at each end, from data-key-lo / data-key-hi, over the track),
   // and the channel patches' 1-3 (core opt.showKeys). Space is left out (it moves the messages on).
   const KEYS = { play: '\u21b5', sound: 'M', headup: 'E', morphs: 'X', reset: 'Z', 'morphs-dead': 'X', fire: 'A',
-                 'book-close': 'Esc', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S', species: 'C', restart: '\u2190',
+                 'book-close': 'Esc', settings: 'V', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S', species: 'C', restart: '\u2190',
                  'dev-ch': 'I', 'dev-ok': 'O', 'dev-do': 'P',
                  'clone-rot': 'Q', 'clone-flip': 'W', 'clone-ok': '\u21b5', 'clone-cancel': 'Esc' };
   const SLIDER_KEYS = { speed: ['Q', 'W'], zoom: ['R', 'T'] };   // [left end (less), right end (more)]
@@ -2590,7 +2835,7 @@
     if (d > 0) changeEnergy(d); else showEnergy();
   };
   function showEnergy() {
-    $('score').hidden = energyHidden || (!Dots.on && !challenge.maskCost && !challenge.eraseCost && !challenge.drawCost && !bulletCost && !cloneCost); $('score-v').textContent = Math.round(energy);
+    $('score').hidden = energyHidden || (!Dots.on && !challenge.maskCost && !challenge.eraseCost && !challenge.drawCost && !challenge.worldDrawCost && !bulletCost && !cloneCost); $('score-v').textContent = Math.round(energy);
     const was = bulletNew;
     syncNew();   // [new_bullet:<n>]: one more may be creatable
     if (bulletNew !== was && book.open && book.mode === 'bullet') renderBook();   // "Create or choose bullet" now, or no more
@@ -2604,6 +2849,7 @@
   // [bullet_cost:<n>]: each shot costs n energy (bulletCost, with the energy); with less, the gun doesn't fire
   const canPay = () => energy >= bulletCost;
   function doFire() {
+    if (fieldMode()) return doClear();   // (Fire reads Clear)
     if (!canPay()) return;
     if (Bullets.fire()) { flash('fire'); if (bulletCost) changeEnergy(-bulletCost); }
   }
@@ -2612,7 +2858,8 @@
   $('bullet-next').addEventListener('pointerdown', e => { e.preventDefault(); if (Bullets.cycle(1)) flash('bullet-next'); });
   // the pattern's name under "Fire"; < > above it while the list holds two or more (D / F)
   Bullets.hooks.change = () => {
-    const many = Bullets.on && Bullets.list.length > 1;
+    const many = Bullets.on && Bullets.count > 1, fm = fieldMode();
+    $('fire').querySelector('.kt').textContent = fm ? 'Clear' : 'Fire';
     $('fire').hidden = !Bullets.on;
     $('fire-id').hidden = !Bullets.kind;
     $('fire-id').textContent = (Bullets.kind || '').replace(' ', '\n');   // two words: two rows
@@ -2621,7 +2868,8 @@
     syncNew();   // the list changed: as many more creatable?
     saveInventory();   // (a pattern added: into the central inventory)
     if (book.open && book.mode === 'bullet') { if (Bullets.on) renderBook(); else closeBook(); }
-    $('fire').title = 'Fire a bullet the way the ship moves (A)' + (many ? '; D / F: the previous / next pattern' : '');
+    $('fire').title = (fm ? 'Clear the selected colour\'s field (A)' : 'Fire a bullet the way the ship moves (A)') + (many ? '; D / F: the previous / next type' : '');
+    if (!fm) Field.end();
   };
   C.hooks.frame = () => {
     devFps();
@@ -2632,18 +2880,21 @@
     dead.style.visibility = shade > 0.99 ? 'hidden' : '';
     $('msg').classList.toggle('next', byContinue());
     if (Bullets.on) {   // Fire: its ring in the bullets' colour
-      $('fire').classList.toggle('ready', Bullets.canFire() && canPay());
+      $('fire').classList.toggle('ready', fieldMode() || (Bullets.canFire() && canPay()));
       const rgb = `rgb(${Bullets.color.map(v => Math.round(v * 255)).join(',')})`;
       $('fire').style.setProperty('--fire', rgb); $('bullet-nav').style.setProperty('--fire', rgb);   // (< > too)
     }
     if (C.action === 2 && !drawOn()) C.action = 0;   // (draw no longer allowed: the species changed)
-    scrollFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostShown()) syncButtons(); };
+    Field.tick();
+    autospawnFrame();
+    scrollFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostPanel()) syncButtons();
+    const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()]; };
 
   // ---- controls ---------------------------------------------------------------------------
   function syncButtons() {
     $('play').setAttribute('aria-pressed', !C.running);   // "Pause", highlighted while paused
-    $('reset').hidden = !lostShown();
-    $('morphs-dead').hidden = !lostShown() || !book.on;
+    $('reset').hidden = !lostPanel();
+    $('morphs-dead').hidden = !lostPanel() || !book.on;
     $('morphs').hidden = !book.on || shipLost();   // while the ship is lost, Choose takes its place
     if (clone.held && shipLost()) clone.held = null;   // lost while holding: the clone goes
     $('clone-tools').hidden = !clone.held;
@@ -2655,10 +2906,18 @@
     $('bullets').classList.toggle('new', bulletNew);
     $('bullets').textContent = bulletNew ? 'Create' : 'Bullets';
     $('bullets').hidden = !Bullets.on || shipLost();   // the bullet book's button: while the gun is on, not while lost
+    $('settings').hidden = !settingsOn;   // ([settings:on])
     $('species').hidden = MODE === 'story' || (MODE === 'sandbox' && !visSpecies.length);   // sandbox mode: the species book's button; challenge mode: the challenge book's
-    $('headup').setAttribute('aria-pressed', C.viewMode !== 'board');
+    // world draw (fieldMode): Upward is Undo (Redo once undone), Zoom is Width
+    const fm = fieldMode();
+    $('headup').textContent = fm ? (Field.undone ? 'Redo' : 'Undo') : 'Upward';
+    $('headup').classList.toggle('dim', fm && !Field.canUndo);
+    $('headup').title = fm ? 'Undo the last stroke or Clear; again: redo it (E)' : 'Upward: rotate the ship view so the creature\'s heading points up (E toggles)';
+    $('headup').setAttribute('aria-pressed', !fm && C.viewMode !== 'board');
+    $('zoom-name').textContent = fm ? 'Width' : 'Zoom';
+    $('zoom').parentElement.title = fm ? `Brush width: ${Field.WIDTHS.join(' / ')} cells; the soft brush and the eraser twice that (R narrower, T wider)` : 'Zoom of the ship view, in screen px per cell (R out, T in)';
     $('speed').value = C.speedIdx + 1;
-    $('zoom').value = C.zoomIdx + 1;
+    $('zoom').value = fm ? Field.widthIdx + 2 : C.zoomIdx + 1;
     for (const el of document.querySelectorAll('input[type=range]')) fillRange(el);
   }
 
@@ -2681,24 +2940,46 @@
     if (type === 'book') openBook();
     else if (type === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); C.setRunning(true); }
     else if (type === 'put') { ACTIONS.put_player(name, 'random'); C.setRunning(true); }
-    if (type === 'clear_put' || type === 'put') { retake = true; cand = null; respawns++; respawned(); }   // its picture may be retaken; [need:respawn]
+    if (type === 'clear_put' || type === 'put') { cand = null; respawns++; respawned(); }   // [need:respawn] (no retake: a Respawn may come amid chaos)
   }
-  const doView = () => { flash('headup'); C.toggleHeadUp(); };
+  const doView = () => { if (fieldMode()) return doUndo(); flash('headup'); C.toggleHeadUp(); };
   const doSpeed = d => { flash('speed'); C.changeSpeed(d); };
   // The game's zooms: the core's but the outermost two (2 and 16 px per cell): slots 1 .. 5
   const ZOOM_MIN = 1, ZOOM_MAX = C.ZOOMS.length - 2;
   const clampZoom = i => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, i));
   if (C.zoomIdx !== clampZoom(C.zoomIdx)) C.setZoom(clampZoom(C.zoomIdx));   // e.g. ?zoom=2
-  const doZoom = d => { flash('zoom'); C.setZoom(clampZoom(C.zoomIdx + d)); };   // R out, T in
+  const doZoom = d => {   // R out, T in (world draw: the brush's width)
+    flash('zoom');
+    if (fieldMode()) { Field.setWidth(Field.widthIdx + d); syncButtons(); } else C.setZoom(clampZoom(C.zoomIdx + d));
+  };
   $('play').onclick = doPlay;
   // Retry (and Backspace); challenge mode: the retry book (a pick plays the challenge again)
+  // Sandbox mode: Retry is the species chosen again (its [on_start] block, with the player's morph
+  // for [put_player], useMorph), behind a fade, not the whole script replayed
+  function retrySandbox() {
+    if (resetting || speciesFading || chapterShowing() || bookShowing()) return;
+    const id = chosenSpecies ?? (C.pattern && C.speciesOf(C.pattern));
+    if (!id || !visSpecies.some(e => e.id === id)) return resetScene();
+    if (clone.held) endClone();
+    resetting = true;
+    fadeWorld(1);
+    setTimeout(() => {
+      Dots.clear(); Bullets.clear(); Hostile.clear();
+      useMorph = playerMorph;
+      chooseSpecies(id);
+      useMorph = null;
+      fadeWorld(0);
+      resetting = false;
+    }, WORLD_FADE_MS);
+  }
+  const retryScene = () => MODE === 'sandbox' ? retrySandbox() : resetScene();
   const doRestart = () => {
     flash('restart');
     if (MODE === 'challenge' && (challenge.cur || challenge.last)) return openBook(null, true);   // the retry book
     // story, sandbox: the retry book too (a pick redoes the scene with that morph), if the morph
     // book is on and a morph of this species is discovered; else the scene again at once
-    if (book.on && discovered.some(d => isVisible(d.name)) && line >= 0 && !resetting) return openRetryBook();
-    resetScene();
+    if (book.on && discovered.some(d => isVisible(d.name) && !isHidden(d.name)) && line >= 0 && !resetting) return openRetryBook();
+    retryScene();
   };
   $('restart').onclick = doRestart;
   $('reset').onclick = doReset;
@@ -2706,7 +2987,7 @@
   $('headup').onclick = doView;
   $('speed').oninput = e => C.setSpeed(+e.target.value - 1);
   $('zoom').value = C.zoomIdx + 1;
-  $('zoom').oninput = e => C.setZoom(clampZoom(+e.target.value - 1));
+  $('zoom').oninput = e => { if (fieldMode()) { Field.setWidth(+e.target.value - 2); syncButtons(); } else C.setZoom(clampZoom(+e.target.value - 1)); };
 
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'SELECT' || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
@@ -2715,6 +2996,9 @@
       // a slot's letter (SLOT_KEYS) picks it, if it can be picked (which closes the book too)
       const el = k.length === 1 && $('book-grid').querySelector(`.book-slot.pick[data-key="${k.toUpperCase()}"]`);
       if (el) el.click();
+      // Enter: the current slot (the lighter one: the player's morph, the bullet in use, the current
+      // species, the challenge being played), as a click on it; none: nothing (not even the focused Close)
+      else if (k === 'Enter') { e.preventDefault(); $('book-grid').querySelector('.book-slot.pick.current')?.click(); }
       // else Escape (only: the letters that open the books pick slots in them) closes it
       else if (k === 'Escape') closeOrBack();
       else if (e.code === 'Space') e.preventDefault();   // not even the focused Close button
@@ -2735,6 +3019,7 @@
     else if (k === 'a') doFire();
     else if (k === 'x') { if (book.on) openBook(); }   // the morph book, as the Morphs / Choose buttons
     else if (k === 's') { if (!$('bullets').hidden) openBulletBook(); }   // the bullet book, as the Bullets button
+    else if (k === 'v') { if (settingsOn) openSettingsBook(); }   // the settings book ([settings:on])
     else if (k === 'c') { if (!$('species').hidden) $('species').onclick(); }   // the species book (sandbox mode), the challenge book (challenge mode)
     else if (k === 'd') { if (Bullets.cycle(-1)) flash('bullet-prev'); }
     else if (k === 'f') { if (Bullets.cycle(1)) flash('bullet-next'); }
@@ -2772,6 +3057,7 @@
       parseChallenges();
       const first = challenge.list.length ? challenge.list[0].start : SCRIPT.length;
       for (const L of SCRIPT.slice(0, first)) for (const a of L.actions) ACTIONS[a.name](...a.args);
+      baseHidden = new Set(hiddenMorphs);
       if (!challenge.list.length) return say('No challenges in challenge.txt.');
       return openChallengeBook();
     }
@@ -2784,5 +3070,6 @@
       for (const a of L.actions) if (a.name !== 'chapter') ACTIONS[a.name](...a.args);
     replaying = false;
     if (from < SCRIPT.length) run(from);
-  }, err => { console.error(err); say(`Could not load the script (${SCRIPT_FILE}).`); }), Page.showError);
+  }, err => { console.error(err); say(`Could not load the script (${SCRIPT_FILE}).`); }), Page.showError)
+    .finally(() => Page.releaseMusic());   // (the music was held until the script set its playlist: page.js; with no [music], the default)
 })();

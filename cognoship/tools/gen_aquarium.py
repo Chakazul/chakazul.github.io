@@ -5,7 +5,7 @@ Usage: python3 tools/gen_aquarium.py [path/to/Lenia/Python/found/233.json]
 
 Takes the entries from 5N7KKM to HAESRE (file lines 2-76: 5N7KKM to GDNQYX, then HGMLH8, PJ1EF7,
 KZ2BLD, XEH4YR, HAESRE), skips "G6G6CR metamorpha beaked" and "VT049W gyrotachus"
-(its own kernels: a different species), renames VT049W's first "para" to "paralimus", KZ2BLD's
+(its own kernels: a different species), renames VT049W's first "para" to "rectogyrans" (was "paralimus"), KZ2BLD's
 unnamed second entry to "virgatus" and its "gyrans tachus" to "limus", HGMLH8's "parapedes" to
 "tardus" and "para" to "tachus", numbers a repeated name
 within a code ("auctus", "auctus 2"), and writes one pattern per entry: id "CODE-name", display
@@ -31,11 +31,13 @@ KEYS = ['b', 'm', 's', 'h', 'r', 'c']
 
 lines = open(SRC).read().split('\n')
 entries = [json.loads(l.rstrip().rstrip(',')) for l in lines[1:76] if l.strip()]
-# Renamed after the steps above (so VT049W's first "para" still becomes "paralimus")
+# Renamed after the steps above (VT049W's first "para" is named apart: vt_para)
 POST_RENAME = {('G6G6CR', 'fortified'): 'munitus', ('VT049W', 'para'): 'paragyrans',
                ('KH97WU', 'antipara'): 'antigyrans', ('KH97WU', 'dual'): 'impetus+gyrans',
                ('HAESRE', 'anti'): 'antigyrans', ('HAESRE', 'para'): 'paragyrans',
-               ('VT049W', 'rectus+gyrans'): 'rectogyrans'}
+               ('VT049W', 'rectus+gyrans'): 'sequerectus'}   # (was rectogyrans until 2026-11-18)
+# A code's morphs in this order in the lab's picker (the rest after them, as they come)
+MORPH_ORDER = {'VT049W': ['rectus', 'gyrans', 'tachus', 'lithos', 'paragyrans', 'pararectus', 'rectogyrans', 'sequerectus']}
 BOOM = {('XEH4YR', 'auctus')}   # self-replicating, though not marked R in the file
 RENAME = {('KZ2BLD', ''): 'virgatus', ('KZ2BLD', 'gyrans tachus'): 'limus',
           ('HGMLH8', 'parapedes'): 'paratardus', ('HGMLH8', 'para'): 'paratachus'}
@@ -45,9 +47,12 @@ RENAME = {('KZ2BLD', ''): 'virgatus', ('KZ2BLD', 'gyrans tachus'): 'limus',
 # merge); wholeSaddle, the second merge of parts into wholes (twins, trios; 0.6 keeps the twins of
 # the measurement in output/whole_saddle whole, GDNQYX paratardus included; a loose twin, gyrans
 # orbiting a lithos, is whole only while its parts touch, at any value).
-DETECT = {'VT049W': {'saddle': 0.95}, 'KZ2BLD': {'saddle': 0.95}, 'G6G6CR': {'saddle': 0.9},
+DETECT = {'VT049W': {'saddle': 1.0},   # (was 0.95: 1.0 keeps pararectus's two rectus apart, two parts of a whole)
+          'KZ2BLD': {'saddle': 0.95}, 'G6G6CR': {'saddle': 0.9},
           'KH97WU': {'wholeSaddle': 0.4},
-          'Z18A9R': {'wholeSaddle': 0.3}}   # (transgyrans: its gyrans part between crossings; whole 54 % of the time at 0.6, 99 % at 0.3)
+          'Z18A9R': {'wholeSaddle': 0.2}}   # (transgyrans: its gyrans part between crossings; whole 54 % of the time at 0.6, 99 % at 0.3 as
+                                            # measured, ~2/3 in the lab after the kernel 4 tweak; always at 0.2. Touching
+                                            # Z18A9R creatures already join at 0.3, 90 % of contacts; 99.9 % at 0.2)
 DETECT_DEFAULT = {'saddle': 1.0, 'wholeSaddle': 0.6}
 
 def clean(code, name, k):
@@ -63,14 +68,15 @@ def clean(code, name, k):
 TWEAKS = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'rule_tweaks.json')))
 
 rules, pats, seen, zk = {}, [], {}, 0
+vt_para = False   # VT049W's first "para" named yet
 for e in entries:
     code = e['code'].split('<')[0]
     k = zk if code == 'Z18A9R' else 0
     if code == 'Z18A9R': zk += 1
     name = clean(code, e['name'], k)
     if (code, name) in SKIP: continue
-    if (code, name) == ('VT049W', 'para') and 'VT049W-paralimus' not in seen:
-        name = 'paralimus'                              # the first of VT049W's two "para" entries
+    if (code, name) == ('VT049W', 'para') and not vt_para:
+        name, vt_para = 'rectogyrans', True             # the first of VT049W's two "para" entries (paralimus until 2026-11-18)
     name = POST_RENAME.get((code, name), name)
     p0 = e['params'][0]
     ks = [{key: p[key] for key in KEYS} for p in e['params']]
@@ -102,6 +108,12 @@ for x in json.load(open(EXTRA)) if os.path.exists(EXTRA) else []:
     seen[pid] = 1
     last = max(i for i, p in enumerate(pats) if p['rule'] == x['code'])
     pats.insert(last + 1, {'id': pid, 'name': f"{x['code']} {x['name']}", 'rule': x['code'], 'R': x['R'], 'cells': x['cells']})
+
+for code, order in MORPH_ORDER.items():   # (stable: the others keep their places after them)
+    idx = [i for i, p in enumerate(pats) if p['rule'] == code]
+    base = lambda p: p['name'].split(' ', 1)[1].replace(' 💥', '')
+    rank = lambda p: order.index(base(p)) if base(p) in order else len(order)
+    for i, p in zip(idx, sorted((pats[i] for i in idx), key=rank)): pats[i] = p
 
 def kjs(k): return '{' + ', '.join(f'{key}:{json.dumps(k[key])}' for key in KEYS) + '}'
 out = ['"use strict";',

@@ -1,4 +1,6 @@
 [
  {"code": "Z18A9R", "kernel": 3, "key": "m", "value": 0.121, "was": 0.123,
-  "why": "Makes the transgyrans crossing (two mirror gyrans meeting and parting) a stable morph instead of a passing state; the other Z18A9R morphs change by under 0.5 % in mass (MORPH.md, output/transgyrans/tune/)."}
+  "why": "Makes the transgyrans crossing (two mirror gyrans meeting and parting) a stable morph instead of a passing state; the other Z18A9R morphs change by under 0.5 % in mass (MORPH.md, output/transgyrans/tune/)."},
+ {"code": "Z18A9R", "kernel": 4, "key": "m", "value": 0.41, "was": 0.398,
+  "why": "Makes trigyrans (three gyrans rotating round a common centre) a stable morph instead of a passing state that replicates after ~500 steps: 35 of 36 runs hold it for 6,000 steps (none before). The other Z18A9R morphs keep their form; gyrans' mass -2.5 % and turn rate -13 %, the rest within ~1.5 % (MORPH.md, output/z18a9r_new/)."}
 ]

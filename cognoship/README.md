@@ -44,8 +44,8 @@ and the challenges completed.
   the ship's senses, and it reacts. Gentle pats on a side or the tail change its shape; holding
   ahead or to one side changes its course.
 - **R G B** (top of the ship view, keys `1` `2` `3`): which of the ship's three channels you hide.
-  Clicking the selected one again switches to *recycling* (erasing that channel's mass); again
-  goes back.
+  Clicking the selected one again switches to *drawing* (adding mass), where allowed, then to
+  *recycling* (erasing that channel's mass); again goes back.
 - **Upward** (`E`): turns the ship view so the ship always heads up. **Zoom** (`R` `T`).
 - **Morphs:** hold a new morph steady for about a second to discover it. The **Morphs** button
   (`X`) opens the morph book.
@@ -62,6 +62,10 @@ and the challenges completed.
   on. Paste it away from your ship to switch morph; paste another next to you, and the two may
   become a new twin morph.
 - **Species** (`C`, Sandbox Mode): switch to another species you have reached.
+- **Nebula / Antimatter** (Sandbox Mode, in the bullet book): paint on the world instead of
+  firing. **R G B** pick the colour, the selected one again the tool (+ paintbrush, × soft brush,
+  − eraser); **Width** (`R` `T`), **Clear** (`A`) and **Undo** (`E`) take the places of Zoom, Fire
+  and Upward. Nebula hides that channel from the creatures' senses; Antimatter wipes it out.
 
 ## Controls
 
@@ -71,7 +75,7 @@ and the challenges completed.
 | `Enter` | Pause / play |
 | `Backspace` | Retry: choose a morph, then start the current scene (Challenge Mode: the challenge) again with it |
 | `Q` / `W` | Slower / faster |
-| `1` `2` `3` | Hide the R, G or B channel (the selected one again: recycle; again, where allowed: draw) |
+| `1` `2` `3` | Hide the R, G or B channel (the selected one again: draw, where allowed; again: recycle) |
 | `E` | Upward |
 | `R` / `T` | Zoom out / in |
 | `A` | Fire |
@@ -82,7 +86,9 @@ and the challenges completed.
 | `Z` | Respawn when dissolved |
 | Letters, in a book | Pick that slot (hold Shift to see them) |
 | `Escape` | Close a book |
+| `Enter` (in a book) | Pick the highlighted entry (the lighter one: your morph, the bullet in use, the current species or challenge) |
 | `M` | Music on / off |
+| `,` / `.` | Save the ship / the whole board as a pattern file and a picture (for new morphs: see README-MORE.md) |
 | Shift (held) | Show every control's key |
 
 The buttons at the top right: music, light / dark page, fullscreen.

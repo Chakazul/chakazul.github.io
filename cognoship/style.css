@@ -84,15 +84,15 @@ button,select,input{transition:background .25s,border-color .25s}
 
 .controls{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-top:10px}
 .controls label,.ship-ctl label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-:is(.controls,.ship-ctl) input[type=range]{width:110px;height:22px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
+:is(.controls,.ship-ctl,.book-settings) input[type=range]{width:110px;height:22px;margin:0;background:none;-webkit-appearance:none;appearance:none;cursor:pointer}
 /* Slider bar drawn by hand so it follows the theme: accent up to the value (--pct, set by page.js), --track after. */
-:is(.controls,.ship-ctl) input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
+:is(.controls,.ship-ctl,.book-settings) input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;
   background:linear-gradient(to right,var(--accent) var(--pct,50%),var(--track) var(--pct,50%))}
-:is(.controls,.ship-ctl) input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
-:is(.controls,.ship-ctl) input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
-:is(.controls,.ship-ctl) input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;
+:is(.controls,.ship-ctl,.book-settings) input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
+:is(.controls,.ship-ctl,.book-settings) input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--accent)}
+:is(.controls,.ship-ctl,.book-settings) input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;margin-top:-6px;
   border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
-:is(.controls,.ship-ctl) input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
+:is(.controls,.ship-ctl,.book-settings) input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--raised)}
 .row2{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:8px}
 .row2 .pat{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
 .row2 .icon{font-size:12px;line-height:1}
@@ -177,6 +177,7 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game: the ship-view controls (.ship-ctl above), on black whatever the page theme */
 .ship-ctl{gap:16px}
 .ship-ctl label{color:#c8c0d6}
+.ship-ctl button.dim{opacity:.45}   /* Undo with nothing to undo (world draw) */
 @media (max-width:1000px){ .ship-ctl{gap:10px} }
 @media (max-width:560px){ .ship-ctl{gap:4px} }
 /* Game: when the ship is lost, Respawn and Morphs (#reset, #morphs-dead), one above the other in the
@@ -231,6 +232,9 @@ button,select,input{transition:background .25s,border-color .25s}
 .ship-species{position:absolute;left:50%;top:calc(18.95% - 2px);transform:translate(-50%,-50%);z-index:3}
 /* Game: the Bullets button, mirroring Morphs at the left */
 .ship-bullets{position:absolute;left:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
+/* Game ([settings:on]): the Settings button, at the world view's lower right (mirroring Fire's corner) */
+.world-settings{position:absolute;right:14px;bottom:14px;z-index:3}
+.world-settings[hidden]{display:none}
 /* Game: the morph book, centred over the whole game window; the dimmed rest closes it on a click */
 .book{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
 .book[hidden]{display:none}
@@ -246,6 +250,12 @@ button,select,input{transition:background .25s,border-color .25s}
 .book-box{position:relative}
 .book-species{position:absolute;right:calc(var(--ui-h) * .6);bottom:calc(var(--ui-h) * .45);font-size:calc(var(--ui-font) * 1.15);color:var(--muted);letter-spacing:.04em}
 .book-species[hidden]{display:none}
+/* the settings book ([settings:on]): its toggles and the Objects slider, in a row */
+.book-settings{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:16px 20px;
+  margin:calc(var(--ui-h) * .4) 0 calc(var(--ui-h) * .6);font-size:calc(var(--ui-font) * 1.15);color:var(--muted)}
+.book-settings label{display:flex;align-items:center;gap:6px}
+.book-settings output{color:var(--ink);min-width:1.8em;font-variant-numeric:tabular-nums}
+.book-settings[hidden],.book-grid[hidden]{display:none}
 .book-species.link{cursor:pointer;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}
 .book-species.link:hover{color:var(--ink)}   /* sandbox mode: a click goes to the species book */
 /* sandbox mode: "Hold to clear data", at every book's lower left, styled as the species link; while

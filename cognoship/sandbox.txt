@@ -1,25 +1,25 @@
 # script file for sandbox mode, see README-MORE.md for syntax
-[speed:1][gun:on][new_bullet:50][clone:on][erase:off][draw:if:G6G6CR][morph_book:on]
+[speed:1][gun:on][new_bullet:50][clone:on][morph_book:on]
 [morph_book_action:put][retry_action:put]
+[erase:on][draw:on][world_draw:on][settings:on]
 [music:1,2,3,4:3]
 
 [add_allow_species:Aquarium originale:5N7KKM:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos,circumgyrans]
 [add_allow_species:A. novus:GDNQYX:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,pararectus,rectogyrans]
-[add_allow_species:A. vorticosus:Z18A9R:gyrans,tardus,lithos,paragyrans,antigyrans,transgyrans,trias]
+[add_allow_species:A. replicans:VT049W:rectus,gyrans,tachus,lithos,paragyrans,pararectus,rectogyrans,sequerectus]
+[add_allow_species:A. vorticosus:Z18A9R:gyrans,tardus,lithos,paragyrans,antigyrans,transgyrans,trigyrans,trias]
 [add_allow_species:A. multiplicans:PJ1EF7:rectus,tachus,lithos]
 [add_allow_species:A. explodens:XEH4YR:rectus,tachus,cor]
-[add_allow_species:A. virgatus:KZ2BLD:rectus,virgatus,limus]
+[add_allow_species:A. virgatus:KZ2BLD:rectus,limus,virgatus]
 [add_allow_species:A. saltans:KH97WU:limus,gyrans,impetus,antigyrans]
 [add_allow_species:A. sinuosus:HAESRE:zigzag,lithos,antigyrans,paragyrans,circumgyrans]
 [add_allow_species:A. metamorpha:HGMLH8:metamorpha,paratardus,paratachus]
-[add_allow_species:A. replicans:VT049W:gyrans,rectus,tachus,lithos,paralimus,paragyrans,rectogyrans]
 [add_allow_species:Cilium immunitatis:G6G6CR:rectus,limus,tardus,lithos,munitus]
 
-# run each time a species is chosen (after its [species] and [allow_morph])
-[on_choose_species]
+[on_start]
+[star]
 [clear_world][put_player:first]
-[dot:5][min_morph:3:all:far]
+[dot:5][min_morph:2:all:random]
 [end]
 
-# starting species
 [choose_species:5N7KKM]

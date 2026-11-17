@@ -16,6 +16,9 @@
 //              by fftgather into 4 textures)
 //    fftgrow   the update, as sim.glsl, with the cognitive mask's small circle taken out of U
 //              directly (its cells only), and erase / draw / the bullets' erase after it
+//  The world-draw field (glsim.js setField) masks per channel, its R, G, B each hiding that channel
+//  only: its spectra, (bR, bG) and (bB, 0), are made once per change (it is static), into FB, and
+//  fftmul picks each kernel's channel of them in place of b's.
 //  The kernels' spectra are made once per rule (ext.rule): each kernel as an image of the board,
 //  flipped (sim.glsl's U(p) = sum w(o) A(p + o) is a correlation), forward FFT'd.
 //
@@ -39,6 +42,7 @@ const FFTSim = (function () {
   let F = [], Kspec = [], P = [], D = [];   // fields' spectra (4), kernels' spectra, U, bullets' shares (8 each)
   const fbo = new Map();   // texture -> its own framebuffer (an FFT pass writes one texture)
   let packFbo = null, mulFbo = [], kimgTex = null, KR = 0, pairsUsed = PAIRS, ready = false;
+  let FB = [], fbFbo = null, fbVersion = -1;   // the world-draw field's spectra, and the field version they are of
 
   // Radices for a length: 4s, then 2s, then 3s (384 = 4 4 4 2 3, 256 = 4 4 4 4)
   function radices(N) {
@@ -67,7 +71,7 @@ const FFTSim = (function () {
   async function attach() {
     I = SimGL.internals; gl = I.gl; W = I.W; H = I.H;
     const src = await Promise.all(NAMES.map(async n => {
-      const r = await fetch('./shaders/' + n + '.glsl');
+      const r = await fetch('./shaders/' + n + '.glsl', { cache: 'no-cache' });
       if (!r.ok) throw new Error('shader ' + n + ': HTTP ' + r.status);
       return r.text();
     }));
@@ -84,6 +88,8 @@ const FFTSim = (function () {
     P = Array.from({ length: PAIRS }, tex);
     D = Array.from({ length: PAIRS }, tex);
     packFbo = I.makeFbo(F);
+    FB = [0, 1].map(tex);
+    fbFbo = I.makeFbo(FB);
     mulFbo = P.map((t, j) => I.makeFbo([t, D[j]]));
     I.ext.rule = buildKernels;
     if (I.taps) buildKernels(I.taps);
@@ -156,16 +162,30 @@ const FFTSim = (function () {
   // The creatures' step, into stateFbo[1 - cur] (glsim.js flips cur after)
   function step(tool) {
     const params = I.params, bul = I.bul, bActive = I.bulletsActive;
-    const bmode = bActive ? bul.mode : 0, bmask = bmode === 2;
+    const bmode = bActive ? bul.mode : 0, bmask = bmode === 2, bvec = bActive && I.bulletVec;
     const state = I.state[I.cur];
     gl.viewport(0, 0, W, H);
 
     let p = prog.fftpack;
+    if (bmask && bvec && fbVersion !== I.fieldVersion) {   // the field changed: its spectra again (fftpack's out0, out1 of it)
+      fbVersion = I.fieldVersion;
+      gl.useProgram(p);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbFbo);
+      I.bindTex(0, I.fieldTex, p, 'uState');
+      I.bindTex(1, I.fieldTex, p, 'uBullets');
+      gl.uniform1i(I.loc(p, 'uBMask'), 0);
+      gl.uniform1i(I.loc(p, 'uBVec'), 0);
+      I.draw4();
+      fft(FB[0], -1); fft(FB[1], -1);
+      gl.viewport(0, 0, W, H);
+    }
+
     gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, packFbo);
     I.bindTex(0, state, p, 'uState');
     I.bindTex(1, I.bulTex, p, 'uBullets');
     gl.uniform1i(I.loc(p, 'uBMask'), bmask ? 1 : 0);
+    gl.uniform1i(I.loc(p, 'uBVec'), bvec ? 1 : 0);
     gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
     I.draw4();
     for (let i = 0; i < (bmask ? 4 : 2); i++) fft(F[i], -1);
@@ -180,6 +200,8 @@ const FFTSim = (function () {
       gl.uniform3fv(I.loc(p, 'uSrc0'), srcOf(params, 2 * j));
       gl.uniform3fv(I.loc(p, 'uSrc1'), srcOf(params, 2 * j + 1));
       gl.uniform1i(I.loc(p, 'uBMask'), bmask ? 1 : 0);
+      gl.uniform1i(I.loc(p, 'uBVec'), bvec ? 1 : 0);
+      FB.forEach((t, i) => I.bindTex(5 + i, t, p, 'uFB' + i));
       gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
       gl.uniform1f(I.loc(p, 'uScale'), 1 / (W * H));
       I.draw4();
@@ -222,6 +244,7 @@ const FFTSim = (function () {
     gl.uniform3f(I.loc(p, 'uMaskCh'), tool && tool.ch === 0 ? 1 : 0, tool && tool.ch === 1 ? 1 : 0, tool && tool.ch === 2 ? 1 : 0);
     gl.uniform1f(I.loc(p, 'uReach'), I.reach);
     gl.uniform1i(I.loc(p, 'uBulletMode'), bmode);
+    gl.uniform1i(I.loc(p, 'uBulletVec'), bvec ? 1 : 0);
     gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
     gl.uniform1f(I.loc(p, 'uBulletHit'), bul.hit);
     I.draw4();

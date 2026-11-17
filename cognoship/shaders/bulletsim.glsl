@@ -22,6 +22,12 @@ uniform float uWear;        // bullet mass removed per step per unit of creature
 uniform vec3  uWearCh;      // which creature channels wear the bullets (one-hot or all ones)
 uniform sampler2D uOther;   // the other bullets field (the player's or the bots'), R
 uniform float uOtherWear;   // bullet mass removed per step per unit of the other field's ([bullet_mutual:wear]); 0: none
+// the scrolling world's seam (glsim.js setBulletSeam): the cells within uSeamBand of its column or row
+// (round the torus) set to 0 every bullet step, a band wider than half the kernel, so no bullet
+// regrows across it at the opposite edge (the per-frame clearSeam alone came too seldom, too narrow)
+uniform int   uSeamOn;
+uniform vec2  uSeam;
+uniform float uSeamBand;
 
 out vec4 fragColor;
 
@@ -39,5 +45,10 @@ void main() {
     float v = texelFetch(uField, p, 0).r + uDt * (2.0 * g - 1.0);
     vec3 a = texelFetch(uState, p, 0).rgb * uWearCh;
     v = clamp(v - uWear * max(a.r, max(a.g, a.b)) - uOtherWear * texelFetch(uOther, p, 0).r, 0.0, 1.0);
+    if (uSeamOn == 1) {
+        vec2 s = vec2(uSize), d = vec2(p) - uSeam;
+        d = abs(d - s * floor(d / s + 0.5));
+        if (d.x < uSeamBand || d.y < uSeamBand) v = 0.0;
+    }
     fragColor = vec4(v, 0.0, 0.0, 1.0);
 }

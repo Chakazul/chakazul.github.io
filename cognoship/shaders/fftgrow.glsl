@@ -37,12 +37,18 @@ uniform float uReach;
 uniform int   uBulletMode;
 uniform vec3  uBulletCh;
 uniform float uBulletHit;
+uniform int   uBulletVec;   // 1: the bullets texture is the world-draw field, its rgb one per channel (sim.glsl)
 
 out vec4 fragColor;
 
 vec2 wrapDelta(vec2 d) {
     vec2 s = vec2(uSize);
     return d - s * floor(d / s + 0.5);
+}
+
+vec3 bulletAt(ivec2 q) {
+    vec4 t = texelFetch(uBullets, q, 0);
+    return (uBulletVec == 1 ? t.rgb : vec3(t.r)) * uBulletCh;
 }
 
 vec4 growth(vec4 u, vec4 m, vec4 s) {
@@ -94,7 +100,7 @@ void main() {
                 if (dot(dq, dq) > r2) continue;
                 ivec2 o = ivec2(wrapDelta(vec2(q - p)));   // the kernel offset of q from p
                 if (abs(o.x) > uKR || abs(o.y) > uKR) continue;
-                vec3 vb = bmask ? vec3(1.0) - texelFetch(uBullets, q, 0).r * uBulletCh : vec3(1.0);
+                vec3 vb = bmask ? vec3(1.0) - bulletAt(q) : vec3(1.0);
                 vec3 hid = vb * uMaskCh;                      // what the circle hides at q
                 vec3 ah = texelFetch(uState, q, 0).rgb * hid;
                 ivec2 t = o + uKR;
@@ -125,6 +131,7 @@ void main() {
     vec3 A = texelFetch(uState, p, 0).rgb;
     vec3 Anew = clamp(A + uDt * delta * uGain, 0.0, 1.0);
     if (erase) Anew = uMaskOn == 3 ? max(Anew, uMaskCh) : Anew * (vec3(1.0) - uMaskCh);
-    if (uBulletMode == 1) Anew = max(Anew - uBulletHit * texelFetch(uBullets, p, 0).r * uBulletCh, 0.0);
+    // the bullets' erase takes mass out gradually; the world-draw field's (Antimatter) caps it at once: at most 1 - field
+    if (uBulletMode == 1) Anew = uBulletVec == 1 ? min(Anew, vec3(1.0) - bulletAt(p)) : max(Anew - uBulletHit * bulletAt(p), 0.0);
     fragColor = vec4(Anew, 1.0);
 }

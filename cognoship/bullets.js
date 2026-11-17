@@ -18,6 +18,11 @@
 //  (default 0.2), ?bwear= bullet mass worn per bullet step per unit of creature mass (0.03),
 //  ?bsub= bullet steps per sim step (5: Scutium then flies at ~2.1 cells per step), ?bcool= the least
 //  time between shots, in seconds (0.7).
+//
+//  World draw ([world_draw:on]): two more types after the patterns, Nebula and Antimatter (FIELDS),
+//  which fire nothing: in use, the player paints the R G B fields instead (field.js), which mask
+//  (Nebula) or erase (Antimatter) the creatures' channels; they are never in the list (nor the
+//  inventory), only offered while world draw is on.
 // ============================================================================================
 
 const Bullets = (function () {
@@ -41,6 +46,11 @@ const Bullets = (function () {
   // core.js CH_COLORS)
   const COLORS = { rgb: [1, 1, 1], r: [1, 0.231, 0.231], g: [0.231, 1, 0.353], b: [0.231, 0.482, 1] };
 
+  // the world-draw types: how their field acts (glsim.js setField mode: 2 mask, 1 erase)
+  const FIELDS = { 'Nebula': { mode: 2 }, 'Antimatter': { mode: 1 } }, FIELD_NAMES = Object.keys(FIELDS);
+  let worldDraw = false;
+  const fieldKinds = () => worldDraw ? FIELD_NAMES : [];
+  const choices = () => list.concat(fieldKinds());   // what the book, select and cycle offer
   let on = false, kind = null, lastShot = -Infinity, mode = 2, chOpt = 'color_now', chNow = null, wearAll = false;
   let list = [];   // the patterns the player can fire ([bullet:...]), none at first; kind: the one in use
   const hooks = { change() {} };   // the gun turned on or off, the list changed, or another pattern picked
@@ -71,7 +81,7 @@ const Bullets = (function () {
     if (o.off) { on = false; setKind(null); hooks.change(); return; }
     mode = o.mode === 'mask' ? 2 : 1; chOpt = o.ch; wearAll = o.wear === 'wear_all';
     on = true;
-    setKind(list.includes(kind) ? kind : list[list.length - 1] ?? null, true);   // (none chosen yet: the list's last)
+    setKind(choices().includes(kind) ? kind : list[list.length - 1] ?? null, true);   // (none chosen yet: the list's last)
     hooks.change();
   }
   // [bullet:<names>[:<equip>]], <names> in order, separated by ',': a pattern name adds it to the
@@ -93,7 +103,7 @@ const Bullets = (function () {
     }
     list.sort((a, b) => IDS.indexOf(a) - IDS.indexOf(b));   // always in the patterns' own order (the README's)
     if (eq) last = eq;   // equipped even if it was listed already
-    if (on) setKind(last ?? (list.includes(kind) ? kind : list[0] ?? null));
+    if (on) setKind(last ?? (choices().includes(kind) ? kind : list[0] ?? null));
     else if (last) kind = last;   // gun off: it starts with it when turned on
     hooks.change();
   }
@@ -113,7 +123,15 @@ const Bullets = (function () {
   // Use pattern `id` (null: none, the field off): its rule, and an empty field (the old bullets
   // would run under the new rule). force: re-apply the gun's options even if it is the same one.
   function setKind(id, force = false) {
-    if (!on || !id) { kind = on ? null : kind; SimGL.setBullets(null); return; }
+    if (!on || !id) { kind = on ? null : kind; SimGL.setBullets(null); SimGL.setField(null); return; }
+    if (FIELDS[id]) {   // a world-draw type: no bullets, the field in their place
+      kind = id; st = null; chNow = null;
+      SimGL.setBullets(null);
+      SimGL.setField({ mode: FIELDS[id].mode, hit: HIT });
+      return;
+    }
+    SimGL.setField(null);
+    if (!st) kind = null;   // (back from a field type: the pattern made afresh)
     if (id !== kind || force) {
       const fresh = id !== kind;
       kind = id;
@@ -126,23 +144,24 @@ const Bullets = (function () {
   }
   // The bullet book: switch to pattern `name`, if the gun has it (the field is emptied).
   function select(name) {
-    if (!on || !list.includes(name) || name === kind) return false;
+    if (!on || !choices().includes(name) || name === kind) return false;
     setKind(name);
     hooks.change();
     return true;
   }
   // D / F, or the ◀ ▶ buttons: the previous / next pattern in the list (the field is emptied).
   function cycle(step) {
-    if (!on || list.length < 2) return false;
-    const i = list.indexOf(kind);
-    setKind(list[(i + step + list.length) % list.length]);
+    const all = choices();
+    if (!on || all.length < 2) return false;
+    const i = all.indexOf(kind);
+    setKind(all[(i + step + all.length) % all.length]);
     hooks.change();
     return true;
   }
 
   // Could fire now: on, and the ship moving (its arrow shows), FIRE_STEPS after the last shot (steps: no cooldown passes while paused).
   function canFire() {
-    return on && !!kind && !!C.focus && C.simSteps - lastShot >= FIRE_STEPS;
+    return on && !!kind && !FIELDS[kind] && !!C.focus && C.simSteps - lastShot >= FIRE_STEPS;
   }
   // A or the Fire button: fire a bullet from the ship (a twin or trio: the whole) if canFire(). True if a bullet was put in.
   // From the front, the way the ship moves (its arrow); while it is (near) stationary, the arrow
@@ -172,7 +191,7 @@ const Bullets = (function () {
   // Once the field has (almost) emptied, the last of it is wiped and the field goes idle (glsim:
   // no bullet steps, no bullet path in the creatures' step, no readback) until the next shot.
   function frame() {
-    if (!on || !kind) return;
+    if (!on || !kind || FIELDS[kind]) return;
     applyChannel();
     if (SimGL.bulletsIdle) return;
     const blk = SimGL.readBulletBlocks();
@@ -182,15 +201,27 @@ const Bullets = (function () {
     if (total > maxBullets * one || total < IDLE * one) SimGL.clearBullets();
   }
 
+  // [world_draw:on|off]: offer Nebula and Antimatter or not (off, while one is in use: back to
+  // the list's last pattern, or none)
+  function setWorldDraw(v) {
+    worldDraw = !!v;
+    if (!worldDraw && FIELDS[kind]) { if (on) setKind(list[list.length - 1] ?? null); else kind = list[list.length - 1] ?? null; }
+    hooks.change();
+  }
+
   // [bullet_limit:<x>]: the field's mass limit, in bullets' worth (default 8)
   function setLimit(x = 8) { maxBullets = x; }
   // Empty the bullets channel (the game's Reset, [clear_world]).
   function clear() { SimGL.clearBullets(); }   // (also with the gun off: nothing left to come back)
 
-  return { setGun, parseGun, setList, addRandom, kindOf, setLimit, clear, fire, canFire, cycle, select, frame, hooks, KINDS, HIT, WEAR, SUB,
+  return { setGun, parseGun, setList, addRandom, kindOf, setLimit, clear, fire, canFire, cycle, select, frame, setWorldDraw, hooks, KINDS, HIT, WEAR, SUB,
            get maxBullets() { return maxBullets; }, get on() { return on; }, get kind() { return kind; },
            get list() { return list.slice(); },
-           get color() { return COLORS[chNow] || COLORS.rgb; },
+           // the world-draw types offered now, and the one in use (null: a pattern, or none)
+           get fieldKinds() { return fieldKinds().slice(); }, get field() { return on && FIELDS[kind] ? kind : null; },
+           get count() { return choices().length; },
+           // (a field type: the colour of the field being painted, the player's channel pick)
+           get color() { return on && FIELDS[kind] ? COLORS[['r', 'g', 'b'][C.channel]] || COLORS.rgb : COLORS[chNow] || COLORS.rgb; },
            // the gun's settings now, as the bullets field's options (the bots' bullets take them too: Hostile)
            get settings() {
              const c = chOpt === 'color_now' ? ['r', 'g', 'b'][C.channel] || 'rgb' : chOpt;

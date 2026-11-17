@@ -21,6 +21,9 @@ uniform float uBulletsOn;
 uniform vec3  uBulletRGB;
 uniform sampler2D uHostile; // hostile bullets channel (R), shown in white over everything where uHostileOn
 uniform float uHostileOn;
+uniform sampler2D uField;   // the world-draw field (glsim.js setField): rgb = the R, G, B fields, shown where uFieldOn
+uniform float uFieldOn;
+uniform int   uFieldStyle;  // 2: Nebula (a translucent glow), 1: Antimatter (dark, nearly opaque)
 uniform vec2  uDotOff;      // the dots' drift, cells: board cell p shows dot cell p + uDotOff
 uniform vec3  uFocus;       // (col, row, on): the focused creature's CoM; off = blank zoom view
 uniform ivec2 uSize;        // board (W, H)
@@ -55,6 +58,15 @@ vec3 cellColor(vec2 cell) {
         ivec2 d = (ivec2(floor(cell + uDotOff)) + uSize * 8) % uSize;
         float v = texelFetch(uDots, d, 0).r;
         c = mix(c, uDotRGB, v);
+    }
+    if (uFieldOn > 0.5) {
+        // each field in its channel's colour (core.js CH_COLORS), by the strongest of the three
+        vec3 f = texelFetch(uField, q, 0).rgb;
+        float a = max(f.r, max(f.g, f.b));
+        if (a > 0.0) {
+            vec3 tint = min((f.r * vec3(1.0, 0.23, 0.23) + f.g * vec3(0.23, 1.0, 0.35) + f.b * vec3(0.23, 0.48, 1.0)) / a, 1.0);
+            c = uFieldStyle == 1 ? mix(c, tint * 0.4, 0.85 * a) : mix(c, tint, 0.55 * a);
+        }
     }
     if (uBulletsOn > 0.5) c = mix(c, uBulletRGB, texelFetch(uBullets, q, 0).r);
     if (uHostileOn > 0.5) c = mix(c, vec3(1.0), texelFetch(uHostile, q, 0).r);

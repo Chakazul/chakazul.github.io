@@ -70,6 +70,11 @@ const Page = (function () {
   let ask = false;
   if (!chosen && GAME) { if (!PHONE || wifi) soundOn = true; else ask = true; }
   if (PHONE_TEST && GAME) { soundOn = false; ask = true; }
+  // The game: no music until its script has set the playlist (its [music] tag: setPlaylist), or
+  // has started without one (releaseMusic): else the default track would start as the page loads
+  // (a browser may allow it at once, e.g. after the mode link's click) and then fade into the
+  // script's. The lab has no script: no hold.
+  let held = GAME;
   // The button: the game's Music (data-label, a note icon in the title row), else the lab's Stars.
   function syncSound() {
     if ($('sound')) {
@@ -78,7 +83,7 @@ const Page = (function () {
       $('sound').setAttribute('aria-pressed', soundOn);
     }
     if (!soundOn) music.pause();
-    else if (!gapTimer) play();   // in a gap between tracks, the timer starts the next
+    else if (!gapTimer && !held) play();   // in a gap between tracks, the timer starts the next
   }
   function toggleSound() {
     if ($('sound')) flash('sound');
@@ -94,6 +99,7 @@ const Page = (function () {
     clearTimeout(gapTimer); gapTimer = null;
     track = i;
     if (!soundOn) { music.pause(); return; }
+    if (held) return;   // (it plays from the start once released)
     if (music.paused) { play(); return; }
     if (fadeTimer) return;   // already fading out: the new track starts when it ends
     const v0 = music.volume, t0 = performance.now();
@@ -105,7 +111,9 @@ const Page = (function () {
       if (soundOn) play();
     }, 40);
   }
-  const startMusic = () => { if (soundOn && music.paused && !gapTimer) play(); };
+  const startMusic = () => { if (soundOn && music.paused && !gapTimer && !held) play(); };
+  // Let the music start (the game, once its script has set it up); idempotent
+  function releaseMusic() { if (!held) return; held = false; syncSound(); }
   // retried on every press until it plays; on window, capturing, and added before the pages' own
   // handlers, so it sees every press first, even one a handler swallows (the game's chapter card,
   // closed by Space or a click, stops the event there)
@@ -180,8 +188,9 @@ const Page = (function () {
     playlist = list;
     if (start !== undefined && start >= 0 && start < TRACKS.length && start !== track) switchTo(start);
     pos = list.indexOf(track);   // -1 (not in it): the next is the list's first
+    releaseMusic();   // (the script's playlist is set: the music may start, with its track)
     return true;
   }
   const setTrack = i => setPlaylist([i], i);
-  return { $, flash, fillRange, showError, toggleSound, nextTrack, setTrack, setPlaylist, TRACKS, get soundOn() { return soundOn; } };
+  return { $, flash, fillRange, showError, toggleSound, nextTrack, setTrack, setPlaylist, releaseMusic, TRACKS, get soundOn() { return soundOn; } };
 })();

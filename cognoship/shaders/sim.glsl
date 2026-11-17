@@ -21,6 +21,8 @@
 // uBulletMode = 2 is a cognitive mask by the bullets, soft: a cell's selected channels are seen
 // at (1 - bullet) of their value, renormalised as for the circle (every pixel then takes the
 // masked path, which costs one more fetch per tap).
+// With uBulletVec = 1 the texture is the world-draw field (glsim.js setField): its R, G and B each
+// act on that channel alone, instead of its R on every channel.
 precision highp float;
 precision highp sampler2D;
 precision highp int;      // fragment-stage int defaults to mediump on mobile (see Carlman action.glsl)
@@ -50,12 +52,19 @@ uniform sampler2D uBullets; // bullets channel (R)
 uniform int   uBulletMode;  // 0 none, 1 erase, 2 mask
 uniform vec3  uBulletCh;    // which channels the bullets act on
 uniform float uBulletHit;   // erase: mass removed per step per unit of bullet mass
+uniform int   uBulletVec;   // 1: the field's rgb, one per channel (world draw); 0: its R for every channel
 
 out vec4 fragColor;
 
 vec2 wrapDelta(vec2 d) {
     vec2 s = vec2(uSize);
     return d - s * floor(d / s + 0.5);
+}
+
+// The bullets at cell q, per channel, times the channels they act on
+vec3 bulletAt(ivec2 q) {
+    vec4 t = texelFetch(uBullets, q, 0);
+    return (uBulletVec == 1 ? t.rgb : vec3(t.r)) * uBulletCh;
 }
 
 // Growth in [-1, 1] for four kernels at once.
@@ -108,7 +117,7 @@ void main() {
                 vec2 d = wrapDelta(vec2(q) - mc);
                 if (dot(d, d) <= r2) vis = vec3(1.0) - uMaskCh;
             }
-            if (bmask) vis *= vec3(1.0) - texelFetch(uBullets, q, 0).r * uBulletCh;
+            if (bmask) vis *= vec3(1.0) - bulletAt(q);
             a *= vis;
             N0 += w0 * (uSrc[0] * vis);
             N1 += w1 * (uSrc[1] * vis);
@@ -138,6 +147,7 @@ void main() {
     vec3 A = texelFetch(uState, p, 0).rgb;
     vec3 Anew = clamp(A + uDt * delta * uGain, 0.0, 1.0);
     if (erase) Anew = uMaskOn == 3 ? max(Anew, uMaskCh) : Anew * (vec3(1.0) - uMaskCh);
-    if (uBulletMode == 1) Anew = max(Anew - uBulletHit * texelFetch(uBullets, p, 0).r * uBulletCh, 0.0);
+    // the bullets' erase takes mass out gradually; the world-draw field's (Antimatter) caps it at once: at most 1 - field
+    if (uBulletMode == 1) Anew = uBulletVec == 1 ? min(Anew, vec3(1.0) - bulletAt(p)) : max(Anew - uBulletHit * bulletAt(p), 0.0);
     fragColor = vec4(Anew, 1.0);
 }

@@ -3,7 +3,9 @@
 // the spectrum of the channel it reads (uSrc0 / uSrc1, one-hot), less, where the bullets mask
 // (uBMask), that of the channel times the bullets field; scaled by 1 / (W H) for the inverse.
 //   out0 = the numerators' spectra (pair)   out1 = the bullets' spectra times src . bulletCh (pair),
-// whose inverse is how much of each kernel the bullets hide.
+// whose inverse is how much of each kernel the bullets hide. uBVec = 1 (the world-draw field, its
+// rgb one per channel): the bullets' spectrum is that of the kernel's own channel of the field,
+// uFB0 = (bR, bG), uFB1 = (bB, -) (fftsim.js makes them once per change of the static field).
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -12,6 +14,8 @@ uniform sampler2D uF0, uF1, uF2, uF3;   // spectra of (R, G), (B, b), (R b chR, 
 uniform sampler2D uK;                   // the pair's kernel spectra
 uniform vec3 uSrc0, uSrc1;
 uniform int uBMask;
+uniform int uBVec;
+uniform sampler2D uFB0, uFB1;
 uniform vec3 uBulletCh;
 uniform float uScale;
 
@@ -30,7 +34,13 @@ void main() {
         vec4 f2 = texelFetch(uF2, p, 0), f3 = texelFetch(uF3, p, 0);
         a0 -= uSrc0.x * f2.xy + uSrc0.y * f2.zw + uSrc0.z * f3.xy;
         a1 -= uSrc1.x * f2.xy + uSrc1.y * f2.zw + uSrc1.z * f3.xy;
-        d = vec4(cmul(k.xy, f1.zw) * dot(uSrc0, uBulletCh), cmul(k.zw, f1.zw) * dot(uSrc1, uBulletCh)) * uScale;
+        vec2 b0 = f1.zw, b1 = f1.zw;
+        if (uBVec == 1) {
+            vec4 g0 = texelFetch(uFB0, p, 0), g1 = texelFetch(uFB1, p, 0);
+            b0 = uSrc0.x * g0.xy + uSrc0.y * g0.zw + uSrc0.z * g1.xy;
+            b1 = uSrc1.x * g0.xy + uSrc1.y * g0.zw + uSrc1.z * g1.xy;
+        }
+        d = vec4(cmul(k.xy, b0) * dot(uSrc0, uBulletCh), cmul(k.zw, b1) * dot(uSrc1, uBulletCh)) * uScale;
     }
     out0 = vec4(cmul(k.xy, a0), cmul(k.zw, a1)) * uScale;
     out1 = d;

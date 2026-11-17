@@ -56,7 +56,11 @@
     drawReadout();
     if (chart.relock && stats.short.len >= stats.short.cap) chart.relock = false;
     const w = stats.recLeft > 0 && stats.level === 'whole' ? C.focusWhole() : null;   // recording a whole: its line
-    if (statsOn()) StatsChart.draw($('c-canvas'), w ? w.hist : stats.short, stats.long, chart, C.everyObject ? C.tracks.map(t => t.hist) : [], C.hovered()?.tr?.hist);
+    // the other objects' lines: every part's, and every recognized twin or trio's (a whole named, as
+    // its circle shows it: core wholeTracks, label set), on the board now (not the one being recorded)
+    const others = C.everyObject ? C.tracks.map(t => t.hist)
+      .concat(C.wholeTracks.filter(t => t.label && t.wi >= 0 && t !== w).map(t => t.hist)) : [];
+    if (statsOn()) StatsChart.draw($('c-canvas'), w ? w.hist : stats.short, stats.long, chart, others, C.hovered()?.tr?.hist);
   };
 
   // ---- readout ----------------------------------------------------------------------------

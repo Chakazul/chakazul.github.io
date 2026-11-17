@@ -24,6 +24,13 @@
 //  bullets' settings, bullets.js Hostile); with the bullets' field, the two added
 //  (bulletmix.glsl).
 //
+//  World-draw field (setField: the bullet book's Nebula and Antimatter, [world_draw]): one static
+//  texture, rgb = an R, G and B field the player paints (field.js, uploaded with putFieldRows).
+//  While it is on it stands in for the bullets, the hostile bullets and the dots (not stepped, not
+//  drawn, the bullets emptied; the dots go on with setFieldKeepsDots, the game's challenge mode): the creatures' step takes it through the bullets' path (effBullets),
+//  each of its channels acting on that creature channel alone (sim.glsl uBulletVec), masking
+//  (Nebula) or erasing (Antimatter: each channel capped at 1 - field). Never stepped, nor worn down.
+//
 //  Board state is a ping-pong pair of RGBA32F textures (rgb = channels). Needs
 //  EXT_color_buffer_float, as Carlman does.
 // ============================================================================================
@@ -63,6 +70,11 @@ const SimGL = (function () {
   // hostile bullets channel: as the bullets', with its own pair, rule and options (hit, wear, sub)
   const hos = { tex: [], fbo: [], cur: 0, on: false, idle: true, tapTex: null, tapCount: 0, rule: null,
                 opt: { hit: 0.2, wear: 0.03, sub: 3, mode: 2, ch: [0, 1, 0], wearCh: [0, 1, 0] } };
+  // world-draw field: its texture, and whether it stands in for the bullets now (on), how it acts
+  // (mode: 1 erase | 2 mask, hit: as the bullets'), whether it holds anything (empty: no effect,
+  // so no cost), and its version (bumped on every upload: fftsim.js redoes its spectra)
+  let fieldTex = null, fieldVersion = 0;
+  const field = { on: false, mode: 2, hit: 0.2, empty: true };
   // Plug-ins (fftsim.js, FFT mode, on unless ?fft=0): ext.step(tool) replaces the creatures' sim pass (it must write the
   // next board into stateFbo[1 - cur]; step() then flips cur, steps the dots and bullets);
   // ext.rule(taps) follows setRule. Both null: the direct convolution (sim.glsl) as ever.
@@ -73,7 +85,7 @@ const SimGL = (function () {
   async function loadSources() {
     const out = {};
     await Promise.all(NAMES.map(async n => {
-      const r = await fetch(SHADER_DIR + n + '.glsl');
+      const r = await fetch(SHADER_DIR + n + '.glsl', { cache: 'no-cache' });   // (revalidated: a reload never runs stale shaders with new JS)
       if (!r.ok) throw new Error('shader ' + n + ': HTTP ' + r.status);
       out[n] = await r.text();
     }));
@@ -173,6 +185,7 @@ const SimGL = (function () {
     bblkBuf = new Float32Array(BBW * BBH * 4);
     hos.tex = [makeTex(W, H), makeTex(W, H)];
     hos.fbo = hos.tex.map(t => makeFbo([t]));
+    fieldTex = makeTex(W, H);
     mixTex = makeTex(W, H);
     mixFbo = makeFbo([mixTex]);
     siteTex = makeTex(MAX_SITES, 1);
@@ -237,6 +250,15 @@ const SimGL = (function () {
       gl.bindTexture(gl.TEXTURE_2D, t);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
     }
+  }
+
+  // The board as it is now: W x H x 4 floats (rgb = channels), row-major from row 0. Reads it back
+  // from the GPU, so only on demand (core.js capture).
+  function readState() {
+    const buf = new Float32Array(W * H * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[cur]);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
+    return buf;
   }
 
   // Add a form onto the current board (cell-wise max with what is there), top-left at
@@ -328,6 +350,9 @@ const SimGL = (function () {
   // f: { tex, fbo, cur, tapTex, tapCount, rule, wear, wearCh, sub, other: the other bullets field's
   // texture (always one: never this field's own, which the sub-steps write into, a feedback loop
   // WebGL refuses: the draw dropped), otherWear: whether it wears this one down }: f.cur is updated
+  // The scrolling world's seam for the bullets fields (null: none): [col, row], set each frame
+  let bulletSeam = null;
+  function setBulletSeam(col, row) { bulletSeam = col === null || col === undefined ? null : [col, row]; }
   function stepField(f) {
     const p = prog.bulletsim;
     gl.useProgram(p);
@@ -341,6 +366,9 @@ const SimGL = (function () {
     gl.uniform3fv(loc(p, 'uWearCh'), f.wearCh);
     bindTex(3, f.other, p, 'uOther');
     gl.uniform1f(loc(p, 'uOtherWear'), f.otherWear ? f.wear : 0);   // the other field wears it as the creatures do
+    gl.uniform1i(loc(p, 'uSeamOn'), bulletSeam ? 1 : 0);
+    gl.uniform2f(loc(p, 'uSeam'), bulletSeam ? bulletSeam[0] : 0, bulletSeam ? bulletSeam[1] : 0);
+    gl.uniform1f(loc(p, 'uSeamBand'), Math.ceil(f.rule.R / 2) + 2);   // half-width: both halves together wider than the kernel's reach
     for (let i = 0; i < f.sub; i++) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, f.fbo[1 - f.cur]);
       bindTex(0, f.tex[f.cur], p, 'uField');
@@ -389,7 +417,7 @@ const SimGL = (function () {
   }
   function putHostile(flat, h, w, row0, col0) { putField(hos.tex[hos.cur], flat, h, w, row0, col0); hos.idle = false; }
   function clearHostile() { clearFbos(hos.fbo); hos.idle = true; }
-  const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle;
+  const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle && !field.on;
   // The two bullets fields together ([bullet_mutual]): 'none' (apart), or 'wear': where they
   // overlap each wears the other down, at its own wear rate per unit of the other's mass (as the
   // creatures wear them): shots meeting cancel out. One more fetch per cell per bullet step.
@@ -401,6 +429,7 @@ const SimGL = (function () {
   // bullets' mode and channels. So the bots' bullets act exactly as the player's.
   let mixTex = null, mixFbo = null, eff = null;
   function effBullets() {
+    if (field.on) return field.empty ? null : { tex: fieldTex, mode: field.mode, ch: [1, 1, 1], hit: field.hit, vec: true };
     const pa = bulletsOn && !!bulTapTex && !bulletsIdle, ha = hostileActive();
     if (!pa && !ha) return null;
     if (!ha) return { tex: bulTex[bcur], mode: bul.mode, ch: bul.ch, hit: bul.hit };
@@ -421,6 +450,28 @@ const SimGL = (function () {
     stepField(f);
     hos.cur = f.cur;
   }
+  // ---- world-draw field -------------------------------------------------------------------
+  // On (opts: { mode: 1 erase | 2 mask, hit }) or off (null). Turning it on empties both bullets
+  // fields (they would stand still under it); the dots wait, unstepped and hidden, until it is off.
+  function setField(opts) {
+    const was = field.on;
+    field.on = !!opts;
+    if (opts) Object.assign(field, opts);
+    if (field.on && !was) { clearFbos(bulFbo); bulletsIdle = true; clearHostile(); }
+  }
+  // Rows y0 .. y1 - 1 of a W x H x 4 field (row-major, rgb used), uploaded as they are
+  function putFieldRows(buf, y0, y1) {
+    gl.bindTexture(gl.TEXTURE_2D, fieldTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y0, W, y1 - y0, gl.RGBA, gl.FLOAT, buf.subarray(y0 * W * 4, y1 * W * 4));
+    fieldVersion++;
+  }
+  function setFieldEmpty(e) { field.empty = !!e; }
+  // keep: the dots go on (stepped, eaten, drawn) while the field is on, instead of waiting (the
+  // game's challenge mode: its beacons are still to be eaten)
+  let fieldKeepsDots = false;
+  function setFieldKeepsDots(keep) { fieldKeepsDots = !!keep; }
+  const dotsLive = () => dotsOn && (!field.on || fieldKeepsDots);
+
   const readHostileBlocks = () => readBulletBlocks(hos.tex[hos.cur]);
   // the dots channel's coarse mass map (as readBulletBlocks: BBW x BBH, in the field's own frame)
   const readDotBlocks = () => readBulletBlocks(dotTex[dcur]);
@@ -505,9 +556,7 @@ const SimGL = (function () {
     if (ext.step) {   // a plug-in's sim pass (fftsim.js)
       ext.step(tool);
       cur = 1 - cur;
-      if (dotsOn && dotTapTex) stepDots();
-      if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
-      if (hostileActive()) stepHostile();
+      stepOthers();
       return;
     }
     const p = prog.sim;
@@ -535,11 +584,17 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uReach'), reach);
     bindTex(2, eff ? eff.tex : bulTex[bcur], p, 'uBullets');
     gl.uniform1i(loc(p, 'uBulletMode'), eff ? eff.mode : 0);
+    gl.uniform1i(loc(p, 'uBulletVec'), eff && eff.vec ? 1 : 0);
     gl.uniform3fv(loc(p, 'uBulletCh'), eff ? eff.ch : bul.ch);
     gl.uniform1f(loc(p, 'uBulletHit'), eff ? eff.hit : bul.hit);
     draw4();
     cur = 1 - cur;
-    if (dotsOn && dotTapTex) stepDots();
+    stepOthers();
+  }
+  // after the creatures' step: the dots and both bullets fields (none while the field stands in for them)
+  function stepOthers() {
+    if (dotsLive() && dotTapTex) stepDots();
+    if (field.on) return;
     if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
     if (hostileActive()) stepHostile();
   }
@@ -603,11 +658,14 @@ const SimGL = (function () {
     bindTex(0, state[cur], p, 'uState');
     bindTex(1, dotTex[dcur], p, 'uDots');
     bindTex(2, bulTex[bcur], p, 'uBullets');
-    gl.uniform1f(loc(p, 'uBulletsOn'), bulletsOn ? 1 : 0);
+    gl.uniform1f(loc(p, 'uBulletsOn'), bulletsOn && !field.on ? 1 : 0);
     gl.uniform3fv(loc(p, 'uBulletRGB'), bulRGB);
     bindTex(3, hos.tex[hos.cur], p, 'uHostile');
-    gl.uniform1f(loc(p, 'uHostileOn'), hos.on ? 1 : 0);
-    gl.uniform1f(loc(p, 'uDotsOn'), dotsOn ? 1 : 0);
+    gl.uniform1f(loc(p, 'uHostileOn'), hos.on && !field.on ? 1 : 0);
+    gl.uniform1f(loc(p, 'uDotsOn'), dotsLive() ? 1 : 0);
+    bindTex(4, fieldTex, p, 'uField');
+    gl.uniform1f(loc(p, 'uFieldOn'), field.on ? 1 : 0);
+    gl.uniform1i(loc(p, 'uFieldStyle'), field.mode);
     gl.uniform3fv(loc(p, 'uDotRGB'), dotRGB);
     gl.uniform2fv(loc(p, 'uDotOff'), dotOff);
     gl.uniform2i(loc(p, 'uSize'), W, H);
@@ -669,13 +727,16 @@ const SimGL = (function () {
     get reach() { return reach; }, get taps() { return lastTaps; },
     // the bullets as this step's creatures see them (effBullets: the player's and the bots' as one)
     get bulletsActive() { return !!eff; }, get bul() { return eff || bul; }, get bulTex() { return eff ? eff.tex : bulTex[bcur]; },
+    // ... the world-draw field in their place (vec: its rgb, one per channel), its texture and version
+    get bulletVec() { return !!(eff && eff.vec); }, get fieldTex() { return fieldTex; }, get fieldVersion() { return fieldVersion; },
   };
   let VERTEX_SRC = '', pluginIds = 0;
 
-  return { init, setRule, setUpdate, seed, add, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
+  return { init, setRule, setUpdate, seed, add, readState, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, setSky, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
            setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks, setBulletMutual,
+           setField, putFieldRows, setFieldEmpty, setFieldKeepsDots, setBulletSeam, get fieldOn() { return field.on; },
            get hostileIdle() { return hos.idle; },
            get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },

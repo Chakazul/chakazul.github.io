@@ -2,6 +2,9 @@
 """Rebuild a Cognoship pattern from a screenshot of the world view, and optionally add it to
 tools/extra_patterns.json (then rerun tools/gen_aquarium.py).
 
+Better, when the morph is on screen in the lab or the game: capture it (',' the ship, '.' the
+whole board) and add the file with tools/add_pattern.py: the exact cell values, nothing to read back.
+
 Needs numpy, scipy and Pillow, e.g. the complexity venv:
   ~/github/complexity/.venv/bin/python tools/from_screenshot.py "../assets/screenshots/Z18A9R trias.png" \\
       --code Z18A9R --name trias [--add]
@@ -24,6 +27,14 @@ Steps (the ones used for Z18A9R trias):
      the correlation of per-channel radial profiles around the CoM (rotation-free), with the
      settled state shown as the screenshot would show it;
   4. its settled state, recentred and cropped, is the pattern, at R = --R.
+
+How far to check (the user's way of working, 2026-11-18): basic checks only. This tool's short
+verify, and for a rule tweak (tools/rule_tweaks.json) a quick look that the code's other morphs
+keep their form, are enough; no very long stability runs (thousands of steps, many seeds, noise
+copies). Put a good candidate into the lab (--add, then tools/gen_aquarium.py) and stop: the user
+checks the new pattern and all the others there, and asks for more parameter tweaks if they see
+issues. Shifts in the other morphs' stats are fine too (the user re-records their long histories).
+
 Writes into --out (default: output/from_screenshot_<name>, gitignored): seed.png (the grid as
 read), scales.png (each pair at the end of the verify run; rows = gammas, columns = scales),
 verify.png (the chosen pattern at the start, middle and end of the verify run) and pattern.json.

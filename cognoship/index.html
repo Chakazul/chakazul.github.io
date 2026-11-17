@@ -57,19 +57,22 @@
           <button id="dev-ok" title="Complete the waiting line's conditions (O)">Ok</button>
           <button id="dev-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
         </div>
-        <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X -->
+        <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X; Clear while drawing ([world_draw]) -->
         <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (D / F) -->
         <div id="bullet-nav" class="bullet-nav" hidden>
           <button id="bullet-prev" title="The previous bullet pattern (D)">&#9664;</button>
           <button id="bullet-next" title="The next bullet pattern (F)">&#9654;</button>
         </div>
+        <!-- the world view's lower right ([settings:on]): opens the settings book -->
+        <button id="settings" class="world-settings" hidden title="Settings (V)">Settings</button>
         <button id="fire" class="fire" hidden title="Fire a bullet the way the ship moves (A)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
       </div>
       <div class="layer layer-ship">
         <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
         <div class="ship-ctl">
           <button id="headup" aria-pressed="false" title="Upward: rotate the ship view so the creature's heading points up (E toggles)">Upward</button>
-          <label title="Zoom of the ship view, in screen px per cell (R out, T in)">Zoom <input id="zoom" type="range" min="2" max="6" step="1"></label>
+          <!-- world draw (game.js fieldMode): Upward reads Undo, Zoom reads Width (the brush's) -->
+          <label title="Zoom of the ship view, in screen px per cell (R out, T in)"><span id="zoom-name">Zoom</span> <input id="zoom" type="range" min="2" max="6" step="1"></label>
         </div>
         <!-- in the ship view, right of the name box ([morph_book:on]): opens the morph book -->
         <!-- in the ship view, left of the name box, mirroring Morphs ([gun] on): opens the bullet book -->
@@ -99,6 +102,13 @@
         <div class="book-box" role="dialog" aria-label="Morph book">
           <h2 id="book-title">Dissolve to respawn</h2>
           <div class="book-grid" id="book-grid"></div>
+          <!-- the settings book (above Close) ([settings:on], the Settings button): Autospawn (Respawn by itself once dissolved),
+               Scroll (a scrolling world, [clear_world:scroll]), Objects (how many other creatures to keep, [min_morph:<n>]) -->
+          <div id="book-settings" class="book-settings" hidden>
+            <button id="autospawn" aria-pressed="false" title="Autospawn: once your ship has dissolved, Respawn by itself after a second">Autospawn</button>
+            <button id="scroll" aria-pressed="false" title="Scroll: a scrolling world that follows your ship ([clear_world:scroll]); the world starts afresh as the book closes">Scroll</button>
+            <label title="Objects: keep at least this many other creatures in the world (a species chosen, or now)">Objects <input id="objects" type="range" min="0" max="6" step="1"><output id="objects-v"></output></label>
+          </div>
           <button id="book-close">Close</button>
           <div id="book-species" class="book-species" hidden></div>
           <!-- sandbox mode: held for 3 s, clears the central inventory -->
@@ -141,6 +151,7 @@
 <script src="dots.js"></script>
 <script src="bullet_patterns.js"></script>
 <script src="bullets.js"></script>
+<script src="field.js"></script>
 <script src="clone.js"></script>
 <script src="game.js"></script>
 </body>

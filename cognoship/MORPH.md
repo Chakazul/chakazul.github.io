@@ -18,6 +18,14 @@ on Cognoship's 384×256 torus, the same rule and board as the game. Masses are i
   mass, speed (R per unit time), turning rate (rad per unit time), number of bodies and radial
   profile. A mirror image has the same mass, speed and profile but the opposite turning rate.
 
+## VT049W sequerectus and rectogyrans (renamed, 2026-11-18)
+
+The morph below, *rectogyrans* since 2026-11-13, is now **sequerectus**, and *paralimus* (the
+first of 233.json's two VT049W "para" entries) is now **rectogyrans**: `tools/gen_aquarium.py`,
+the segments in `assets/stats/VT049W.json`, the scripts' lists (in the morph book's order: rectus,
+gyrans, tachus, lithos, paragyrans, pararectus, rectogyrans, sequerectus) and, once, every saved
+inventory (game.js `MORPH_RENAMES`, version 2). The tables below keep the names of their day.
+
 ## VT049W rectogyrans (renamed, 2026-11-13)
 
 Formerly *rectus+gyrans* (from 233.json): renamed in `tools/gen_aquarium.py` (`POST_RENAME`),
@@ -187,3 +195,80 @@ old rule (the other morphs moved under 0.5 % in mass).
 ### Open
 
 - Reproducing the twin as seen: two gyrans that really run into each other, again and again.
+
+## Z18A9R trigyrans, currus and flos (new, 2026-11-18)
+
+From `../assets/screenshots/Z18A9R trigyrans-1.png`, `trigyrans-2.png`, `currus.png` and
+`flos.png`, ship-view screenshots. Their yellow velocity arrow (243, 212, 72, and its outline: the
+same colour ratios at any brightness) was painted out first, each pixel from its nearest unmasked
+one (`output/z18a9r_new/clean.py`). Work files in `output/z18a9r_new/` (kept locally, not in git).
+
+### currus and flos: two-channel morphs (lab only)
+
+Red and green only, no blue. Read at 14.6–14.7 px per cell (the ship view zoomed in) and rebuilt
+by `tools/from_screenshot.py` under the current rule (below): **flos** a still flower, 19×20 cells
+(mass 325, gamma 1.4, shape 0.71); **currus** a slowly moving oval, 21×18 cells (mass 351, gamma
+1.8, shape 0.90; speed ~0.010 R per unit time).
+In `tools/extra_patterns.json`, not in any allow list.
+
+### trigyrans: three gyrans round a common centre (lab only for now)
+
+Both screenshots are 7.33 px per cell (measured from the images' edges; the tool's detection read
+5.5 for trigyrans-1, which gave too much mass). From their grids (values ** 1.0–2.2, scaled
+0.95–1.05) the creature becomes three crescents rotating together (mass ~2.85 gyrans, spread
+~1.1 R, about 0.06 rad per step, a turn every ~100 steps), and under the rule as it was it lasts a
+median of ~200–600 steps, then loses its balance and splits into gyrans that replicate. The runs
+are chaotic: the same seed recentred every 50 steps instead of 5 (float rounding) ends
+differently, so every result below is over many seeds.
+
+Detected as: mass 2.5–3.3 gyrans, spread 0.95–1.35 R, three-fold symmetry about the centre of mass
+(|Σ m e^{3iθ}| / Σ m within 2.2 R) at least 0.18 (an arc of three, also seen, scores lower).
+
+**Search** (`tune_tri.py`, a 128×128 torus): each of the 45 kernel parameters ×0.97 and ×1.03, and
+T 2.5 / 3 / 4, over 18 seeds (2 screenshots × gamma 1.4, 1.8, 2.2 × scale 0.95, 1, 1.05), up to
+3,000 steps. Unchanged: mean 294 steps, none to 3,000. Two stood out: **kernel 4 (G→G) m ×1.03**,
+18 of 18 to 3,000, and kernel 10 (R→B) m ×0.97, 16 of 18; the next best had a mean of 900.
+
+**Check** (`check.py`: 36 runs to 6,000 steps, the 18 seeds and each with 1 % noise; the other
+morphs settled, then 1,200 steps, against the rule as it was; the transgyrans pattern and 6
+video frames, how long the crossing lasts, up to 3,000):
+
+| change | trigyrans mean | to 6,000 | gyrans mass / turn | others | transgyrans |
+|---|---|---|---|---|---|
+| none | 269 | 0/36 | | | holds |
+| k4 m ×1.01 | 619 | 0/36 | −0.8 % / −5 % | < 0.9 % | holds |
+| k4 m ×1.015 | 1,507 | 2/36 | −1.3 % / −7 % | < 1.4 % | holds |
+| k4 m ×1.02 | 3,187 | 9/36 | −1.8 % / −9 % | < 1.6 % | holds |
+| **k4 m ×1.03** | **5,930** | **35/36** | **−2.5 % / −13 %** | tardus −1.5 %, currus −3 %, flos +6 % (new), the rest < 1 % | holds |
+| k10 m ×0.98, ×0.97 | 681, 5,206 | 0, 31/36 | +3.5 %, +5.1 % | antigyrans starts to move and turn | holds |
+
+Kernel 10 breaks antigyrans. Kernel 4 keeps every morph's form (speeds within 0.01 R per unit
+time; antigyrans and lithos still); gyrans moves most. Pairing k4 m ×1.02 with a second
+parameter ±2 % also reaches 18 of 18 to 3,000 (e.g. k5 h ×0.98, k7 m ×0.98, k10 s ×1.02; search
+stopped at 72 of 182), but moves two parameters for a gyrans cost no clearly smaller.
+
+**Applied** as kernel 4 `m` = 0.41 (was 0.398, ×1.030) in `tools/rule_tweaks.json`. **Z18A9R
+trigyrans** is trigyrans-1's grid (values ** 1.8) run 3,000 steps under it (`make_tri.py`): 56×59
+cells, mass 2,404 (2.78 gyrans); decoded back it holds 3,000 more steps. Not yet in an allow list:
+to be tried in the lab first. The long histories in `assets/stats/Z18A9R.json` were recorded
+under the old rule (gyrans' turn rate is 13 % lower now); re-record them in the lab.
+
+## VT049W pararectus (new, 2026-11-18; lab only)
+
+From `../assets/screenshots/VT049W pararectus.png` (the world view, 4.85 px per cell; its yellow
+focus circle painted out by `--clean-overlays`) and `pararectus-2.png` (the ship view, 7.3 px per
+cell; its velocity arrow painted out first, as for Z18A9R trigyrans). Two rectus side by side,
+moving straight. Both rebuild the same under `tools/from_screenshot.py` (one creature, mass within
+0.3 % over the check, shape 0.97): 37×50 cells, mass ~1,475. The first is in
+`tools/extra_patterns.json`. Against VT049W's morphs (settled 300 steps, then 1,200; R = 18):
+
+| morph | mass | speed | turn |
+|---|---|---|---|
+| **pararectus** | 1,477 | 0.082 | 0 |
+| rectogyrans | 1,511 | 0.076 | 0.010 |
+| paralimus | 1,658 | 0.089 | 0.015 |
+| paragyrans | 1,812 | 0.100 | 0 |
+| rectus | 765 | 0.072 | 0.001 |
+
+Closest to rectogyrans (2 % lighter, 7 % faster), told apart by its turn rate (none). Not in an
+allow list yet, and no long history in `assets/stats/VT049W.json`.

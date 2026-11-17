@@ -143,13 +143,19 @@ const Core = (function () {
                 worldGhost: () => null,
                 // patchErase: the selected channel's patch toggles erase (no action patches)
                 patchErase: () => false,
-                // patchDraw: the selected channel's patch also toggles draw (adds mass), after erase if
-                // that is on: mask -> erase -> draw -> mask
+                // patchDraw: the selected channel's patch also toggles draw (adds mass), before erase if
+                // that is on: mask -> draw -> erase -> mask
                 patchDraw: () => false,
+                // fieldTools: the R G B patches pick the colour of the world-draw field to paint (the
+                // game's Nebula / Antimatter), the selected one again cycling its tool (fieldTool):
+                // paintbrush +, soft brush ×, eraser −; the ship tool (mask / erase / draw) is not used
+                fieldTools: () => false,
+                // pressEnd(e): a press the page took (opt.worldPress, opt.zoomPress) ended
+                pressEnd: () => {},
                 // frameColor: the world view's frame around the followed creature (null: as the panel border)
                 frameColor: () => null,
                 // emptyView: with nothing followed, the ship view shows the world's centre (unrotated)
-                // instead of staying blank
+                // instead of staying blank; or [col, row, phi]: that cell, turned by phi (viewAngle's)
                 emptyView: () => false,
                 // focusCircle: a yellow circle around the followed creature in the world view (as
                 // Detect: Every draws it), inside its frame, also when the other circles are off
@@ -220,6 +226,8 @@ const Core = (function () {
   let starSec = 0;      // real seconds the star field drifts this frame
   let running = true, speedIdx = nearestIdx(SPEEDS, num('speed', 1, 1 / 8, 8)), stepAcc = 0;
   let maskR = Math.round(num('radius', 2.5 * R / 12, 1, 8)), channel = 1, action = 0;   // selected tool: G mask (best for steering and shape-shifting)
+  let fieldTool = 0;   // opt.fieldTools: 0 paintbrush, 1 soft brush, 2 eraser
+  const FIELD_SYMS = ['+', '\u00d7', '\u2212'];
   // Zoom-view rotation modes:
   //   board: no rotation; vel: heading = the arrow's smoothed velocity (arrow points straight up);
   //   axis: heading = the B->G body axis (stable at any speed, but not the travel direction:
@@ -288,8 +296,8 @@ const Core = (function () {
     'HGMLH8': 'Aquarium metamorpha', 'PJ1EF7': 'Aquarium multiplicans', 'KZ2BLD': 'Aquarium virgatus',
     'XEH4YR': 'Aquarium explodens', 'HAESRE': 'Aquarium sinuosus' };
   // Picker order, as sandbox.txt lists them; others go last
-  const SPECIES_ORDER = ['5N7KKM', 'GDNQYX', 'Z18A9R', 'PJ1EF7', 'XEH4YR', 'KZ2BLD', 'KH97WU', 'HAESRE', 'HGMLH8',
-    'VT049W', 'G6G6CR'];
+  const SPECIES_ORDER = ['5N7KKM', 'GDNQYX', 'VT049W', 'Z18A9R', 'PJ1EF7', 'XEH4YR', 'KZ2BLD', 'KH97WU', 'HAESRE',
+    'HGMLH8', 'G6G6CR'];
   const speciesName = p => p.logic === 'legacy' ? p.name : `${SPECIES_NAMES[p.rule] || p.rule} (${p.rule})`;
   const morphName = p => p.logic === 'legacy' ? 'rectus' : p.name.replace(p.rule + ' ', '');
   const BOOM = / \u{1F4A5}$/u;   // the self-replicating morphs' emoji: shown in the picker, not recorded
@@ -905,13 +913,14 @@ const Core = (function () {
     }
     if (n === 0) analyze(0);
     if (detectMode !== 'none' && (n > 0 || md.dirty || stats.long.len !== md.len)) detectMorphs();
-    const p = focus ? viewAngle() : 0, c = Math.cos(p), s = Math.sin(p), sh = ship();
+    const ev = focus ? null : opt.emptyView(), at = Array.isArray(ev) ? ev : null;
+    const p = focus ? viewAngle() : at ? at[2] || 0 : 0, c = Math.cos(p), s = Math.sin(p), sh = ship();
     VS = opt.viewShift() || [0, 0]; VI = opt.viewInset() * WS;
     SimGL.render({
       canvasW: layout.w, canvasH: layout.h, worldScale: WS, worldOff: VS, worldInset: VI / WS,
       zoom: zoomRect(),
       rot: [c, s, -s, c],
-      focus: sh ? [sh.col, sh.row, 1] : opt.emptyView() ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
+      focus: sh ? [sh.col, sh.row, 1] : at ? [at[0], at[1], 1] : ev ? [BW / 2 - 0.5, BH / 2 - 0.5, 1] : [0, 0, 0],
       ...starView(),   // the star field (opt.stars: the lab's Stars button)
     });
     drawOverlay();
@@ -1045,9 +1054,11 @@ const Core = (function () {
       for (let i = 0; i < 3; i++) {
         const r = patchRect(i, bottom), sel = bottom ? i === action : i === channel;
         // erase on the selected channel patch (opt.patchErase, the game's recycle): striped, "-G";
-        // draw (opt.patchDraw): cross-hatched, "+G"
-        const striped = !bottom && sel && ((action === 1 && opt.patchErase()) || (action === 2 && opt.patchDraw()));
-        const hatched = striped && action === 2;
+        // draw (opt.patchDraw): cross-hatched, "+G". The field's tools (opt.fieldTools): "+G"
+        // solid (paintbrush; the others too, which a click gives), "×G" a blurred disc (soft brush), "−G" striped (eraser)
+        const fm = !bottom && opt.fieldTools(), ft = fm ? (sel ? fieldTool : 0) : -1;
+        const striped = fm ? ft > 0 : !bottom && sel && ((action === 1 && opt.patchErase()) || (action === 2 && opt.patchDraw()));
+        const hatched = !fm && striped && action === 2, speckled = ft === 1;
         ctx.globalAlpha = sel ? 1 : 0.4;
         ctx.fillStyle = CH_COLORS[bottom ? channel : i];
         if (striped) {
@@ -1055,6 +1066,11 @@ const Core = (function () {
           ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
           ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, r.w, r.h);
           ctx.strokeStyle = CH_COLORS[i]; ctx.lineWidth = 7;
+          if (speckled) {   // the soft brush: its blurred disc, the colour full in the middle fading to the dark at the edges
+            const cx = r.x + r.w / 2, cy = r.y + r.h / 2, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r.w / 2);
+            g.addColorStop(0, CH_COLORS[i]); g.addColorStop(0.35, CH_FILLS[i]); g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g; ctx.fillRect(r.x, r.y, r.w, r.h);
+          } else
           for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y + r.h); ctx.lineTo(r.x + d + r.h, r.y); ctx.stroke(); }
           if (hatched) for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y); ctx.lineTo(r.x + d + r.h, r.y + r.h); ctx.stroke(); }
           ctx.restore();
@@ -1067,7 +1083,7 @@ const Core = (function () {
         ctx.fillStyle = sel ? '#000' : 'rgba(0,0,0,.75)';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = bottom ? '700 17px system-ui, sans-serif' : '700 22px system-ui, sans-serif';
-        const label = bottom ? ACTIONS[i] : (striped ? (hatched ? '+' : '\u2212') : '') + CH_NAMES[i];
+        const label = bottom ? ACTIONS[i] : fm ? FIELD_SYMS[ft] + CH_NAMES[i] : (striped ? (hatched ? '+' : '\u2212') : '') + CH_NAMES[i];
         if (striped) {   // on the stripes: dark text in a light halo
           ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.strokeText(label, r.x + r.w / 2, r.y + r.h / 2);
         }
@@ -1452,8 +1468,14 @@ const Core = (function () {
   // patches), the selected channel's patch again toggles erase (its "recycle") on and off, and
   // another channel goes back to mask.
   function pickChannel(i) {
-    // the actions the patch cycles through: mask, then erase (opt.patchErase), then draw (opt.patchDraw)
-    const cycle = [0].concat(opt.patchErase() ? [1] : [], opt.patchDraw() ? [2] : []);
+    if (opt.fieldTools()) {   // the field's colour; the selected one again: the next tool (another colour: the paintbrush)
+      fieldTool = i === channel ? (fieldTool + 1) % 3 : 0;
+      channel = i;
+      hooks.change();
+      return;
+    }
+    // the actions the patch cycles through: mask, then draw (opt.patchDraw), then erase (opt.patchErase)
+    const cycle = [0].concat(opt.patchDraw() ? [2] : [], opt.patchErase() ? [1] : []);
     if (cycle.length > 1) action = i === channel ? cycle[(cycle.indexOf(action) + 1) % cycle.length] ?? 0 : 0;
     channel = i;
   }
@@ -1467,8 +1489,9 @@ const Core = (function () {
           `Mask (4): pressing on the ship view hides the ${CH_WORDS[channel]} channel there from the creature's senses`,
           `Erase (5): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 0`,
           `Draw (6): pressing on the ship view sets ${CH_WORDS[channel]} mass there to 1`][i]
+          : opt.fieldTools() ? `${CH_NAMES[i]} (${i + 1}): paint the ${CH_WORDS[i]} field (+, paintbrush); again: soft brush (\u00d7); again: eraser (\u2212)`
           : opt.patchErase() || opt.patchDraw() ? `${CH_NAMES[i]} (${i + 1}): mask the ${CH_WORDS[i]} channel; again: ` +
-              [opt.patchErase() && 'erase it (recycle), striped', opt.patchDraw() && 'draw it (add mass), cross-hatched'].filter(Boolean).join('; again: ')
+              [opt.patchDraw() && 'draw it (add mass), cross-hatched', opt.patchErase() && 'erase it (recycle), striped'].filter(Boolean).join('; again: ')
           : `${CH_NAMES[i]} (${i + 1}): act on the ${CH_WORDS[i]} channel`;
     }
     return '';
@@ -1491,7 +1514,10 @@ const Core = (function () {
   ui.addEventListener('pointerleave', e => { if (!opt.keepHover(e.relatedTarget)) { hover = null; worldHover = null; } });
   let pageDrag = null;   // the pointer of a press the page took (opt.zoomPress, opt.worldPress), while held
   let dragWorld = false;   // ... in the world view (else the ship view)
-  const endMask = e => { if (masking && e.pointerId === masking.id) masking = null; if (pageDrag === e.pointerId) pageDrag = null; };
+  const endMask = e => {
+    if (masking && e.pointerId === masking.id) masking = null;
+    if (pageDrag === e.pointerId) { pageDrag = null; opt.pressEnd(e); }
+  };
   ui.addEventListener('pointerup', endMask);
   ui.addEventListener('pointercancel', endMask);
   ui.addEventListener('lostpointercapture', endMask);
@@ -1525,6 +1551,103 @@ const Core = (function () {
   function setZoom(i) { zoomIdx = i; CELL_PX = ZOOMS[zoomIdx]; ZOOM_CELLS = ZOOM.edge / CELL_PX; hooks.change(); }
   function setMaskR(r) { maskR = r; hooks.change(); }
 
+  // ---- capture (',' the ship, '.' the whole board) -----------------------------------------
+  // A morph candidate as it is, for tools/add_pattern.py: the exact cell values (no screenshot to
+  // read back, nothing drawn over it), downloaded as a pattern JSON in tools/extra_patterns.json's
+  // format (code, name: the detected morph or "unnamed", R, cells: an RLE per channel) and a PNG of
+  // its RGB channels (value = brightness, 4 px per cell; the board: 2).
+  // The ship: the blocks of its object (the part followed, or its whole once named: a twin, a
+  // trio), grown by CAP_GROW blocks to take its faint edges, less any block of another object;
+  // every other cell 0; cropped to its mass.
+  const CAP_GROW = 2;
+  const RLE_CH = v => v === 0 ? '.' : v < 25 ? String.fromCharCode(65 + v - 1)
+    : String.fromCharCode(112 + Math.floor((v - 25) / 24)) + String.fromCharCode(65 + (v - 25) % 24);
+  function toRLE(ch) {   // rows of 0..1 values -> Lenia RLE (as tools/from_screenshot.py cells2rle)
+    return ch.map(row => {
+      let out = '', i = 0;
+      const q = row.map(v => Math.round(Math.min(1, Math.max(0, v)) * 255));
+      while (i < q.length) { let n = 1; while (i + n < q.length && q[i + n] === q[i]) n++; out += (n > 1 ? n : '') + RLE_CH(q[i]); i += n; }
+      return out;
+    }).join('$') + '!';
+  }
+  function download(name, blob) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  // whole: true = the whole board, else the ship. Returns the file name, or null (no ship).
+  function capture(whole = false) {
+    if (!ruleLoaded) return null;
+    const sh = ship();
+    if (!whole && !sh) return null;
+    const buf = SimGL.readState(), B = SimGL.BLOCK, nbx = SimGL.BW, nby = SimGL.BH;
+    let x0, y0, w, h, keep = null;
+    if (whole) { x0 = 0; y0 = 0; w = BW; h = BH; }
+    else {
+      const sw = shipWhole(), parts = new Set(sw ? found.wholes[sw.wi].parts : [focusIdx]);
+      const own = new Uint8Array(nbx * nby), other = new Uint8Array(nbx * nby);
+      found.labels.forEach((l, b) => { if (l >= 0) (parts.has(l) ? own : other)[b] = 1; });
+      keep = new Uint8Array(nbx * nby);
+      for (let by = 0; by < nby; by++) for (let bx = 0; bx < nbx; bx++) {
+        if (!own[by * nbx + bx]) continue;
+        for (let dy = -CAP_GROW; dy <= CAP_GROW; dy++) for (let dx = -CAP_GROW; dx <= CAP_GROW; dx++) {
+          const b = (((by + dy) % nby + nby) % nby) * nbx + (((bx + dx) % nbx + nbx) % nbx);
+          if (!other[b]) keep[b] = 1;
+        }
+      }
+      // its extent round the ship's centre (the torus: offsets from it)
+      let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
+      keep.forEach((k, b) => {
+        if (!k) return;
+        const ox = wrapD((b % nbx) * B + B / 2 - sh.col, BW), oy = wrapD(Math.floor(b / nbx) * B + B / 2 - sh.row, BH);
+        lo = [Math.min(lo[0], ox), Math.min(lo[1], oy)]; hi = [Math.max(hi[0], ox), Math.max(hi[1], oy)];
+      });
+      x0 = Math.floor(sh.col + lo[0] - B); y0 = Math.floor(sh.row + lo[1] - B);
+      w = Math.min(BW, Math.ceil(hi[0] - lo[0]) + 2 * B); h = Math.min(BH, Math.ceil(hi[1] - lo[1]) + 2 * B);
+    }
+    // the cells, channel by channel (rows of the crop), 0 outside the kept blocks
+    const cells = [0, 1, 2].map(() => Array.from({ length: h }, () => new Array(w).fill(0)));
+    let mass = 0;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const c = (((x0 + x) % BW) + BW) % BW, r = (((y0 + y) % BH) + BH) % BH;
+      if (keep && !keep[Math.floor(r / B) * nbx + Math.floor(c / B)]) continue;
+      for (let k = 0; k < 3; k++) { const v = buf[(r * BW + c) * 4 + k]; if (v >= 0.5 / 255) { cells[k][y][x] = v; mass += v; } }
+    }
+    // trimmed to what is there
+    const any = (y, x) => cells[0][y][x] || cells[1][y][x] || cells[2][y][x];
+    let t = h, b = -1, l = w, rr = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (any(y, x)) { t = Math.min(t, y); b = Math.max(b, y); l = Math.min(l, x); rr = Math.max(rr, x); }
+    if (b < 0) return null;
+    const crop = cells.map(ch => ch.slice(t, b + 1).map(row => row.slice(l, rr + 1)));
+    const det = whole ? null : shipDet(), name = det && det.name ? det.name : 'unnamed';
+    const code = speciesOf(pattern), stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    const base = `${code} ${whole ? 'board' : name} ${stamp}`;
+    const entry = { code, name: whole ? 'board' : name, R,
+                    source: `Captured in Cognoship (${document.title}) at R = ${R}, step ${steps}: ` +
+                            (whole ? 'the whole board' : `the ship${shipWhole() ? ' (a whole: ' + found.wholes[shipWhole().wi].parts.length + ' parts)' : ''}, ` +
+                             `detected as ${det && det.name ? det.name : 'nothing known'}`) +
+                            `; ${crop[0][0].length}x${crop[0].length} cells, mass ${mass.toFixed(0)}; exact cell values.`,
+                    cells: crop.map(toRLE) };
+    download(base + '.json', new Blob([JSON.stringify(entry, null, 1)], { type: 'application/json' }));
+    // the PNG: the channels as they are (no stars, no overlays)
+    const z = whole ? 2 : 4, cw = crop[0][0].length, chh = crop[0].length, cv = document.createElement('canvas');
+    cv.width = cw * z; cv.height = chh * z;
+    const g = cv.getContext('2d'), im = g.createImageData(cw, chh);
+    for (let y = 0; y < chh; y++) for (let x = 0; x < cw; x++)
+      im.data.set([crop[0][y][x] * 255, crop[1][y][x] * 255, crop[2][y][x] * 255, 255], (y * cw + x) * 4);
+    const small = document.createElement('canvas'); small.width = cw; small.height = chh; small.getContext('2d').putImageData(im, 0, 0);
+    g.imageSmoothingEnabled = false; g.drawImage(small, 0, 0, cw * z, chh * z);
+    cv.toBlob(blob => blob && download(base + '.png', blob), 'image/png');
+    console.info(`Cognoship: captured ${base} (${cw}x${chh} cells, mass ${mass.toFixed(0)})`);
+    return base;
+  }
+  // ',' the ship, '.' the whole board (both pages; not in a text field, nor with Ctrl / Cmd / Alt)
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    if (e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA' || (e.target.tagName === 'INPUT' && e.target.type !== 'range')) return;
+    if (e.key === ',' || e.key === '.') { e.preventDefault(); capture(e.key === '.'); }
+  });
+
   // ---- start ----------------------------------------------------------------------------
   // Call once the page has set its hooks and options. Resolves when the first frame is queued.
   // empty: start with an empty world and no species (the game: its script loads one and puts the
@@ -1542,7 +1665,7 @@ const Core = (function () {
   const core = {
     // constants
     q, R, DEBUG, BW, BH, WS, PX, CW, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
-    CH_NAMES, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
+    CH_NAMES, CH_COLORS, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
     // live objects (mutated in place)
     stats, md, opt, hooks,
     // the end-of-run banner's second line
@@ -1553,10 +1676,11 @@ const Core = (function () {
     start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt, pointerCell,
     pickChannel, setLayout, logicalPerCss,
     setDetectMode, setEveryObject, setRunning, revive, togglePlay, reset, changeSpeed, setSpeed, stepOnce, toggleHeadUp,
-    setZoom, setMaskR, setStars, setStarsFollow, starDrift,
+    setZoom, setMaskR, setStars, setStarsFollow, starDrift, capture,
   };
   // live state, read through getters (and set where a page may change it directly)
-  const rw = { channel: [() => channel, v => { channel = v; }], action: [() => action, v => { action = v; }] };
+  const rw = { channel: [() => channel, v => { channel = v; }], action: [() => action, v => { action = v; }],
+               fieldTool: [() => fieldTool, v => { fieldTool = v; }] };
   const ro = { running: () => running, status: () => status, steps: () => steps, dt: () => dt, pattern: () => pattern,
                focus: () => focus, focusIdx: () => focusIdx, kin: () => kin, spawnMass: () => spawnMass,
                found: () => found, masking: () => masking, tracks: () => tracks, wholeTracks: () => wholeTracks, speedIdx: () => speedIdx,
