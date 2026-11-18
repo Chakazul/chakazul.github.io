@@ -142,7 +142,7 @@
   // The progress a line's conditions show after ⧗ at its widest (CONDITIONS' t.progress), for fitMsg
   function progressSample(conds) {
     const PROG = { object: ([n]) => `morph: ${n}/${n}`, mass: ([, x]) => `mass: ${(+x).toFixed(1)}/${x}`,
-                   survive_time: ([s]) => `time: ${s}/${s}` };
+                   survive_time: ([s]) => `time: ${s}/${s}`, survive: ([n]) => n ? `time: 999/${n}` : 'time: 999' };
     return conds.filter(c => PROG[c.name]).map(c => ' ' + PROG[c.name](c.args)).join('');
   }
   function fitMsg() {
@@ -332,7 +332,7 @@
     const recs = book.mode === 'challenge' || (book.mode === 'species' && challenge.pending);
     const clearWhat = recs ? 'completion & best time' : 'data';
     if (!$('book-clear').classList.contains('done')) $('book-clear').textContent = `Hold to clear ${clearWhat}`;
-    $('book-clear').title = clearWhat === 'data' ? 'Hold for 3 seconds to clear every discovered morph and bullet, and the energy, from every run'
+    $('book-clear').title = clearWhat === 'data' ? 'Hold for 3 seconds to clear every discovered morph and pulse, and the energy, from every run'
       : book.mode === 'species' ? `Hold for 3 seconds to clear the completion and best times of ${challenge.pending.title}, with every species`
       : 'Hold for 3 seconds to clear the completion and best time of every challenge';
     if (book.mode === 'bullet') return renderBullets();
@@ -529,7 +529,7 @@
     if (at) pasteClone(at);
   }
 
-  // ---- world draw ([world_draw:on], the bullet types Nebula and Antimatter) -------------------
+  // ---- world draw ([world_draw], [add_bullet:nebula|antimatter]: the bullet types Nebula and Antimatter) -------------------
   // While one of them is in use (fieldMode) the player paints the R G B fields (field.js) with a
   // press in either view: the R G B patches pick the colour, the selected one again the tool (+
   // paintbrush, × soft brush, − eraser); the Zoom slider is Width (2 to 32 cells; the soft brush and the
@@ -537,7 +537,7 @@
   // selected colour's field emptied), Upward is Undo (the last stroke or Clear; again: redo it).
   // The bots don't fire meanwhile (their bullets' channel is a field).
   const fieldMode = () => !!Bullets.field;
-  SimGL.setFieldKeepsDots(MODE === 'challenge');   // challenge mode: the dots (its beacons, to be eaten) stay while drawing
+  SimGL.setFieldKeepsDots(true);   // the dots (and beacons, to be eaten) stay while drawing on the world
   C.opt.fieldTools = fieldMode;
   C.opt.worldPress = at => { if (!fieldMode()) return false; Field.begin(at, C.channel, C.fieldTool); return true; };
   C.opt.worldDrag = at => Field.move(at);
@@ -555,24 +555,20 @@
   const doClear = () => { flash('fire'); Field.clear(C.channel); };
   const doUndo = () => { if (Field.undo()) flash('headup'); };
   // A small picture of a field type for the bullet book: a soft cloud of the three colours (Nebula),
-  // or a dark disc with a faint violet rim (Antimatter)
+  // or the same in cyan, magenta and yellow (Antimatter)
   const fieldPics = new Map();
   function fieldPic(name) {
     if (!fieldPics.has(name)) {
       const n = 32, cv = document.createElement('canvas');
       cv.width = cv.height = n;
       const g = cv.getContext('2d');
-      if (name === 'Antimatter') {
-        const gr = g.createRadialGradient(n / 2, n / 2, 2, n / 2, n / 2, n / 2);
-        gr.addColorStop(0, 'rgba(10,6,20,1)'); gr.addColorStop(0.7, 'rgba(30,16,60,1)'); gr.addColorStop(1, 'rgba(140,90,255,0)');
+      // three soft blobs: Nebula's red, green, blue; Antimatter's cyan, magenta, yellow
+      const cols = name === 'Antimatter' ? ['0,255,255', '255,59,255', '255,255,59'] : ['255,59,59', '59,255,90', '59,123,255'];
+      [[11, 13], [21, 12], [16, 21]].forEach(([x, y], i) => {
+        const gr = g.createRadialGradient(x, y, 0, x, y, 12);
+        gr.addColorStop(0, `rgba(${cols[i]},.9)`); gr.addColorStop(1, `rgba(${cols[i]},0)`);
         g.fillStyle = gr; g.fillRect(0, 0, n, n);
-      } else {
-        for (const [x, y, c] of [[11, 13, '255,59,59'], [21, 12, '59,255,90'], [16, 21, '59,123,255']]) {
-          const gr = g.createRadialGradient(x, y, 0, x, y, 12);
-          gr.addColorStop(0, `rgba(${c},.9)`); gr.addColorStop(1, `rgba(${c},0)`);
-          g.fillStyle = gr; g.fillRect(0, 0, n, n);
-        }
-      }
+      });
       fieldPics.set(name, cv.toDataURL());
     }
     const img = new Image();
@@ -639,7 +635,7 @@
   }
   function renderBullets() {
     const create = bulletCredits() > 0;
-    setTitle(create ? [['Create', 'create'], ' or ', ['use', 'choose'], ' a bullet type'] : [['Use', 'choose'], ' a bullet type']);
+    setTitle(create ? [['Create', 'create'], ' or ', ['use', 'choose'], ' a pulse type'] : [['Use', 'choose'], ' a pulse type']);
     const have = Bullets.list, fields = Bullets.fieldKinds;   // (world draw: Nebula, Antimatter after the patterns, always usable)
     let nNew = 0;
     $('book-grid').replaceChildren(...Object.keys(Bullets.KINDS).concat(fields).map((name, slot) => {
@@ -659,7 +655,7 @@
         if (SLOT_KEYS.bullet[slot]) el.dataset.key = SLOT_KEYS.bullet[slot];
       } else if (create) {
         el.classList.add('pick', 'create');
-        el.title = 'Create this new bullet'; el.onclick = () => createBullet(name);
+        el.title = 'Create this new pulse'; el.onclick = () => createBullet(name);
         if (SLOT_KEYS.bullet[slot]) el.dataset.key = SLOT_KEYS.bullet[slot];
       }
       return el;
@@ -728,14 +724,16 @@
       }
       label.className = 'label';
       label.textContent = e.name || e.id;
-      if (ch) {   // challenge mode: this challenge's record with this species: a green tick at the left, the best time at the right
-        label.textContent = (e.name || e.id).replace(/^(\S)\S*\s+(?=\S)/, '$1. ');   // (the genus shortened: the name on one line, beside them)
-        const r = loadRecords()[recordKey(ch.id, e.id)], row = document.createElement('div'), tick = document.createElement('span'), best = document.createElement('span');
+      if (ch) {   // challenge mode: this challenge's record with this species, in a row of its own below the name: a green tick and the best time (blank: not completed yet)
+        const r = loadRecords()[recordKey(ch.id, e.id)], row = document.createElement('div');
         row.className = 'crow';
-        tick.className = 'tick'; tick.textContent = r && r.done ? '✓' : ''; if (r && r.done) tick.title = 'Completed';
-        best.className = 'best'; best.textContent = r && Number.isFinite(r.best) ? fmtTime(r.best) : '';
-        row.append(tick, label, best);
-        el.append(thumbs, row);
+        if (r && r.done) {
+          const tick = document.createElement('span'), best = document.createElement('span');
+          tick.className = 'tick'; tick.textContent = '✓'; tick.title = 'Completed';
+          best.className = 'best'; best.textContent = Number.isFinite(r.best) ? fmtTime(r.best) : '';
+          row.append(tick, best);
+        } else row.textContent = '\u00a0';   // (the row kept: every slot the same height)
+        el.append(thumbs, label, row);
         if (book.reveal && newRecord && newRecord.id === ch.id && newRecord.species === e.id) revealSlot(el, 0);   // the new record: revealed as it opens
       } else el.append(thumbs, label);
       el.title = `Choose ${e.name || e.id}`;
@@ -782,7 +780,8 @@
   // ([time_limit] ran out), 'energy' ([mask_cost] took it to 0); deadline: the step [time_limit]
   // ends at (null: none); maskCost: energy per game second of a press ([mask_cost])
   // dissolveFails: [dissolve:retry], a lost ship fails the challenge
-  const challenge = { list: [], cur: null, pending: null, last: null, t0: 0, failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, worldDrawCost: 0, dissolveFails: false };
+  // longest: the attempt waits on [need:survive], so its best time is its longest
+  const challenge = { list: [], cur: null, pending: null, last: null, t0: 0, failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, worldDrawCost: 0, dissolveFails: false, longest: false };
   // The challenge book's "Hold to clear completion & best time": every record goes (ticks, best times)
   // id: that challenge's records only (with every species); none: every record
   function clearCompletion(id = null) {
@@ -796,11 +795,12 @@
   }
   // The records are per challenge and species: "<name>:<n>@<species id>" -> { done, best }
   const recordKey = (id, species) => `${id}@${species}`;
-  // Challenge id completed with species in sec seconds: its record, saved (not with ?all=1)
-  function saveRecord(id, sec, species) {
+  // Challenge id completed with species in sec seconds: its record, saved (not with ?all=1); longest:
+  // the best is the longest time ([need:survive]), else the shortest
+  function saveRecord(id, sec, species, longest = false) {
     const r = loadRecords(), key = recordKey(id, species), o = r[key] || {}, first = !o.done;
     o.done = true;
-    if (!Number.isFinite(o.best) || sec < o.best) o.best = sec;
+    if (!Number.isFinite(o.best) || (longest ? sec > o.best : sec < o.best)) o.best = sec;
     r[key] = o;
     if (!ALL) {
       try { localStorage.setItem(CHALLENGE_KEY, JSON.stringify(r)); }
@@ -902,6 +902,7 @@
       retake = true; cand = null;
       challenge.cur = challenge.last = c;
       freshAttempt();
+      challengeMsgs = { success: null, fail: {} };   // (each challenge its own: the defaults, then its header)
       runChallengeDefaults();
       useMorph = morph;
       speciesFading = false;
@@ -918,7 +919,7 @@
   // from 0, the time from now
   function freshAttempt() {
     hiddenMorphs.clear(); for (const k of baseHidden) hiddenMorphs.add(k);   // (the hidden morphs as the set-up left them: a challenge's [hide_morph] is its own)
-    Object.assign(challenge, { failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, worldDrawCost: 0, t0: C.simSteps });
+    Object.assign(challenge, { failed: null, deadline: null, maskCost: 0, eraseCost: 0, drawCost: 0, worldDrawCost: 0, longest: false, t0: C.simSteps });
     bulletCost = 0; cloneCost = 0;   // ([bullet_cost], [clone_cost] too: each challenge sets its own costs)
     energyHidden = false;   // (and shows the energy, unless [energy:off] again)
     energy = 0; showEnergy();
@@ -937,6 +938,7 @@
     setTimeout(() => {
       Dots.clear(); Bullets.clear(); Hostile.clear();
       freshAttempt();
+      challengeMsgs = { success: null, fail: {} };   // (each challenge its own: the defaults, then its header)
       runChallengeDefaults();
       speciesFading = false;
       useMorph = playerMorph;
@@ -949,12 +951,18 @@
   }
   // The challenge being played fails (why: see challenge.failed): "Failed" in the ship view, with
   // Respawn and Choose (lostShown); the script stops waiting
-  const FAIL_TEXT = { lost: 'the ship dissolved', time: "time's up", energy: 'out of energy' };
+  const FAIL_TEXT = { lost: 'the ship dissolved', time: "time's up", energy: 'out of energy', short: 'the ship dissolved too soon' };
+  // [success_msg], [fail_msg]: the challenge's own messages (null: the defaults), set afresh for each
+  // attempt (before [on_challenge_default] and the challenge's lines run again); {title}, {time},
+  // {best} filled in (fillMsg)
+  let challengeMsgs = { success: null, fail: {} };
+  const fillMsg = (tpl, v) => tpl.replace(/\{(title|time|best)\}/g, (_, k) => v[k] ?? '').replace(/\s+$/, '');
   function failChallenge(why) {
     if (!challenge.cur || challenge.failed) return;
     challenge.failed = why;
     tests = []; progress = null; deferred = -1;
-    say(`_${challenge.cur.title}_ failed: ${FAIL_TEXT[why]}.`);
+    const tpl = challengeMsgs.fail[why] ?? `_{title}_ failed: ${FAIL_TEXT[why]}.`;
+    say(fillMsg(tpl, { title: challenge.cur.title, time: fmtTime((C.simSteps - challenge.t0) / C.STEPS_PER_S) }));
     syncButtons();
   }
   // Each frame, during a challenge: a lost ship fails it ([dissolve:retry]); [time_limit] runs out; [mask_cost] spends
@@ -967,20 +975,22 @@
     const t = performance.now(), dtS = drawCostAt ? Math.min(0.25, (t - drawCostAt) / 1000) : 0; drawCostAt = t;
     showTimer();
     if (!c || challenge.failed || chapterShowing() || speciesFading) return;
-    if (challenge.dissolveFails && shipLost() && !emptySpace) return failChallenge('lost');
+    const surv = tests.find(t => t.survive)?.survive;   // [need:survive]: the ship lost is the goal, if it lasted long enough
+    if (surv && shipLost() && !emptySpace && surv.lasted() < surv.need) return failChallenge('short');
+    if (challenge.dissolveFails && shipLost() && !emptySpace && !surv) return failChallenge('lost');
     if (challenge.deadline !== null && now >= challenge.deadline) return failChallenge('time');
     // the press's cost by its action: mask, erase or draw ([mask_cost], [erase_cost], [draw_cost])
     const costs = [challenge.maskCost, challenge.eraseCost, challenge.drawCost];
     if (costs.some(x => x > 0)) {
       const cost = costs[C.action] || 0;
       if (C.masking && dn > 0 && cost > 0) changeEnergy(-cost * dn / C.STEPS_PER_S);
-      if (energy <= 0) return failChallenge('energy');
+      if (energy <= 0 && !surv) return failChallenge('energy');   // ([need:survive]: play on at 0)
     }
     // [world_draw_cost]: a stroke of Nebula / Antimatter's paintbrush or soft brush held (not the
     // eraser), per real second (drawing works while paused too)
     if (challenge.worldDrawCost > 0) {
       if (fieldMode() && Field.active && Field.tool !== 2 && dtS > 0) changeEnergy(-challenge.worldDrawCost * dtS);
-      if (energy <= 0) return failChallenge('energy');
+      if (energy <= 0 && !surv) return failChallenge('energy');   // ([need:survive]: play on at 0)
     }
   }
   // [mask_cost], [erase_cost], [draw_cost]: energy per game second of a press with that action
@@ -1008,9 +1018,12 @@
     challenge.cur = null; line = -1; tests = []; progress = null;
     challenge.deadline = null; challenge.maskCost = challenge.eraseCost = challenge.drawCost = challenge.worldDrawCost = 0;
     showSuccess(true);   // (challenge mode: only here, at its end)
-    const r = saveRecord(c.id, sec, chosenSpecies);
+    const longest = challenge.longest;   // ([need:survive]: the longer the better)
+    const r = saveRecord(c.id, sec, chosenSpecies, longest);
     newRecord = r.best === sec ? { id: c.id, species: chosenSpecies } : null;   // its species book reveals the slot
-    say(`_${c.title}_ completed in ${fmtTime(sec)}` + (r.best < sec ? ` (best ${fmtTime(r.best)})` : r.first ? ' (new completion!)' : r.best === sec ? ' (new record!)' : ''));
+    const best = r.best !== sec ? `(best ${fmtTime(r.best)})` : r.first ? '(new completion!)' : '(new record!)';
+    const tpl = challengeMsgs.success ?? `_{title}_ ${longest ? 'survived for' : 'completed in'} {time} {best}`;
+    say(fillMsg(tpl, { title: c.title, time: fmtTime(sec), best }));
     setTimeout(() => { if (!challenge.cur && !book.open && !speciesFading) openChallengeBook(c); }, SUCCESS_MS);   // its species book (the record just made; Back: the challenge book)
   }
   // the line after a challenge's last, or the script's end
@@ -1359,13 +1372,15 @@
       const cv = document.createElement('canvas');
       cv.width = cv.height = n;
       const g = cv.getContext('2d');
-      const x0 = Math.round(C.wxp(f.col) - n / 2), y0 = Math.round(C.wyp(f.row) - n / 2);   // (the world view's place: shifted in a scrolling world)
-      for (const dx of [-W, 0, W]) for (const dy of [-H, 0, H]) {   // the world view's copies round the torus
-        const sx = x0 + dx, sy = y0 + dy;
-        const ax = Math.max(0, sx), ay = Math.max(0, sy), bx = Math.min(W, sx + n), by = Math.min(H, sy + n);
-        if (bx > ax && by > ay) g.drawImage($('gl'), ax, ay, bx - ax, by - ay, ax - sx, ay - sy, bx - ax, by - ay);
-      }
-      return cv.toDataURL();
+      return SimGL.withoutField(() => {
+        const x0 = Math.round(C.wxp(f.col) - n / 2), y0 = Math.round(C.wyp(f.row) - n / 2);   // (the world view's place: shifted in a scrolling world)
+        for (const dx of [-W, 0, W]) for (const dy of [-H, 0, H]) {   // the world view's copies round the torus
+          const sx = x0 + dx, sy = y0 + dy;
+          const ax = Math.max(0, sx), ay = Math.max(0, sy), bx = Math.min(W, sx + n), by = Math.min(H, sy + n);
+          if (bx > ax && by > ay) g.drawImage($('gl'), ax, ay, bx - ax, by - ay, ax - sx, ay - sy, bx - ax, by - ay);
+        }
+        return cv.toDataURL();   // (taken with the world-draw field left out: SimGL.withoutField)
+      });
     } catch (e) { return null; }
   }
 
@@ -1395,14 +1410,15 @@
   const speciesBlocks = new Map();   // [on_start[:<id>]] blocks: id ('' = any species) -> its lines
   // A species chosen (the species book, to come; [choose_species:<id>]): load it ([species], with
   // its [add_allow_species] name), make its morphs visible ([allow_morph], its [add_allow_species]
-  // list), then run the actions of its [on_start:<id>] block, or else of the general one, in
-  // order and at once (no waiting: a block holds actions only).
+  // list), then run the actions of the general [on_start] block, then of its own [on_start:<id>]
+  // block (which may change what the general one set), in order and at once (no waiting: a block
+  // holds actions only).
   function chooseSpecies(id) {
     const e = visSpecies.find(x => x.id === id);
     if (!e) return console.warn(`script.txt: [choose_species:${id}]: not added by [add_allow_species]`);
     ACTIONS.species(e.name, id);
     ACTIONS.allow_morph(e.morphs.join(','));
-    for (const L of speciesBlocks.get(id) ?? speciesBlocks.get('') ?? [])
+    for (const L of (speciesBlocks.get('') ?? []).concat(speciesBlocks.get(id) ?? []))
       for (const a of L.actions) ACTIONS[a.name](...a.args);
     if (settingsOn) applyObjects();   // the Objects slider's [min_morph:<n>], over the block's
     retake = true; cand = null;   // a fresh world: the morph's picture may be retaken (the sandbox's start too)
@@ -1554,6 +1570,7 @@
     // shows it again (challenge mode: a new attempt too)
     energy: (v) => {
       if (v === 'off') { energyHidden = true; showEnergy(); return; }
+      if (v === 'on') { energyHidden = false; showEnergy(); return; }   // (shown, unchanged)
       const n = parseFloat(v);
       if (!Number.isFinite(n)) return console.warn(`script.txt: bad value [energy:${v}], ignored`);
       energyHidden = false;
@@ -1625,20 +1642,24 @@
       target = null;
       if (!BACKGROUNDS.includes(bg)) { console.warn(`script.txt: unknown background [clear_world:${bg}], using black`); bg = 'black'; }
       background = bg;
-      minMorph = null;   // a new scene: no [min_morph] until the script sets one again
+      minMorph = null; minHostile = null;   // a new scene: no [min_morph] nor [min_hostile] until the script sets one again
       if (Dots.on) { Dots.set(0); Dots.clear(); }   // nor dots (none put back) until a [dot:<n>]; the energy kept
       Bullets.clear();   // nor bullets in flight
       bots = []; Hostile.clear();   // nor bots, nor their bullets
       Field.reset();   // nor anything drawn ([world_draw])
       C.clearWorld();
     },
-    // world_draw:on|off: offer the bullet types Nebula and Antimatter (after the patterns in the
-    // bullet book; the gun must be on) or not (the default; off also empties the fields): in use,
-    // the player paints the world's R G B fields instead of firing (see fieldMode)
-    world_draw: (v = 'on') => {
-      if (v !== 'on' && v !== 'off') return console.warn(`script.txt: unknown option [world_draw:${v}], ignored`);
-      if (v === 'off') Field.reset();
-      Bullets.setWorldDraw(v === 'on');
+    // world_draw:on|off|nebula|antimatter: put the bullet types Nebula and / or Antimatter (on: both;
+    // ',' or ':' between) into the bullet book, quietly (after the patterns; the gun must be on),
+    // or take both out (off, which also empties the fields; neither is in the book by default). In
+    // use, the player paints the world's R G B fields instead of firing (see fieldMode).
+    // [add_bullet:nebula|antimatter] puts one in with the book's reveal instead (the story).
+    world_draw: (...args) => {
+      const ts = args.flatMap(a => a.split(',')).map(t => t.trim().toLowerCase()).filter(Boolean);
+      if (!ts.length) ts.push('on');
+      if (ts.includes('off')) { Field.reset(); Bullets.setWorldDraw(null); return; }
+      const names = ts.flatMap(t => t === 'on' ? ['nebula', 'antimatter'] : [t]);
+      if (!Bullets.setWorldDraw(names)) console.warn(`script.txt: unknown option [world_draw:${args.join(':')}], ignored`);
     },
     // put_morph:<id>[:center|random|far]: put morph <id> of the current species into the world:
     // at the centre (default, unrotated), at a random empty spot and angle (the lab's Add), or at
@@ -1726,6 +1747,25 @@
       if (!settingsOn && book.open && book.mode === 'settings') closeBook();
       syncButtons();
     },
+    // success_msg:<text>: (challenge mode) the message when this challenge is completed, in place of
+    // "_{title}_ completed in {time} {best}" ("survived for", waiting on [need:survive]); {title}, {time}
+    // (as 1m 12s) and {best} ("(best …)", "(new completion!)" or "(new record!)") are filled in. A ':'
+    // in the text is kept (as ': '). No text: back to the default. Set afresh for each attempt.
+    success_msg: (...text) => { challengeMsgs.success = text.join(': ') || null; },
+    // fail_msg:<cause>:<text>: (challenge mode) the message when this challenge fails by <cause> (lost,
+    // short, time, energy: see FAIL_TEXT), in place of "_{title}_ failed: <reason>."; {title} and {time}
+    // (so far) filled in. No text: back to the default.
+    fail_msg: (cause, ...text) => {
+      if (!FAIL_TEXT[cause]) return console.warn(`script.txt: unknown cause [fail_msg:${cause}] (${Object.keys(FAIL_TEXT).join(', ')}), ignored`);
+      if (text.join('')) challengeMsgs.fail[cause] = text.join(': '); else delete challengeMsgs.fail[cause];
+    },
+    // view_damping:<s>: (the scrolling world) smooth the world view's following of the ship over s game
+    // seconds more (0 or no value: the default, close following); see moveCamera
+    view_damping: (s) => {
+      const v = s === undefined || s === 'off' ? 0 : parseFloat(s);
+      if (!(v >= 0)) return console.warn(`script.txt: bad value [view_damping:${s}], ignored`);
+      camDamp = v;
+    },
     // put_hostile:[<n>:]<morphs>[:center|random|far][:<bullet>]: put n bots (default 1) into the
     // world, each a morph picked at random from <morphs> (names, ',' between) of the current
     // species (those it lacks are left out), placed as put_morph's (default random; center: the
@@ -1743,12 +1783,27 @@
       if (!Hostile.set(bullet)) { console.warn(`script.txt: unknown bullet [put_hostile:...:${bullet}], using Scutium`); Hostile.set('Scutium'); }
       const pool = morphIds([ids]).filter(id => findMorph(id));
       if (!pool.length) return console.warn(`script.txt: [put_hostile:${ids}]: none of these morphs is in the species`);
-      for (let k = 0; k < n; k++) {
-        C.selectMorph(findMorph(pool[Math.floor(Math.random() * pool.length)]).id);
-        const at = C.putPattern(k > 0 && how === 'center' ? 'random' : creatureHow(how), 'never');
-        bots.push({ col: at[0], row: at[1], radius: C.R, next: C.simSteps + Math.round(botWait.first * C.STEPS_PER_S) + botDelay(), seen: C.simSteps, live: true });
+      for (let k = 0; k < n; k++) putBot(pool[Math.floor(Math.random() * pool.length)], k > 0 && how === 'center' ? 'random' : creatureHow(how));
+    },
+    // min_hostile:<n>[:<morphs>[:center|random|far]][:<bullet>]: keep at least n bots on the board, as
+    // [min_morph] keeps creatures: whenever there are fewer (bots dissolved, shot, or dropped), put in
+    // one more, as [put_hostile] (a morph picked at random from <morphs>, names with ',' between,
+    // default or all: the visible list; placed by how, default random; at most one every half game
+    // second), firing <bullet> (default Scutium; one for all bots, as [put_hostile]'s). n = 0 or off:
+    // stop. [clear_world] turns it off too.
+    min_hostile: (n, ...args) => {
+      const k = parseInt(n, 10);
+      if (n === 'off' || k === 0) { minHostile = null; return; }
+      if (!(k > 0)) return console.warn(`script.txt: bad value [min_hostile:${n}], ignored`);
+      let [ids = '', how = 'random', bullet = 'Scutium'] = args;
+      if (!PUT_HOW.includes(how)) {
+        if (args.length === 2 && Bullets.kindOf(how)) { bullet = how; how = 'random'; }   // [min_hostile:<n>:<morphs>:<bullet>]
+        else { console.warn(`script.txt: unknown option [min_hostile:...:${how}], using random`); how = 'random'; }
       }
-      botsFound = null;
+      if (!Hostile.set(bullet)) { console.warn(`script.txt: unknown bullet [min_hostile:...:${bullet}], using Scutium`); Hostile.set('Scutium'); }
+      const ids2 = ids === 'all' || !ids ? [] : morphIds([ids]);
+      if (ids2.length && !ids2.some(id => findMorph(id))) console.warn(`script.txt: [min_hostile:${n}:${ids}]: none of these morphs is in the species`);
+      minHostile = { n: k, ids: ids2, how, next: 0, puts: 0 };
     },
     // dot:<n>|off: the dots channel (dots.js): keep <n> dots on the board, which any creature
     // eats; the player's ship eating one scores 10 (the score shows at the top, from 0 when the
@@ -1767,49 +1822,59 @@
       if (!PUT_HOW.includes(how)) { console.warn(`script.txt: unknown option [dot:${v}:${how}], using random`); how = 'random'; }
       Dots.set(n, how);
     },
-    // beacon:<pattern>[:<n>][:center|random|far|extended[:<d>]]: put one <pattern> (Heptadentium) in
-    // the dots channel (instead of the round dots: the channel takes its rule), placed by how
-    // (default random; extended: out of the view, in a scrolling world; <d>: d R from the ship).
-    // Eaten by the ship, it gives n energy (default 10); not replaced ([need:clear_dot] waits for it).
-    // In challenge mode beacons stay put (the round dots drift with the star field).
-    beacon: (v, ...rest) => {
-      if (!Dots.patternKey(v)) return console.warn(`script.txt: unknown beacon pattern [beacon:${v}], ignored`);
-      const points = rest.length && /^\d+(\.\d+)?$/.test(rest[0]) ? parseFloat(rest.shift()) : undefined;
-      let how = rest[0] ?? 'random';
-      if (!PUT_HOW.includes(how)) { console.warn(`script.txt: unknown option [beacon:${v}:${how}], using random`); how = 'random'; }
-      const dist = rest[1] !== undefined ? parseFloat(rest[1]) : undefined;
-      if (rest[1] !== undefined && !(dist > 0)) console.warn(`script.txt: bad distance [beacon:${v}:…:${rest[1]}], ignored`);
-      if (!Dots.put(v, how, points, dist > 0 ? dist : undefined)) console.warn(`script.txt: [beacon:${v}:${how}]: no clear spot found`);
-    },
+    // beacon:<patterns>[:<n>][:center|random|far|extended[:<d>]]: put one beacon in the dots channel
+    // (instead of the round dots: the channel takes its rule): a pattern picked at random from
+    // <patterns> (names, ',' between; all: every one, dots.js PATTERNS), or the one the beacons on
+    // the board already are, if listed (the channel runs one rule at a time: another would empty
+    // it), placed by how (default random; extended: out of the view, in a scrolling world; <d>: d R
+    // from the ship). Eaten by the ship, it gives n energy (default 10); not replaced
+    // ([need:clear_dot] waits for it). In challenge mode beacons stay put (the round dots drift with
+    // the star field).
+    beacon: (list, ...rest) => putBeacon('beacon', list, rest, false),
+    // keep_beacon:…: as beacon, but once the ship eats it another is put in at a new spot (by the same
+    // how, the same energy), a pattern picked afresh from the list (dots.js put), again and again
+    // ([need:clear_beacon] never completes)
+    keep_beacon: (list, ...rest) => putBeacon('keep_beacon', list, rest, true),
     // gun[:<options>]: the player's gun (bullets.js): C or Fire shoots the pattern in use, which
     // masks (or erases) the creatures it hits while they wear it down. Options, any order:
     // off, erase|mask, rgb|r|g|b|color_now, wear_color|wear_all (defaults mask, color_now, wear_color).
     gun: (...options) => Bullets.setGun(options),
+    // hostile_gun[:<options>]: the bots' bullets' own settings ([put_hostile], [min_hostile]): [gun]'s
+    // options (mask | erase, rgb | r | g | b | color_now, wear_color | wear_all; off: the bots hold
+    // fire, on: they fire again); follow, or none: as the player's [gun] (the default). Kept until changed.
+    hostile_gun: (...options) => Hostile.setGun(options),
     // bullet_mutual:none|wear|masking: the player's and the bots' bullets together: apart (none, the
     // default), or each wearing the other down where they overlap (wear: shots meeting cancel out);
     // masking: not built yet (as none)
-    bullet_mutual: (v = 'none') => {
+    // wear:<k>: the rate, a multiple of the bullets' own wear rate (0.03, ?bwear=; default 1)
+    bullet_mutual: (v = 'none', k) => {
       if (v === 'masking') { console.warn('script.txt: [bullet_mutual:masking] is not built yet: none'); v = 'none'; }
       if (v !== 'none' && v !== 'wear') return console.warn(`script.txt: unknown option [bullet_mutual:${v}], ignored`);
-      SimGL.setBulletMutual(v);
+      let rate = k === undefined ? 1 : parseFloat(k);
+      if (!(rate >= 0)) { console.warn(`script.txt: bad rate [bullet_mutual:${v}:${k}], using 1`); rate = 1; }
+      SimGL.setBulletMutual(v, rate);
     },
     // bullet:… (the old name): as add_bullet
     bullet: (...args) => { console.warn('script.txt: [bullet] is now [add_bullet]'); return ACTIONS.add_bullet(...args); },
     // add_bullet:<names>[:<name>]: the patterns the gun can fire: add names (separated by commas),
-    // random (one more at random), all, or clear (none); then equip <name> (added too if not
-    // listed). With two or more, ◀ ▶ (D / F) switch between them. The patterns it adds are shown:
+    // random (one more at random), all, or clear (none); nebula / antimatter put that world-draw
+    // type in the book ([world_draw]); then equip <name> (added too if not listed). With two or more, ◀ ▶ (D / F) switch between them. The patterns it adds are shown:
     // the bullet book opens and reveals them (not when replayed: [jump_here], Reset, I).
     add_bullet: (names = '', equip) => {
-      const before = Bullets.list;
+      const before = Bullets.choices;   // (the world-draw types too, revealed as the patterns)
       Bullets.setList(names, equip);
-      const added = Bullets.list.filter(n => !before.includes(n));
+      const added = Bullets.choices.filter(n => !before.includes(n));
+      const fieldsAdded = added.filter(n => Bullets.fieldKinds.includes(n));   // (free, never saved)
       // all: for testing, kept out of the central inventory (patterns named, or random, are saved)
       if (names.split(',').some(t => t.trim().toLowerCase() === 'all')) {
         const named = names.split(',').map(t => t.trim()).concat(equip ? [equip.trim()] : []).map(Bullets.kindOf);
         for (const n of added) if (!named.includes(n)) unsavedBullets.add(n);
       }
-      payBullets(added.filter(n => !unsavedBullets.has(n)).length);   // each costs [new_bullet]'s price, as a created one ([bullet:all]'s extras free)
-      if (!replaying && added.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(added);
+      payBullets(added.filter(n => !unsavedBullets.has(n) && !fieldsAdded.includes(n)).length);   // each costs [new_bullet]'s price, as a created one ([bullet:all]'s extras free)
+      // Antimatter / Nebula named: revealed even if the book had them already ([world_draw], free)
+      const named = names.split(',').concat(equip ?? []).map(t => t.trim().toLowerCase());
+      const shown = added.concat(Bullets.fieldKinds.filter(n => !added.includes(n) && named.includes(n.toLowerCase())));
+      if (!replaying && shown.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(shown);
     },
     // bullet_limit:<x>: the bullets channel is emptied once it holds more than x bullets' worth of
     // mass (bullets run into each other and grow); default 8
@@ -1951,6 +2016,18 @@
     // respawn: the ship has dissolved and the player has put it back, by Respawn (Z) or Choose (a
     // pick in the morph book), since the line was reached
     respawn: () => { const n0 = respawns; return () => respawns > n0; },
+    // draw:<x>: the player has painted at least x g of mass into the world's R G B fields (Nebula
+    // or Antimatter, [world_draw]; all three together) since the line was reached: what the
+    // paintbrush and soft brush add (cell values summed / R², as [need:mass]); the eraser, Clear
+    // and Undo don't take it back. Progress: "draw: <mass>/<x>", one decimal.
+    draw: (x) => {
+      const v = parseFloat(x);
+      if (!(v >= 0)) { console.warn(`script.txt: bad value [need:draw:${x}], ignored`); return () => true; }
+      const d0 = Field.drawn, m = () => (Field.drawn - d0) / (C.R * C.R);
+      const t = () => m() >= v;
+      t.progress = () => `draw: ${Math.min(v, m()).toFixed(1)}/${v}`;
+      return t;
+    },
     // create_bullet: the player has created a bullet type (Create, then a "?" in the bullet book)
     // since the line was reached ([new_bullet] must allow one)
     create_bullet: () => { const n0 = bulletsCreated; return () => bulletsCreated > n0; },
@@ -2010,11 +2087,29 @@
       t.progress = () => `time: ${Math.min(v, Math.floor(n / C.STEPS_PER_S))}/${v}`;
       return t;
     },
+    // survive[:<n>]: the ship dissolves (or is otherwise lost) after the line is reached, having
+    // lasted at least n game seconds (default 0): a success, not a failure (in challenge mode,
+    // [dissolve:retry] doesn't fail it meanwhile); lost sooner: in challenge mode it fails the
+    // challenge (challengeFrame), elsewhere the line waits on. The time: the challenge's (from the
+    // attempt's start, or the last respawn), elsewhere from when the line was reached. A challenge
+    // that waits on it keeps its longest time as its best (challenge.longest). Progress: "time:
+    // <t>/<n>" (no n: "time: <t>"), game seconds (paused time not counting).
+    survive: (x) => {
+      const v = x === undefined ? 0 : parseFloat(x);
+      if (!(v >= 0)) { console.warn(`script.txt: bad value [need:survive:${x}], using 0`); }
+      const need = v >= 0 ? v : 0;
+      if (challenge.cur) challenge.longest = true;
+      const n0 = C.simSteps;
+      const lasted = () => (C.simSteps - (challenge.cur ? challenge.t0 : n0)) / C.STEPS_PER_S;
+      const t = () => shipLost() && !emptySpace && lasted() >= need;
+      t.survive = { need, lasted };
+      t.progress = () => need > 0 ? `time: ${Math.floor(lasted())}/${need}` : `time: ${Math.floor(lasted())}`;   // (counting on past n)
+      return t;
+    },
     // clear_beacon: every beacon ([beacon]) eaten by the player's ship (one eaten by another creature,
     // or worn away, is put back nearby: dots.js respawnNear). Progress: "left: <n>".
     clear_beacon: () => {
       const t = () => Dots.beaconCount() === 0;
-      t.progress = () => `left: ${Dots.beaconCount()}`;
       return t;
     },
     // clear_dot: the dots channel holds nothing (every dot or pattern eaten; dots off counts too).
@@ -2232,11 +2327,12 @@
   }
   // (challenge mode: the challenge's end completes it)
   function next() {
+    if (challenge.failed) return;   // (a failed challenge goes nowhere until a retry: Space / a click must not move it on, nor complete it)
     if (line + 1 < scriptEnd()) run(line + 1);
     else if (challenge.cur) completeChallenge();
   }
   // Space / a click on the message bar moves on: a message with no condition
-  const byContinue = () => deferred < 0 && line >= 0 && SCRIPT[line].msg && !tests.length;
+  const byContinue = () => deferred < 0 && line >= 0 && SCRIPT[line].msg && !tests.length && !challenge.failed;
   // ?dev=1: O completes the waiting line's [need] conditions at once (a line waiting only on an
   // action, a chapter card, is left alone); P scores as if the ship ate a dot (+10 energy); I goes
   // to the next chapter
@@ -2330,6 +2426,45 @@
   function fadeWorld(to, ms = WORLD_FADE_MS) { worldFade = { from: worldShade(), to, t0: performance.now(), ms }; }
   let sceneHidden = false;   // faded out by [new_scene]: the next message fades the views back in
   C.opt.worldShade = worldShade;
+
+  // [beacon] / [keep_beacon] (tag; keep: put in afresh once the ship eats it): see beacon
+  function putBeacon(tag, list, rest, keep) {
+    const names = list.split(',').map(t => t.trim()).filter(Boolean);
+    const all = names.some(t => t.toLowerCase() === 'all'), named = names.filter(t => t.toLowerCase() !== 'all');
+    const bad = named.filter(t => !Dots.patternKey(t));
+    if (bad.length) console.warn(`script.txt: unknown beacon pattern [${tag}:${bad.join(',')}], ignored`);
+    const ok = all ? Dots.PATTERN_KEYS : named.map(t => Dots.patternKey(t)).filter(Boolean);
+    if (!ok.length) return;
+    const v = Dots.beaconCount() > 0 && ok.includes(Dots.kind) ? Dots.kind : ok[Math.floor(Math.random() * ok.length)];
+    const points = rest.length && /^\d+(\.\d+)?$/.test(rest[0]) ? parseFloat(rest.shift()) : undefined;
+    let how = rest[0] ?? 'random';
+    if (!PUT_HOW.includes(how)) { console.warn(`script.txt: unknown option [${tag}:${v}:${how}], using random`); how = 'random'; }
+    const dist = rest[1] !== undefined ? parseFloat(rest[1]) : undefined;
+    if (rest[1] !== undefined && !(dist > 0)) console.warn(`script.txt: bad distance [${tag}:${v}:…:${rest[1]}], ignored`);
+    if (!Dots.put(v, how, points, dist > 0 ? dist : undefined, keep ? ok : null)) console.warn(`script.txt: [${tag}:${v}:${how}]: no clear spot found`);
+  }
+  // A bot ([put_hostile], [min_hostile]): morph id put in by how (creatureHow's), never followed,
+  // firing after the first wait
+  function putBot(id, how) {
+    C.selectMorph(findMorph(id).id);
+    const at = C.putPattern(how, 'never');
+    bots.push({ col: at[0], row: at[1], radius: C.R, next: C.simSteps + Math.round(botWait.first * C.STEPS_PER_S) + botDelay(), seen: C.simSteps, live: true });
+    botsFound = null;
+  }
+  // ---- [min_hostile] ------------------------------------------------------------------------
+  // Each frame: fewer bots than minHostile.n -> put one more in (as checkMinMorph, at most one every
+  // MIN_MORPH_STEPS; its how places the first n, a scrolling world's later ones come in at its edges)
+  let minHostile = null;   // { n, ids (none: the visible list), how, next, puts }
+  function checkMinHostile() {
+    if (!minHostile || !C.found || C.simSteps < minHostile.next || bots.length >= minHostile.n) return;
+    const pool = (minHostile.ids.length ? minHostile.ids : visibleList()).filter(id => findMorph(id));
+    if (!pool.length) return;
+    const first = minHostile.puts < minHostile.n;
+    const how = scroll && !first ? scrollRefill(C.R) || minHostile.how : minHostile.how;
+    putBot(pool[Math.floor(Math.random() * pool.length)], creatureHow(how));
+    minHostile.puts++;
+    minHostile.next = C.simSteps + MIN_MORPH_STEPS;
+  }
 
   // ---- [min_morph] ------------------------------------------------------------------------
   // Each frame: fewer creatures than minMorph.n besides the ship -> put one more in. At most one
@@ -2513,18 +2648,26 @@
   // (core kin.vel, as the arrow: no lag behind a moving ship), then closes CAM_TAU_STEPS of the gap
   // (game steps: as fast at any speed; also CAM_TAU_S real seconds, so it settles while paused); a
   // gap over CAM_SNAP R (a respawn elsewhere, a new scene) is jumped at once.
+  // [view_damping:<s>] (camDamp, game seconds; 0, the default: as above): the velocity the view moves
+  // with is itself smoothed over s (camV, an exponential average of the ship's), and the gap closes s
+  // more slowly, so a ship that zigzags or wobbles fast (HAESRE zigzag) no longer shakes the world: the
+  // view follows its mean course, the ship swinging about the middle.
   const CAM_TAU_STEPS = 20, CAM_TAU_S = 1, CAM_SNAP = 3;
-  let camT = 0, camSteps = 0;
+  let camT = 0, camSteps = 0, camDamp = 0, camV = null;
   function moveCamera(sh) {
     const now = performance.now(), dtS = camT ? Math.min(0.25, (now - camT) / 1000) : 0, dn = C.simSteps - camSteps;
     camT = now; camSteps = C.simSteps;
     let gx = C.wrapD(sh.col - scroll.bx, C.BW), gy = C.wrapD(sh.row - scroll.by, C.BH);
     let mx, my;
-    if (Math.hypot(gx, gy) > CAM_SNAP * C.R || !scroll.cam) { mx = gx; my = gy; }   // jump (and the first frame)
+    const v0 = sh.kin ? sh.kin.vel : [0, 0];
+    if (Math.hypot(gx, gy) > CAM_SNAP * C.R || !scroll.cam) { mx = gx; my = gy; camV = v0.slice(); }   // jump (and the first frame)
     else {
-      const v = sh.kin ? sh.kin.vel : [0, 0], px = v[0] * C.dt * dn, py = v[1] * C.dt * dn;   // the ship's own motion since the last frame
+      const ds = camDamp * C.STEPS_PER_S;   // (in steps)
+      if (!camV || !ds) camV = v0.slice();
+      else { const b = 1 - Math.exp(-dn / ds); camV[0] += b * (v0[0] - camV[0]); camV[1] += b * (v0[1] - camV[1]); }
+      const v = camV, px = v[0] * C.dt * dn, py = v[1] * C.dt * dn;   // the ship's own motion since the last frame (damped: its mean)
       gx -= px; gy -= py;
-      const a = 1 - Math.exp(-(dn / CAM_TAU_STEPS + dtS / CAM_TAU_S));
+      const a = 1 - Math.exp(-(dn / (CAM_TAU_STEPS + ds) + dtS / (CAM_TAU_S + camDamp)));
       mx = px + a * gx; my = py + a * gy;
     }
     scroll.cam = true;
@@ -2631,7 +2774,7 @@
   // (none: anywhere), from the object as a whole (its centre and reach: a twin fires as one); not
   // under a card, in a species fade, or after a failure
   function botsFire() {
-    if (!bots.length || !Hostile.on || fieldMode() || chapterShowing() || speciesFading || challenge.failed) return;
+    if (!bots.length || !Hostile.on || chapterShowing() || speciesFading || challenge.failed) return;
     const now = C.simSteps, ship = C.ship();
     for (const o of hostileObjects()) {
       if (now < Math.min(...o.bots.map(b => b.next))) continue;
@@ -2868,7 +3011,7 @@
     syncNew();   // the list changed: as many more creatable?
     saveInventory();   // (a pattern added: into the central inventory)
     if (book.open && book.mode === 'bullet') { if (Bullets.on) renderBook(); else closeBook(); }
-    $('fire').title = (fm ? 'Clear the selected colour\'s field (A)' : 'Fire a bullet the way the ship moves (A)') + (many ? '; D / F: the previous / next type' : '');
+    $('fire').title = (fm ? 'Clear the selected colour\'s field (A)' : 'Fire a pulse the way the ship moves (A)') + (many ? '; D / F: the previous / next type' : '');
     if (!fm) Field.end();
   };
   C.hooks.frame = () => {
@@ -2885,12 +3028,26 @@
       $('fire').style.setProperty('--fire', rgb); $('bullet-nav').style.setProperty('--fire', rgb);   // (< > too)
     }
     if (C.action === 2 && !drawOn()) C.action = 0;   // (draw no longer allowed: the species changed)
+    syncToolNames();
     Field.tick();
     autospawnFrame();
-    scrollFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostPanel()) syncButtons();
+    scrollFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostPanel()) syncButtons();
     const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()]; };
 
   // ---- controls ---------------------------------------------------------------------------
+  // The tool in use, by name, in italic: the ship's (C.action) at the ship view's lower left while
+  // a ship is there; drawing on the world (fieldMode), the brush (C.fieldTool) at the world view's
+  // lower right instead; both in the selected channel's colour
+  const SHIP_TOOLS = ['Masking', 'Erasing', 'Drawing'], FIELD_TOOLS = ['Paintbrush', 'Watercolor', 'Eraser'];
+  function syncToolNames() {
+    const fm = fieldMode(), st = $('ship-tool'), ft = $('field-tool');
+    const shipText = !fm && !shipLost() && !emptySpace ? SHIP_TOOLS[C.action] ?? '' : '', fieldText = fm ? FIELD_TOOLS[C.fieldTool] ?? '' : '';
+    if (st.textContent !== shipText) st.textContent = shipText;
+    if (ft.textContent !== fieldText) ft.textContent = fieldText;
+    st.hidden = !shipText; ft.hidden = !fieldText;
+    st.style.color = ft.style.color = C.CH_COLORS[C.channel] || '';
+    st.style.opacity = ft.style.opacity = 1 - worldShade();   // (faded with the views: [new_scene], [chapter])
+  }
   function syncButtons() {
     $('play').setAttribute('aria-pressed', !C.running);   // "Pause", highlighted while paused
     $('reset').hidden = !lostPanel();
@@ -2904,7 +3061,7 @@
                                  : 'The morph book: the morphs you have discovered (X)';
     $('clone-ok').hidden = !(clone.held && clone.held.at);   // ✓ once a touch has placed it
     $('bullets').classList.toggle('new', bulletNew);
-    $('bullets').textContent = bulletNew ? 'Create' : 'Bullets';
+    $('bullets').textContent = bulletNew ? 'Create' : 'Pulses';   // (the UI's name for the bullets)
     $('bullets').hidden = !Bullets.on || shipLost();   // the bullet book's button: while the gun is on, not while lost
     $('settings').hidden = !settingsOn;   // ([settings:on])
     $('species').hidden = MODE === 'story' || (MODE === 'sandbox' && !visSpecies.length);   // sandbox mode: the species book's button; challenge mode: the challenge book's

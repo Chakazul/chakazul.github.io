@@ -6,12 +6,21 @@ precision highp float;
 precision highp sampler2D;
 precision highp int;
 
-uniform sampler2D uA;   // the bullets field (R)
+uniform sampler2D uA;   // the bullets field (R); uVec 1: the world-draw field (Nebula), rgb one per channel
 uniform sampler2D uB;   // the hostile bullets field (R)
+uniform int  uVec;      // 1: two masks as one per-channel mask: per channel the stronger of A's and the bots' bullets' (on their channels uBCh)
+uniform int  uAVec;     // (uVec) 1: A is the world-draw field (Nebula), rgb one per channel; 0: the player's bullets, R on their channels uACh
+uniform vec3 uACh;
+uniform vec3 uBCh;
 
 out vec4 fragColor;
 
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
+    if (uVec == 1) {
+        vec4 a = texelFetch(uA, p, 0);
+        fragColor = vec4(max(uAVec == 1 ? a.rgb : a.r * uACh, texelFetch(uB, p, 0).r * uBCh), 1.0);
+        return;
+    }
     fragColor = vec4(min(texelFetch(uA, p, 0).r + texelFetch(uB, p, 0).r, 1.0), 0.0, 0.0, 1.0);
 }

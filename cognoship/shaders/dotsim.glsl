@@ -17,7 +17,8 @@ uniform sampler2D uTaps;    // width = tap count, row 0: (dx, dy, weight, -); we
 uniform ivec2 uSize;        // board (W, H)
 uniform int   uTapCount;
 uniform float uMu;          // growth centre
-uniform float uSigma;       // growth width (Gaussian)
+uniform float uSigma;       // growth width
+uniform int   uGrowth;      // 0: Gaussian (the round dots, Heptadentium), 1: polynomial, (1 - d²/9σ²)⁴ (animals.json's gn 1)
 uniform float uDt;
 uniform float uEat;         // creature mass above this erases the dot mass at that cell
 uniform ivec2 uOff;         // the drift, whole cells in [0, W) x [0, H)
@@ -33,7 +34,9 @@ void main() {
         conv += tap.z * texelFetch(uDots, q, 0).r;
     }
     float d = conv - uMu;
-    float v = texelFetch(uDots, p, 0).r + uDt * (2.0 * exp(-d * d / (2.0 * uSigma * uSigma)) - 1.0);
+    float g = uGrowth == 1 ? pow(max(0.0, 1.0 - d * d / (9.0 * uSigma * uSigma)), 4.0)
+                           : exp(-d * d / (2.0 * uSigma * uSigma));
+    float v = texelFetch(uDots, p, 0).r + uDt * (2.0 * g - 1.0);
     v = clamp(v, 0.0, 1.0);
     vec3 a = texelFetch(uState, (p - uOff + uSize) % uSize, 0).rgb;
     if (max(a.r, max(a.g, a.b)) > uEat) v = 0.0;

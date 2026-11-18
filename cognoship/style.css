@@ -212,6 +212,13 @@ button,select,input{transition:background .25s,border-color .25s}
   white-space:pre-line;line-height:1.05}   /* the pattern's name, below "Fire"; a two-word name on two rows */
 .fire>span:first-child{position:absolute;left:50%;top:50%;transform:translate(-50%,-110%);line-height:1;white-space:nowrap}   /* "Fire", on its own, well above the centre */
 .fire-id[hidden]{display:none}
+/* the tool in use, in italic, in the selected channel's colour (game.js): the ship's (ship view,
+   lower left, above Upward / Zoom), the world draw's brush (world view, lower right) */
+.tool-name{position:absolute;z-index:3;pointer-events:none !important;font-style:italic;font-weight:400;
+  font-size:calc(var(--ui-font) * 1.2);line-height:1;color:#e8e2f2;text-shadow:0 0 5px #000,0 0 2px #000;white-space:nowrap}
+.tool-name[hidden]{display:none}
+.ship-tool{left:24px;bottom:calc(11.72% + 14px)}
+.field-tool{right:24px;bottom:24px}
 /* Game: the Morphs button, right-aligned in the ship view, at canvas y 97 of 512 (18.95%: where the
    name box was; it is now at the bottom, core.js opt.nameBoxLow), 2 px higher by eye */
 .clone-tools{position:absolute;right:12px;top:calc(18.95% + var(--ui-h) * .5 + 6px);z-index:3;
@@ -233,7 +240,7 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game: the Bullets button, mirroring Morphs at the left */
 .ship-bullets{position:absolute;left:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
 /* Game ([settings:on]): the Settings button, at the world view's lower right (mirroring Fire's corner) */
-.world-settings{position:absolute;right:14px;bottom:14px;z-index:3}
+.world-settings{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:3}   /* lower centre */
 .world-settings[hidden]{display:none}
 /* Game: the morph book, centred over the whole game window; the dimmed rest closes it on a click */
 .book{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
@@ -274,12 +281,12 @@ button,select,input{transition:background .25s,border-color .25s}
 .book-slot.species .label{font-style:italic}
 .book-slot.challenge .tick{color:var(--new);font-weight:700;font-size:1.2em}   /* a completed challenge: a green tick */
 .book-slot.challenge .info{font-size:.8em;color:var(--muted)}
-/* the species book for a challenge: the challenge's record with each species, a green tick at the left, the best time at the right */
-.book-slot.species{flex-direction:column}   /* the thumbnails on the top row, the tick, name and best time on the bottom one */
-.book-slot.species .crow{display:flex;flex-direction:row;align-items:center;width:100%;gap:.3em;line-height:1.2}
-.book-slot.species .crow .label{flex:1;min-width:0;white-space:nowrap}   /* one line: a wrapped name made the slots taller, and fitBook shrank the thumbnails */
-.book-slot.species .crow .tick{flex:0 0 1.6em;text-align:left;color:var(--new);font-weight:700;font-size:1.1em}
-.book-slot.species .crow .best{flex:0 0 auto;min-width:1.6em;text-align:right;color:var(--muted);white-space:nowrap;font-size:.8em}
+/* the species book for a challenge: the thumbnails, the name, then the challenge's record with that
+   species in a row of its own: a green tick and the best time (a blank row: not completed yet) */
+.book-slot.species{flex-direction:column}
+.book-slot.species .crow{display:flex;flex-direction:row;align-items:center;justify-content:center;width:100%;gap:.4em;line-height:1.2}
+.book-slot.species .crow .tick{color:var(--new);font-weight:700;font-size:1.1em}
+.book-slot.species .crow .best{color:var(--muted);white-space:nowrap;font-size:.8em}
 .thumbs{display:flex;justify-content:center;gap:3px;width:100%;max-width:100%}
 .thumb{flex:none;width:calc((100% - 21px) / 8);aspect-ratio:1;background:#000;border-radius:3px;overflow:hidden;box-sizing:border-box;border:1px solid #3c3a48;
   display:flex;align-items:center;justify-content:center}

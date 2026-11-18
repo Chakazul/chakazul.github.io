@@ -10,7 +10,8 @@ mobile browser. A phone held upright gets a stacked layout; turn it sideways or 
 the side-by-side one.
 
 - [README-LAB.md](README-LAB.md): the lab, the experiment page with every control.
-- [README-MORE.md](README-MORE.md): the full reference, including how to write the game's script.
+- [README-MORE.md](README-MORE.md): the full reference.
+- [SCRIPT.md](SCRIPT.md): how to write the game's script (`script.txt`, `sandbox.txt`, `challenge.txt`).
 
 ## Modes
 

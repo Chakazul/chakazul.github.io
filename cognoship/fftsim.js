@@ -167,12 +167,12 @@ const FFTSim = (function () {
     gl.viewport(0, 0, W, H);
 
     let p = prog.fftpack;
-    if (bmask && bvec && fbVersion !== I.fieldVersion) {   // the field changed: its spectra again (fftpack's out0, out1 of it)
-      fbVersion = I.fieldVersion;
+    if (bmask && bvec && fbVersion !== I.maskVersion) {   // the field changed (or Nebula mixed with the bots' bullets: every step): its spectra again (fftpack's out0, out1 of it)
+      fbVersion = I.maskVersion;
       gl.useProgram(p);
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbFbo);
-      I.bindTex(0, I.fieldTex, p, 'uState');
-      I.bindTex(1, I.fieldTex, p, 'uBullets');
+      I.bindTex(0, I.bulTex, p, 'uState');
+      I.bindTex(1, I.bulTex, p, 'uBullets');
       gl.uniform1i(I.loc(p, 'uBMask'), 0);
       gl.uniform1i(I.loc(p, 'uBVec'), 0);
       I.draw4();
@@ -247,6 +247,8 @@ const FFTSim = (function () {
     gl.uniform1i(I.loc(p, 'uBulletVec'), bvec ? 1 : 0);
     gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
     gl.uniform1f(I.loc(p, 'uBulletHit'), bul.hit);
+    I.bindTex(15, I.fieldTex, p, 'uCap');
+    gl.uniform1i(I.loc(p, 'uCapOn'), I.capOn ? 1 : 0);
     I.draw4();
   }
 

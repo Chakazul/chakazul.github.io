@@ -1,10 +1,10 @@
 "use strict";
 // ============================================================================================
-//  World draw ([world_draw:on]; the bullet book's Nebula and Antimatter): three static fields,
+//  World draw ([world_draw], [add_bullet:nebula|antimatter]; the bullet book's Nebula and Antimatter): three static fields,
 //  R, G and B, that the player paints straight onto the world, in either view. On the GPU they
-//  are one texture (glsim.js setField), standing in for the bullets, the bots' bullets and the
-//  dots while a field type is in use: never stepped, never worn down, but each field masks
-//  (Nebula) or erases (Antimatter) its own channel of the creatures, as the bullets do.
+//  are one texture (glsim.js setField), standing in for the player's bullets while a field type is
+//  in use (the bots' bullets and the dots go on): never stepped, never worn down, but each field
+//  masks (Nebula) or erases (Antimatter) its own channel of the creatures, as the bullets do.
 //
 //  The fields live here, on the CPU (buf: W x H x 4, rgb used), and the rows a stroke touched are
 //  uploaded once a frame (tick). Tools, by the R G B patches (core.js fieldTool): 0 paintbrush
@@ -26,6 +26,7 @@ const Field = (function () {
   let stroke = null;                    // { ch, tool, at: [col, row] }
   const dirty = new Uint8Array(H);      // rows to upload
   let anyDirty = false;
+  let drawn = 0;                        // all the paint strokes have added, cell values summed ([need:draw]; never lowered)
   const hooks = { change() {} };        // the undo state changed
 
   const widthOf = tool => WIDTHS[widthIdx] * (TOOL_SCALE[tool] ?? 1);
@@ -44,6 +45,7 @@ const Field = (function () {
         else { k = Math.min(1, r + 0.5 - d); if (k <= 0) continue; }   // coverage: a 1-cell anti-aliased edge
         const i = (y * W + (((x0 + dx) % W) + W) % W) * 4 + ch, v = buf[i];
         buf[i] = tool === 2 ? Math.min(v, 1 - k) : Math.max(v, k);
+        if (buf[i] > v) drawn += buf[i] - v;
         hit = true;
       }
       if (hit) { dirty[y] = 1; anyDirty = true; }
@@ -134,5 +136,6 @@ const Field = (function () {
   return { begin, move, end, tick, clear, clearSeam, undo, reset, setWidth, widthOf, hooks, WIDTHS,
            get width() { return WIDTHS[widthIdx]; }, get widthIdx() { return widthIdx; },
            get canUndo() { return !!undoBuf; }, get undone() { return undone; }, get active() { return !!stroke; },
-           get tool() { return stroke ? stroke.tool : null; } };   // the held stroke's tool (null: none)
+           get tool() { return stroke ? stroke.tool : null; },   // the held stroke's tool (null: none)
+           get drawn() { return drawn; } };   // the mass painted so far, cell values summed
 })();

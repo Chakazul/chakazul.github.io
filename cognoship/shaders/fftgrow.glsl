@@ -37,6 +37,8 @@ uniform float uReach;
 uniform int   uBulletMode;
 uniform vec3  uBulletCh;
 uniform float uBulletHit;
+uniform sampler2D uCap;     // Antimatter (the world-draw field, erasing) beside the bullets: each channel capped at 1 - its field (glsim.js capOn)
+uniform int   uCapOn;
 uniform int   uBulletVec;   // 1: the bullets texture is the world-draw field, its rgb one per channel (sim.glsl)
 
 out vec4 fragColor;
@@ -133,5 +135,6 @@ void main() {
     if (erase) Anew = uMaskOn == 3 ? max(Anew, uMaskCh) : Anew * (vec3(1.0) - uMaskCh);
     // the bullets' erase takes mass out gradually; the world-draw field's (Antimatter) caps it at once: at most 1 - field
     if (uBulletMode == 1) Anew = uBulletVec == 1 ? min(Anew, vec3(1.0) - bulletAt(p)) : max(Anew - uBulletHit * bulletAt(p), 0.0);
+    if (uCapOn == 1) Anew = min(Anew, vec3(1.0) - texelFetch(uCap, p, 0).rgb);
     fragColor = vec4(Anew, 1.0);
 }

@@ -26,10 +26,12 @@
 //
 //  World-draw field (setField: the bullet book's Nebula and Antimatter, [world_draw]): one static
 //  texture, rgb = an R, G and B field the player paints (field.js, uploaded with putFieldRows).
-//  While it is on it stands in for the bullets, the hostile bullets and the dots (not stepped, not
-//  drawn, the bullets emptied; the dots go on with setFieldKeepsDots, the game's challenge mode): the creatures' step takes it through the bullets' path (effBullets),
-//  each of its channels acting on that creature channel alone (sim.glsl uBulletVec), masking
-//  (Nebula) or erasing (Antimatter: each channel capped at 1 - field). Never stepped, nor worn down.
+//  While it is on it stands in for the player's bullets (not stepped, not drawn, emptied); the bots'
+//  bullets and the dots go on beside it (the dots with setFieldKeepsDots). Each of its channels acts
+//  on that creature channel alone: Nebula masks, through the bullets' path (sim.glsl uBulletVec),
+//  merged with the bots' masking bullets if they fly; Antimatter erases, each channel capped at
+//  1 - field, through a path of its own (uCap), the bots' bullets taking the bullets' path
+//  (effBullets). Never stepped, nor worn down.
 //
 //  Board state is a ping-pong pair of RGBA32F textures (rgb = channels). Needs
 //  EXT_color_buffer_float, as Carlman does.
@@ -365,7 +367,7 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uWear'), f.wear);
     gl.uniform3fv(loc(p, 'uWearCh'), f.wearCh);
     bindTex(3, f.other, p, 'uOther');
-    gl.uniform1f(loc(p, 'uOtherWear'), f.otherWear ? f.wear : 0);   // the other field wears it as the creatures do
+    gl.uniform1f(loc(p, 'uOtherWear'), f.otherWear ? f.wear * mutualK : 0);   // the other field wears it as the creatures do, times [bullet_mutual:wear:<k>]
     gl.uniform1i(loc(p, 'uSeamOn'), bulletSeam ? 1 : 0);
     gl.uniform2f(loc(p, 'uSeam'), bulletSeam ? bulletSeam[0] : 0, bulletSeam ? bulletSeam[1] : 0);
     gl.uniform1f(loc(p, 'uSeamBand'), Math.ceil(f.rule.R / 2) + 2);   // half-width: both halves together wider than the kernel's reach
@@ -417,30 +419,65 @@ const SimGL = (function () {
   }
   function putHostile(flat, h, w, row0, col0) { putField(hos.tex[hos.cur], flat, h, w, row0, col0); hos.idle = false; }
   function clearHostile() { clearFbos(hos.fbo); hos.idle = true; }
-  const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle && !field.on;
+  const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle;   // (the bots fire on while the player draws on the world too)
   // The two bullets fields together ([bullet_mutual]): 'none' (apart), or 'wear': where they
   // overlap each wears the other down, at its own wear rate per unit of the other's mass (as the
   // creatures wear them): shots meeting cancel out. One more fetch per cell per bullet step.
-  let mutual = 'none';
-  function setBulletMutual(m) { mutual = m; }
+  // k: the rate, a multiple of each field's own wear rate ([bullet_mutual:wear:<k>]; 1: as the creatures wear them)
+  let mutual = 'none', mutualK = 1;
+  function setBulletMutual(m, k = 1) { mutual = m; mutualK = k; }
   // The bullets as the creatures' step sees them (sim.glsl / the FFT path: uBullets, uBulletMode,
   // uBulletCh, uBulletHit), set at the start of each step: null (none flying); the bullets' field
   // alone; the hostile field alone (its own mode and channels); or both, added into mixTex, with the
   // bullets' mode and channels. So the bots' bullets act exactly as the player's.
-  let mixTex = null, mixFbo = null, eff = null;
+  // The world-draw field (field.on) with the bots' bullets: Antimatter's cap takes a path of its own
+  // (capOn: sim.glsl / fftgrow.glsl uCap, after the update), the bots' bullets the bullets' path;
+  // Nebula (a mask) and masking bots' bullets share it, merged into one per-channel field (mixTex,
+  // bulletmix.glsl uVec: the stronger of the two per channel; dynamic: fftsim.js transforms it
+  // every step, not once per change of the static field). Nebula with erasing bots ([gun:erase],
+  // for testing): Nebula only, the bots' bullets have no effect.
+  let mixTex = null, mixFbo = null, eff = null, capOn = false, effVersion = 0, mixWarned = false;
   function effBullets() {
-    if (field.on) return field.empty ? null : { tex: fieldTex, mode: field.mode, ch: [1, 1, 1], hit: field.hit, vec: true };
-    const pa = bulletsOn && !!bulTapTex && !bulletsIdle, ha = hostileActive();
+    capOn = field.on && !field.empty && field.mode === 1;
+    const ha = hostileActive();
+    if (field.on && !field.empty && field.mode === 2) {
+      if (!ha || hos.opt.mode !== 2) return { tex: fieldTex, mode: 2, ch: [1, 1, 1], hit: field.hit, vec: true };
+      const p = prog.bulletmix;
+      gl.useProgram(p);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, mixFbo);
+      gl.viewport(0, 0, W, H);
+      bindTex(0, fieldTex, p, 'uA');
+      bindTex(1, hos.tex[hos.cur], p, 'uB');
+      gl.uniform1i(loc(p, 'uVec'), 1);
+      gl.uniform1i(loc(p, 'uAVec'), 1);
+      gl.uniform3fv(loc(p, 'uBCh'), hos.opt.ch);
+      draw4();
+      effVersion++;
+      return { tex: mixTex, mode: 2, ch: [1, 1, 1], hit: field.hit, vec: true, dynamic: true };
+    }
+    const pa = !field.on && bulletsOn && !!bulTapTex && !bulletsIdle;
     if (!pa && !ha) return null;
     if (!ha) return { tex: bulTex[bcur], mode: bul.mode, ch: bul.ch, hit: bul.hit };
     if (!pa) return { tex: hos.tex[hos.cur], mode: hos.opt.mode, ch: hos.opt.ch, hit: hos.opt.hit };
+    // both flying: one field for the step. The same settings: added. Both masking, on other channels
+    // ([hostile_gun]): per channel the stronger (a per-channel mask, transformed every step in the
+    // FFT path). Else (erase with other channels, or mask with erase: [gun:erase] or [hostile_gun:erase],
+    // for testing): added, with the player's settings.
+    const same = bul.mode === hos.opt.mode && bul.ch.every((v, i) => v === hos.opt.ch[i]);
+    const vec = !same && bul.mode === 2 && hos.opt.mode === 2;
+    if (!same && !vec && !mixWarned) { mixWarned = true; console.warn('Cognoship: the player\'s and the bots\' bullets differ (mask / erase, or erasing on other channels): together, both act as the player\'s'); }
     const p = prog.bulletmix;
     gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, mixFbo);
     gl.viewport(0, 0, W, H);
     bindTex(0, bulTex[bcur], p, 'uA');
     bindTex(1, hos.tex[hos.cur], p, 'uB');
+    gl.uniform1i(loc(p, 'uVec'), vec ? 1 : 0);
+    gl.uniform1i(loc(p, 'uAVec'), 0);
+    gl.uniform3fv(loc(p, 'uACh'), bul.ch);
+    gl.uniform3fv(loc(p, 'uBCh'), hos.opt.ch);
     draw4();
+    if (vec) { effVersion++; return { tex: mixTex, mode: 2, ch: [1, 1, 1], hit: bul.hit, vec: true, dynamic: true }; }
     return { tex: mixTex, mode: bul.mode, ch: bul.ch, hit: bul.hit };
   }
   function stepHostile() {
@@ -488,6 +525,7 @@ const SimGL = (function () {
     gl.uniform1i(loc(p, 'uTapCount'), dotTapCount);
     gl.uniform1f(loc(p, 'uMu'), dotRule.mu);
     gl.uniform1f(loc(p, 'uSigma'), dotRule.sigma);
+    gl.uniform1i(loc(p, 'uGrowth'), dotRule.growth === 'poly' ? 1 : 0);
     gl.uniform1f(loc(p, 'uDt'), dotRule.dt);
     gl.uniform1f(loc(p, 'uEat'), DOT_EAT);
     gl.uniform2i(loc(p, 'uOff'), Math.round(dotOff[0]) % W, Math.round(dotOff[1]) % H);
@@ -495,7 +533,8 @@ const SimGL = (function () {
     dcur = 1 - dcur;
   }
   // The dot mass within `radius` cells (a square window) of each site [col, row], as an array
-  // (at most MAX_SITES sites).
+  // (at most MAX_SITES sites); its .com: each window's centre of mass, [dx, dy] from the site.
+  // rule.growth (setDotRule): 'poly' the polynomial growth (animals.json's gn 1), else Gaussian.
   function readDotSites(sites, radius) {
     const n = Math.min(sites.length, MAX_SITES);
     if (!n) return [];
@@ -513,7 +552,9 @@ const SimGL = (function () {
     gl.uniform1i(loc(p, 'uRadius'), radius);
     draw4();
     gl.readPixels(0, 0, n, 1, gl.RGBA, gl.FLOAT, siteOut);
-    return Array.from({ length: n }, (_, i) => siteOut[i * 4]);
+    const out = Array.from({ length: n }, (_, i) => siteOut[i * 4]);
+    out.com = Array.from({ length: n }, (_, i) => [siteOut[i * 4 + 1], siteOut[i * 4 + 2]]);
+    return out;
   }
   function setDotColor(rgb) { dotRGB = rgb; }
   let bgRGB = [0, 0, 0], sky = false;
@@ -587,15 +628,16 @@ const SimGL = (function () {
     gl.uniform1i(loc(p, 'uBulletVec'), eff && eff.vec ? 1 : 0);
     gl.uniform3fv(loc(p, 'uBulletCh'), eff ? eff.ch : bul.ch);
     gl.uniform1f(loc(p, 'uBulletHit'), eff ? eff.hit : bul.hit);
+    bindTex(3, fieldTex, p, 'uCap');
+    gl.uniform1i(loc(p, 'uCapOn'), capOn ? 1 : 0);
     draw4();
     cur = 1 - cur;
     stepOthers();
   }
-  // after the creatures' step: the dots and both bullets fields (none while the field stands in for them)
+  // after the creatures' step: the dots and both bullets fields (the player's none while the field stands in for them)
   function stepOthers() {
     if (dotsLive() && dotTapTex) stepDots();
-    if (field.on) return;
-    if (bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
+    if (!field.on && bulletsOn && bulTapTex && !bulletsIdle) stepBullets();
     if (hostileActive()) stepHostile();
   }
 
@@ -650,7 +692,9 @@ const SimGL = (function () {
   // major, view (right, down) -> board (col, row)), focus: [col, row, on],
   //   stars: star field on, time: seconds (star sway), starOff: [x, y] drift (cells, at unit
   //   layer speed), starDir: [x, y] unit drift direction, starSpeed, starBright: 1 = default }
+  let lastView = null, hideField = false;   // (withoutField)
   function render(view) {
+    lastView = view;
     const p = prog.draw;
     gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -661,10 +705,10 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uBulletsOn'), bulletsOn && !field.on ? 1 : 0);
     gl.uniform3fv(loc(p, 'uBulletRGB'), bulRGB);
     bindTex(3, hos.tex[hos.cur], p, 'uHostile');
-    gl.uniform1f(loc(p, 'uHostileOn'), hos.on && !field.on ? 1 : 0);
+    gl.uniform1f(loc(p, 'uHostileOn'), hos.on ? 1 : 0);
     gl.uniform1f(loc(p, 'uDotsOn'), dotsLive() ? 1 : 0);
     bindTex(4, fieldTex, p, 'uField');
-    gl.uniform1f(loc(p, 'uFieldOn'), field.on ? 1 : 0);
+    gl.uniform1f(loc(p, 'uFieldOn'), field.on && !hideField ? 1 : 0);
     gl.uniform1i(loc(p, 'uFieldStyle'), field.mode);
     gl.uniform3fv(loc(p, 'uDotRGB'), dotRGB);
     gl.uniform2fv(loc(p, 'uDotOff'), dotOff);
@@ -685,6 +729,15 @@ const SimGL = (function () {
     gl.uniform3fv(loc(p, 'uBg'), bgRGB);
     gl.uniform1i(loc(p, 'uSky'), sky ? 1 : 0);
     draw4();
+  }
+
+  // fn() called with this frame redrawn without the world-draw field (the morph book's pictures:
+  // no paint in them), then the frame redrawn as it was; at once, in the same task (the canvas
+  // keeps no drawing buffer). Just fn() if the field isn't shown.
+  function withoutField(fn) {
+    if (!field.on || field.empty || !lastView) return fn();
+    hideField = true; render(lastView);
+    try { return fn(); } finally { hideField = false; render(lastView); }
   }
 
   // The scrolling world's seam: every field (creatures, dots, bullets, hostile bullets) with the
@@ -729,6 +782,8 @@ const SimGL = (function () {
     get bulletsActive() { return !!eff; }, get bul() { return eff || bul; }, get bulTex() { return eff ? eff.tex : bulTex[bcur]; },
     // ... the world-draw field in their place (vec: its rgb, one per channel), its texture and version
     get bulletVec() { return !!(eff && eff.vec); }, get fieldTex() { return fieldTex; }, get fieldVersion() { return fieldVersion; },
+    // (fftsim.js) Antimatter's cap on, and the masking field's version: the static field's, or every step for the mix
+    get capOn() { return capOn; }, get maskVersion() { return eff && eff.dynamic ? 'mix' + effVersion : fieldVersion; },
   };
   let VERTEX_SRC = '', pluginIds = 0;
 
@@ -736,7 +791,7 @@ const SimGL = (function () {
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, setSky, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
            setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks, setBulletMutual,
-           setField, putFieldRows, setFieldEmpty, setFieldKeepsDots, setBulletSeam, get fieldOn() { return field.on; },
+           setField, putFieldRows, setFieldEmpty, withoutField, setFieldKeepsDots, setBulletSeam, get fieldOn() { return field.on; },
            get hostileIdle() { return hos.idle; },
            get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },

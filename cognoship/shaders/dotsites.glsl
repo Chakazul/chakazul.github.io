@@ -12,16 +12,18 @@ uniform sampler2D uSites;   // texel (i, 0).xy = dot i's centre (col, row), whol
 uniform ivec2 uSize;        // board (W, H)
 uniform int   uRadius;      // window half-width, far below the board edge
 
-out vec4 fragColor;         // (mass around dot i, -, -, -)
+out vec4 fragColor;         // (mass around dot i, and its centre of mass's offset from the site: x, y, -)
 
 void main() {
     int i = int(gl_FragCoord.x);
     ivec2 c = ivec2(floor(texelFetch(uSites, ivec2(i, 0), 0).xy + 0.5));
-    float sum = 0.0;
+    float sum = 0.0, sx = 0.0, sy = 0.0;
     for (int dy = -uRadius; dy <= uRadius; dy++) {
         int y = (c.y + dy + uSize.y) % uSize.y;
-        for (int dx = -uRadius; dx <= uRadius; dx++)
-            sum += texelFetch(uDots, ivec2((c.x + dx + uSize.x) % uSize.x, y), 0).r;
+        for (int dx = -uRadius; dx <= uRadius; dx++) {
+            float v = texelFetch(uDots, ivec2((c.x + dx + uSize.x) % uSize.x, y), 0).r;
+            sum += v; sx += v * float(dx); sy += v * float(dy);
+        }
     }
-    fragColor = vec4(sum, 0.0, 0.0, 0.0);
+    fragColor = vec4(sum, sum > 0.0 ? sx / sum : 0.0, sum > 0.0 ? sy / sum : 0.0, 0.0);
 }

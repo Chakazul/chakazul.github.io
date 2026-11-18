@@ -19,10 +19,10 @@
 //  ?bsub= bullet steps per sim step (5: Scutium then flies at ~2.1 cells per step), ?bcool= the least
 //  time between shots, in seconds (0.7).
 //
-//  World draw ([world_draw:on]): two more types after the patterns, Nebula and Antimatter (FIELDS),
-//  which fire nothing: in use, the player paints the R G B fields instead (field.js), which mask
-//  (Nebula) or erase (Antimatter) the creatures' channels; they are never in the list (nor the
-//  inventory), only offered while world draw is on.
+//  World draw ([world_draw], [add_bullet:nebula|antimatter]): two more types after the patterns,
+//  Nebula and Antimatter (FIELDS), which fire nothing: in use, the player paints the R G B fields
+//  instead (field.js), which mask (Nebula) or erase (Antimatter) the creatures' channels; each is
+//  in the book once added (fields), never in the list of patterns (nor the inventory).
 // ============================================================================================
 
 const Bullets = (function () {
@@ -47,9 +47,10 @@ const Bullets = (function () {
   const COLORS = { rgb: [1, 1, 1], r: [1, 0.231, 0.231], g: [0.231, 1, 0.353], b: [0.231, 0.482, 1] };
 
   // the world-draw types: how their field acts (glsim.js setField mode: 2 mask, 1 erase)
-  const FIELDS = { 'Nebula': { mode: 2 }, 'Antimatter': { mode: 1 } }, FIELD_NAMES = Object.keys(FIELDS);
-  let worldDraw = false;
-  const fieldKinds = () => worldDraw ? FIELD_NAMES : [];
+  const FIELDS = { 'Antimatter': { mode: 1 }, 'Nebula': { mode: 2 } }, FIELD_NAMES = Object.keys(FIELDS);
+  const fields = new Set();   // the world-draw types in the book (none at first)
+  const fieldKinds = () => FIELD_NAMES.filter(n => fields.has(n));
+  const fieldOf = s => FIELD_NAMES.find(n => norm(n) === norm(s));   // a world-draw type's name, whatever its case
   const choices = () => list.concat(fieldKinds());   // what the book, select and cycle offer
   let on = false, kind = null, lastShot = -Infinity, mode = 2, chOpt = 'color_now', chNow = null, wearAll = false;
   let list = [];   // the patterns the player can fire ([bullet:...]), none at first; kind: the one in use
@@ -86,12 +87,13 @@ const Bullets = (function () {
   }
   // [bullet:<names>[:<equip>]], <names> in order, separated by ',': a pattern name adds it to the
   // list; random adds one not in it yet, at random; all adds every pattern; clear empties the
-  // list. The gun switches to <equip> (added if not listed), else to the last pattern added; if
+  // list (of patterns: Nebula and Antimatter stay); nebula / antimatter add that world-draw type to
+  // the book. The gun switches to <equip> (added if not listed), else to the last pattern added; if
   // none was, the one in use stays if it is still listed, else it is the list's first.
   function setList(names = '', equip) {
     let last = null;
     const toks = names.split(',').map(s => s.trim()).filter(Boolean);
-    const eq = equip?.trim() ? kindOf(equip.trim()) : null;   // the one to equip
+    const eq = equip?.trim() ? kindOf(equip.trim()) ?? fieldOf(equip.trim()) : null;   // the one to equip
     if (equip?.trim()) toks.push(equip.trim());   // added to the list too (warned if unknown)
     for (const t0 of toks) {
       const t = t0.toLowerCase(), add = n => { if (n && !list.includes(n)) { list.push(n); last = n; } };
@@ -99,6 +101,7 @@ const Bullets = (function () {
       else if (t === 'all') IDS.forEach(add);
       else if (t === 'random') { const rest = IDS.filter(n => !list.includes(n)); add(rest[Math.floor(Math.random() * rest.length)]); }
       else if (kindOf(t0)) add(kindOf(t0));
+      else if (fieldOf(t0)) { fields.add(fieldOf(t0)); last = fieldOf(t0); }   // Nebula / Antimatter: into the book
       else console.warn(`script.txt: unknown bullet [bullet:...${t0}...], ignored`);
     }
     list.sort((a, b) => IDS.indexOf(a) - IDS.indexOf(b));   // always in the patterns' own order (the README's)
@@ -201,12 +204,18 @@ const Bullets = (function () {
     if (total > maxBullets * one || total < IDLE * one) SimGL.clearBullets();
   }
 
-  // [world_draw:on|off]: offer Nebula and Antimatter or not (off, while one is in use: back to
-  // the list's last pattern, or none)
-  function setWorldDraw(v) {
-    worldDraw = !!v;
-    if (!worldDraw && FIELDS[kind]) { if (on) setKind(list[list.length - 1] ?? null); else kind = list[list.length - 1] ?? null; }
+  // [world_draw]: names (world-draw type names) added to the book, quietly; null: both taken out
+  // (one in use: back to the list's last pattern, or none). False if a name is unknown (nothing changed).
+  function setWorldDraw(names) {
+    if (names === null) fields.clear();
+    else {
+      const ks = names.map(fieldOf);
+      if (ks.includes(undefined)) return false;
+      ks.forEach(k => fields.add(k));
+    }
+    if (FIELDS[kind] && !fields.has(kind)) { if (on) setKind(list[list.length - 1] ?? null); else kind = list[list.length - 1] ?? null; }
     hooks.change();
+    return true;
   }
 
   // [bullet_limit:<x>]: the field's mass limit, in bullets' worth (default 8)
@@ -218,7 +227,7 @@ const Bullets = (function () {
            get maxBullets() { return maxBullets; }, get on() { return on; }, get kind() { return kind; },
            get list() { return list.slice(); },
            // the world-draw types offered now, and the one in use (null: a pattern, or none)
-           get fieldKinds() { return fieldKinds().slice(); }, get field() { return on && FIELDS[kind] ? kind : null; },
+           get fieldKinds() { return fieldKinds(); }, get choices() { return choices(); }, get field() { return on && FIELDS[kind] ? kind : null; },
            get count() { return choices().length; },
            // (a field type: the colour of the field being painted, the player's channel pick)
            get color() { return on && FIELDS[kind] ? COLORS[['r', 'g', 'b'][C.channel]] || COLORS.rgb : COLORS[chNow] || COLORS.rgb; },
@@ -316,13 +325,35 @@ const BulletStamp = (function () {
 // --------------------------------------------------------------------------------------------
 const Hostile = (function () {
   let st = null, on = false, maxBullets = 8;   // maxBullets: [hostile_bullet_limit]
-  // The bots' bullets act as the player's: the gun's settings ([gun]: mask or erase, the channels,
-  // which channels wear them), followed live (the player's channel pick, color_now, too).
-  let applied = '';
+  // The bots' bullets act as the player's (the gun's settings, [gun]: mask or erase, the channels,
+  // which channels wear them, followed live: the player's channel pick, color_now, too), unless
+  // [hostile_gun] gives them their own (own: parseGun's { mode, ch, wear }; null: follow [gun]).
+  // hold: [hostile_gun:off], the bots hold fire.
+  let applied = '', own = null, hold = false;
+  function settings() {
+    if (!own) return Bullets.settings;
+    const c = own.ch === 'color_now' ? ['r', 'g', 'b'][Core.channel] || 'rgb' : own.ch;
+    const ch = c === 'rgb' ? [1, 1, 1] : ['r', 'g', 'b'].map(x => x === c ? 1 : 0);
+    return { mode: own.mode === 'erase' ? 1 : 2, ch, wearCh: own.wear === 'wear_all' ? [1, 1, 1] : ch,
+             hit: Bullets.HIT, wear: Bullets.WEAR, sub: Bullets.SUB };
+  }
   function apply() {
-    const o = Bullets.settings;
+    const o = settings();
     applied = JSON.stringify(o);
     SimGL.setHostile(o);
+  }
+  // [hostile_gun[:<options>]]: the bots' bullets' own settings, [gun]'s options (mask | erase, rgb |
+  // r | g | b | color_now, wear_color | wear_all; on | off: the bots fire or hold fire), over the
+  // defaults mask, color_now, wear_color; follow (or no options): as the player's [gun] again.
+  function setGun(options = []) {
+    const toks = options.flatMap(a => a.split(',')).map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (!toks.length || toks.includes('follow')) { own = null; hold = toks.includes('off'); }
+    else {
+      const o = Bullets.parseGun(toks.filter(t => t !== 'follow'), { off: false, mode: 'mask', ch: 'color_now', wear: 'wear_color' }, 'hostile_gun');
+      hold = o.off;
+      own = toks.some(t => t !== 'on' && t !== 'off') ? { mode: o.mode, ch: o.ch, wear: o.wear } : own;   // (on / off alone: the settings kept)
+    }
+    if (on) apply();
   }
   // Arm with pattern `name` (a bullet_patterns.js name): its rule, the field emptied. False if unknown.
   function set(name) {
@@ -338,9 +369,9 @@ const Hostile = (function () {
     return true;
   }
   function off() { on = false; SimGL.setHostile(null); }
-  function fire(col, row, radius, ang) { if (on) BulletStamp.fire(st, ang, col, row, radius, SimGL.putHostile); }
+  function fire(col, row, radius, ang) { if (on && !hold) BulletStamp.fire(st, ang, col, row, radius, SimGL.putHostile); }
   function frame() {
-    if (on && JSON.stringify(Bullets.settings) !== applied) apply();   // the gun changed (or the channel pick)
+    if (on && JSON.stringify(settings()) !== applied) apply();   // the gun changed (or the channel pick)
     if (!on || SimGL.hostileIdle) return;
     const blk = SimGL.readHostileBlocks();
     let total = 0;
@@ -349,5 +380,5 @@ const Hostile = (function () {
   }
   function clear() { SimGL.clearHostile(); }
   function setLimit(x = 8) { maxBullets = x; }
-  return { set, off, fire, frame, clear, setLimit, get on() { return on; } };
+  return { set, off, fire, frame, clear, setLimit, setGun, get on() { return on; }, get settings() { return settings(); } };
 })();

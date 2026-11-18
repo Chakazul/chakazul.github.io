@@ -60,14 +60,19 @@
         <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X; Clear while drawing ([world_draw]) -->
         <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (D / F) -->
         <div id="bullet-nav" class="bullet-nav" hidden>
-          <button id="bullet-prev" title="The previous bullet pattern (D)">&#9664;</button>
-          <button id="bullet-next" title="The next bullet pattern (F)">&#9654;</button>
+          <button id="bullet-prev" title="The previous pulse type (D)">&#9664;</button>
+          <button id="bullet-next" title="The next pulse type (F)">&#9654;</button>
         </div>
-        <!-- the world view's lower right ([settings:on]): opens the settings book -->
+        <!-- the world view's lower centre ([settings:on]): opens the settings book -->
         <button id="settings" class="world-settings" hidden title="Settings (V)">Settings</button>
-        <button id="fire" class="fire" hidden title="Fire a bullet the way the ship moves (A)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
+        <button id="fire" class="fire" hidden title="Fire a pulse the way the ship moves (A)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
+        <!-- world draw (game.js fieldMode): the brush in use, at the world view's lower right -->
+        <div id="field-tool" class="tool-name field-tool" hidden></div>
       </div>
       <div class="layer layer-ship">
+        <!-- the ship view's lower left, above Upward / Zoom: the tool the R G B patches use on the ship
+             (Masking / Drawing / Erasing; not while drawing on the world) -->
+        <div id="ship-tool" class="tool-name ship-tool" hidden></div>
         <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
         <div class="ship-ctl">
           <button id="headup" aria-pressed="false" title="Upward: rotate the ship view so the creature's heading points up (E toggles)">Upward</button>
@@ -76,7 +81,7 @@
         </div>
         <!-- in the ship view, right of the name box ([morph_book:on]): opens the morph book -->
         <!-- in the ship view, left of the name box, mirroring Morphs ([gun] on): opens the bullet book -->
-        <button id="bullets" class="ship-bullets" hidden title="The bullet book: choose the bullet to fire (S)">Bullets</button>
+        <button id="bullets" class="ship-bullets" hidden title="The pulse book: choose the pulse to fire (S)">Pulses</button>
         <button id="morphs" class="ship-morphs" hidden title="The morph book: the morphs you have discovered (X)">Morphs</button>
         <!-- in the ship view, between Bullets and Morphs, in sandbox mode only: opens the species book -->
         <button id="species" class="ship-species" hidden title="The species book: choose a species (C)">Species</button>
@@ -112,7 +117,7 @@
           <button id="book-close">Close</button>
           <div id="book-species" class="book-species" hidden></div>
           <!-- sandbox mode: held for 3 s, clears the central inventory -->
-          <div id="book-clear" class="book-clear" hidden title="Hold for 3 seconds to clear every discovered morph and bullet, and the energy, from every run">Hold to clear data</div>
+          <div id="book-clear" class="book-clear" hidden title="Hold for 3 seconds to clear every discovered morph and pulse, and the energy, from every run">Hold to clear data</div>
         </div>
       </div>
       <!-- "SUCCESS", centred over the game window when a line's [need] conditions are met, fading out -->

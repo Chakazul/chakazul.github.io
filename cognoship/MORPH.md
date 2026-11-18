@@ -272,3 +272,37 @@ moving straight. Both rebuild the same under `tools/from_screenshot.py` (one cre
 
 Closest to rectogyrans (2 % lighter, 7 % faster), told apart by its turn rate (none). Not in an
 allow list yet, and no long history in `assets/stats/VT049W.json`.
+
+## VT049W trias (checked, not added, 2026-11-19: a passing state)
+
+A sequerectus with a side car on each side: a front body (the rectus) and two side cars, mirror
+images, a little behind it. From the user's sighting and `../assets/screenshots/VT049W trias.png`
+(sequerectus.png copied, flipped and pasted in a paint program). Work files in
+`output/vt049w_trias/` (kept locally, not in git).
+
+- **From the picture** (`tools/from_screenshot.py`, its two arrows and white areas painted out
+  first, `clean.py`; 7.33 px per cell): none of the 20 seeds holds; they break into 3–30 bodies,
+  or the one pass is a few separate bodies (shape −0.25).
+- **Copy, flip and paste** (`mirror.py`): a settled sequerectus turned heading up, mirrored about
+  its front body's axis, the cellwise max of the two. A trias for ~150 steps: the side cars catch up
+  with the front, the three line up, and it breaks into separate bodies (some replicate).
+- **From parts** (`search.py`, `search2.py`): the front body with the side car and its mirror moved
+  back 6 to 21 cells and in or out 6 to 8 (80 symmetric starts); 150 lopsided ones (each car
+  moved and turned on its own); 150 collisions of a sequerectus with a third body. None lasts:
+  at most ~200 steps as a trias (three bodies within 2 R of their centre, at least 1 R apart).
+  The sequerectus itself, by the same test as two bodies, holds all 3,000 steps.
+- **Rule tweaks** (`tune_trias.py`, 12 starts, each of the 45 kernel parameters ×0.97 / ×1.03,
+  and smaller time steps): unchanged a mean of 107 steps as a trias; the best, T ×2, 242; no change
+  comes near stable (Z18A9R trigyrans reached 18 of 18 to 3,000 with one). A first, looser test
+  (three bodies within 3.2 R) scored some changes to 3,000, but those were three loose bodies
+  drifting near each other on the small board, the trias long gone (`watch.py`).
+
+So under VT049W's rule a trias lasts a few seconds in the game (30 steps per second: ~100–200
+steps, 3–7 s), which fits a sighting. **VT049W trias**, the symmetric start with the cars 9 cells
+further back than in sequerectus (`make.py`), was added to the lab, unsettled (83×53 cells, mass
+2,272 at R = 18, a trias until step ~200 on the 384×256 board), then removed: not stable.
+
+### Open
+
+- Whether the one seen in the game lasted longer than a few seconds: a capture (',' or '.') of
+  it, via `tools/add_pattern.py`, would give the exact state to start from.

@@ -1,4 +1,4 @@
-# script file for story mode, see README-MORE.md for syntax
+# script file for story mode, see SCRIPT.md for syntax
 [next_msg:Click here or {:Space} to continue:≫:⧗]
 [speed:1][gun:off][new_bullet:off][clone:off][erase:off][draw:off][morph_book:off]
 [morph_book_action:clear_put][retry_action:clear_put]
@@ -27,7 +27,7 @@ Thankfully, _Lenium_ actively senses and reacts to its surroundings.
 So we can steer the ship by blocking parts of its *cognitive field*.
 In the panel, try clicking on the ship to mask its senses.[need:first_touch]
 Nice! You can now steer the ship, and even change its shape.
-At the top, choose which color {R:1} {G:2} {B:3} you want to mask.
+At the top, you can select which color {R}{G}{B}{:1}{:2}{:3} to mask.
 
 # morphs
 [new_scene]
@@ -50,11 +50,12 @@ _Lenium_ recycled. Ship restored.
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:tardus]
 This morph is _tardus_.
-Try to discover the hidden morph. (Hint: gently push its tail)[need:discover_morph:lithos]
-Nice, you are gentle and patient.
+Try to discover the hidden morph. (Hint: pat the side of its tail)[need:discover_morph:lithos]
+Nice, you have a delicate touch.
 Also try out the other controls in the panel.
+When necessary, {Retry:←}, {Pause:↵}, or change the {Speed:Q}{:W}.
 On a keyboard, hold {:Shift} to show their keys.
-Now embark for the _Sirius A_ star system, 9 light-years away.
+Now we are leaving for deeper space.
 
 
 [chapter:2:You Are Not Alone]
@@ -66,25 +67,26 @@ Now embark for the _Sirius A_ star system, 9 light-years away.
 #[discover_morph:limus,tardus]
 [clear_world][put_player:limus]
 [dot:5][min_morph:6:paragyrans,paratardus,lithos+gyrans:far]
+The _Pleiades_, a.k.a. the Seven Sisters, 444 light-years from home.
 Other ships appear, and so do *energy* packets.
-Steer your ship to collect 30 energy. {Speed:Q}{:W} changes may help.[need:energy:30]
+Steer your ship to collect 30 energy. Changing {Speed:Q}{:W} may help.[need:energy:30]
 
 # bullets
 [gun:on]
 Enough energy for the *Lenium gun*!
 [new_bullet:30]
 [add_bullet:Orbium:Orbium]
-{Fire:A} to fire _Lenium_ bullets.
+{Fire:A} to fire _Lenium_ pulses.
 They disrupt other ships' cognitive fields.
-This _Orbium_ type bullet is relatively weak, though.
-Collect 30 more energy, then {Create:S} a new bullet type.[need:create_bullet]
+This _Orbium_ pulse type is relatively weak, though.
+Collect 30 more energy, then {Create:S} a new pulse type.[need:create_bullet]
 [new_bullet:50]
-Switch bullet type using {Bullets:S} or {◀:D} {▶:F}.
-Each bullet type has unique effects.
-Now we are leaving the _Orion Arm_.
+Switch types using {Pulses:S} or {◀:D} {▶:F}.
+Each pulse type has unique effects.
+Now we embark for a stellar nursery.
 
 
-[music:2,1:2]
+[music:3,1:3]
 [chapter:3:Brave New World]
 
 # species
@@ -92,27 +94,101 @@ Now we are leaving the _Orion Arm_.
 [allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,pararectus,rectogyrans]
 [clear_world][put_player:rectus]
 [dot:3][min_morph:10:rectus,gyrans,tardus,lithos,paragyrans,antigyrans:far]
-_Scutum-Centaurus Arm_ of the Milky Way, 10,000 light-years from home.
+_Orion Nebula_, where stars are born, 1,344 light-years from home.
 To survive the interstellar medium, our ship evolved into a new *species*.
-From _Aquarium originale_ evolved into _A. novus_.
+Evolved from _Aquarium originale_ into _A. novus_.
 New species, new morph possibilities.
 
 # clone
 [new_scene]
 [clear_world][put_player:rectus]
-[dot:7][min_morph:2:paragyrans,antigyrans:far]
+[dot:7][min_morph:2:antigyrans:random]
 To engineer new morphs, we developed advanced *cloning* technology.
 [clone:on]
 {Clone:X} a morph, try {↻:Q} {↔:W}, and place it near your ship.[need:first_clone]
-Great! Cloing location, angle, and timing are all important.
-Use cloning to combine two _gyrans_ into a twin morph.[need:discover_morph:paragyrans,antigyrans]
+Great! Cloning position, angle, and timing are all important.
+Clone to combine two _gyrans_ into a twin morph. {Zoom:R}{:T} may help.[need:discover_morph:paragyrans,antigyrans]
 Bravo! You engineered a twin morph.
 
-Feel free to keep experimenting and finding new morphs.
-When you are ready, we will head to the Galactic Center.
+Feel free to keep experimenting and find new morphs.
+When you are ready, we will continue our interstellar journey.
 
 
-[chapter:4:Megastructure]
+[chapter:4:Interstellar Evolution]
+
+[species:Aquarium originale:5N7KKM]
+[allow_morph:limus]
+[stars:follow:0.1:2]
+[clear_world:scroll][put_player:limus]
+There is no mission, no objective while we are wandering through space.
+But to navigate the vastness of space, we still need one more technology.
+
+[add_bullet:Antimatter:Antimatter]
+*Antimatter* is equipped. Now space is your canvas.
+In the world view, dispense antimatter to guide the ship.[need:draw:10]
+Each color affects each morph differently.
+Select a color {R}{G}{B}{:1}{:2}{:3}; repeat to choose brush or eraser.
+The controls become {Clear:A}, {Undo:E}, and {Width:R}{:T}.
+There is a lot to experiment with in cosmic painting.
+To leave Antimatter mode, change {Pulses:S} to another type.
+[add_bullet::Orbium]
+
+[new_scene]
+[clear_world:scroll][put_player:limus]
+Our _Lenium_ ships keep evolving to survive the interstellar medium ...
+... and to survive magnetic storms, black holes, supernovae, and so on.
+Here are some of our Leniologists' favorite species.
+
+[new_scene]
+[stars:follow:0.1]
+[species:Aquarium virgatus:KZ2BLD]
+[allow_morph:rectus,limus,virgatus]
+[clear_world:scroll][put_player:rectus]
+[dot:5][min_morph:5:rectus,limus:far]
+_Veil Nebula_, the remains of a supernova, 2,400 light-years from home.
+The striped species _Aquarium virgatus_.
+Find morph _virgatus_.[need:discover_morph:virgatus]
+Next species ...
+
+[new_scene]
+[species:Aquarium saltans:KH97WU]
+[allow_morph:limus,gyrans,impetus,antigyrans]
+[clear_world:scroll][put_player:limus]
+[dot:5][min_morph:3:gyrans,impetus,antigyrans]
+_Crab Nebula_, another supernova remnant, 6,500 light-years from home.
+The dancing species _Aquarium saltans_.
+Find morph _impetus_.[need:discover_morph:impetus]
+Next species ...
+
+[music:2,1,3:2]
+
+[new_scene]
+[species:Aquarium sinuosus:HAESRE]
+[allow_morph:zigzag,lithos,antigyrans,paragyrans,circumgyrans]
+[clear_world:scroll][put_player:zigzag]
+[dot:5][min_morph:4:antigyrans,paragyrans:far]
+_Cygnus X-1_, the first known black hole, 7,200 light-years from home.
+The zigzagging species _Aquarium sinuosus_.
+Engineer twin morph _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
+Next species ...
+
+[new_scene]
+[species:Aquarium metamorpha:HGMLH8]
+[allow_morph:metamorpha,paratardus,paratachus]
+[clear_world:scroll][put_player:metamorpha]
+[dot:5][min_morph:3:metamorpha]
+The _Pistol Star_, a violent blue hypergiant, 25,000 light-years from home.
+The shapeshifting species _Aquarium metamorpha_.
+Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus]
+
+The journey continues.
+We are heading to the center of our Galaxy.
+
+
+[chapter:5:Megastructure]
+[stars:135:3:2]
+
+[world_draw:off]
 
 # make swarm
 [species:Aquarium vorticosus:Z18A9R]
@@ -123,7 +199,7 @@ The Galactic Center of the Milky Way, 27,000 light-years from home.
 Here sits _Sagittarius A*_, a supermassive black hole.
 This gargantuan black hole releases massive bursts of radiation.
 We need to construct megastructure shields to survive.
-_Aquarium vorticosus_, which evolved here, is well suited to this task.
+_Aquarium vorticosus_, mildly reproductive, is well suited to this task.
 Cloning technology is also useful here.
 Construct a megastructure.[need:object:50:min]
 Shield in operation. We survived.
@@ -134,8 +210,8 @@ Shield in operation. We survived.
 [allow_morph:rectus,tachus,lithos]
 [clear_world:radiation][put_player:rectus]
 [dot:3][min_morph:10:vagus:far]
-However, the radiation mutates our ships into _Aquarium multiplicans_.
-This species keep multiplying.
+However, the radiation mutates our ship into _Aquarium multiplicans_.
+These morphs keep multiplying.
 Survive the swarm.[need:survive_time:30]
 You survived.
 
@@ -153,60 +229,7 @@ You endured.
 [new_scene]
 [stars:0:3:2]
 [clear_world:empty]
-We will continue our interstellar journey.
-
-
-[music:3,1,2:3]
-[chapter:5:Interstellar Evolution]
-
-[stars:135:3:2]
-[species:Aquarium virgatus:KZ2BLD]
-[clear_world:empty]
-There is no objective while we are wandering through space.
-Our _Lenium_ ships keep evolving to survive the interstellar medium.
-And to survive black hole mergers, supernovae, and galaxy collisions.
-Here are some of our Leniologists' favorite species.
-
-[new_scene]
-[stars:135]
-[species:Aquarium virgatus:KZ2BLD]
-[allow_morph:rectus,limus,virgatus]
-[clear_world][put_player:rectus]
-[dot:5][min_morph:5:rectus,limus:far]
-_Small Magellanic Cloud_, 200,000 light-years from home.
-The striped species _Aquarium virgatus_.
-Find morph _virgatus_.[need:discover_morph:virgatus]
-Next species...
-
-[new_scene]
-[species:Aquarium saltans:KH97WU]
-[allow_morph:limus,gyrans,impetus,antigyrans]
-[clear_world][put_player:limus]
-[dot:5][min_morph:3:gyrans,impetus,antigyrans]
-_Andromeda Galaxy_, 2,500,000 light-years from home.
-The dancing species _Aquarium saltans_.
-Find morph _impetus_. Use {B:3} if needed.[need:discover_morph:impetus]
-Next species...
-
-[new_scene]
-[species:Aquarium sinuosus:HAESRE]
-[allow_morph:zigzag,lithos,antigyrans,paragyrans,circumgyrans]
-[clear_world][put_player:zigzag]
-[dot:5][min_morph:4:antigyrans,paragyrans:far]
-_Triangulum Galaxy_, 3,000,000 light-years from home.
-The zigzagging species _Aquarium sinuosus_.
-Engineer twin morph _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
-Next species...
-
-[new_scene]
-[species:Aquarium metamorpha:HGMLH8]
-[allow_morph:metamorpha,paratardus,paratachus]
-[clear_world][put_player:metamorpha]
-[dot:5][min_morph:3:metamorpha]
-_Virgo Cluster_, 53,800,000 light-years from home.
-The shapeshifting species _Aquarium metamorpha_.
-Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus]
-Next species...
+Escaped from the Galactic Center, we wander into unknown places.
 
 
 [music:4,1,2,3:4]
@@ -218,16 +241,16 @@ Next species...
 [allow_morph:rectus,gyrans,tachus,lithos,paragyrans,pararectus,rectogyrans,sequerectus]
 [clear_world:gray][put_player:tachus][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
 #[dot:3]
-We have arrived at a distant, ancient galaxy.
+We have arrived at a distant, ancient part of our Galaxy.
 Our ships have been over-engineering themselves.
-And finally, they go out of control.
+And finally, they have gone out of control.
 _A. replicans_ relentlessly copy themselves, consume every star and planet ...
-... and turn all matter into a homogenous, grayish, massive sludge.
+... and turn all matter into a massive, homogeneous, grayish sludge.
 A so-called *Gray Goo* incident.
 To deal with these self-replicating machines, ...
 [add_bullet:Paraptera,Heptapteryx:Paraptera]
 [bullet_limit:50]
-... you are equipped with powerful bullets, _Paraptera_ and _Heptapteryx_.
+... you are equipped with powerful pulses, _Paraptera_ and _Heptapteryx_.
 {Fire:A} to suppress their growth.
 Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
@@ -239,7 +262,7 @@ Peace has been restored. Thank you for your service.
 
 
 [gun:off]
-[chapter:final:Cosmic Immune System]
+[chapter:final:Galactic Immune System]
 
 # immune system
 [species:Cilium immunitatis:G6G6CR]
@@ -247,16 +270,16 @@ Peace has been restored. Thank you for your service.
 [clear_world][put_player:lithos]
 [min_morph:3:lithos]
 To prevent future Gray Goo events, we accelerated our evolution.
-At the edge of the universe, a new genus _Cilium_ was born.
+At the edge of the Galaxy, a new genus _Cilium_ was born.
 They are peaceful creatures, and they move differently.
 [draw:if:G6G6CR]
-{R:1} twice to enter draw mode. Add red mass to make _Cilium_ move.[need:discover_morph:rectus,limus]
+{R:1} twice to switch to drawing. Add red mass to make _Cilium_ move.[need:discover_morph:rectus,limus]
 That's correct. _Cilium_ are propelled by red devices on their membranes.
 
 [new_scene]
 [clear_world][put_player:rectus]
 [min_morph:15:rectus,limus]
-_Cilium_ could serve as the nascent immune system of a healthy universe.
+_Cilium_ could serve as the nascent immune system of a healthy galaxy.
 "_They may release plenty of red mass that neutralizes Gray Goo,_ ...
 _... if only they work together_," Leniologists suspect.
 Produce an abundance of red mass.[need:mass:r:50]
@@ -273,11 +296,12 @@ Red Goo and Gray Goo are now perfectly balanced.
 [speed:1][gun:off][new_bullet:off][clone:off][erase:off][draw:off][morph_book:off]
 [energy:off]
 [clear_world:empty]
-The universe remains a peaceful place.
+The Galaxy remains a peaceful place.
 
-_Lenium_ was discovered by scientist Chan in the early 21st century.
-Shortly after, the *cognitive masking* capability of _Lenium_ ...
-... was discovered by scientists Cool, Hartl, Levin and Petti.
+_Lenia_, the precursor of _Lenium_ technology, ...
+... was discovered by scientist Chan in the early 21st century.
+Shortly after, the *cognitive masking* capability of _Lenia_ ...
+... was discovered by scientists Cool, Hartl, Levin, and Petti.
 _Lenium_ technology keeps evolving.
 
 [new_scene]
@@ -294,5 +318,5 @@ _Lenium_ technology keeps evolving.
 🎼 Music: _Billions and Billions_ by Stellardrone
 👾 Gameplay inspired by _FTL_ 🚀 and _Asteroids_ 🌠
 
-Your discovered morphs and bullets will be added to Sandbox.
+Your discovered morphs and pulses will be added to Sandbox.
 Thank you for your participation.

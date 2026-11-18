@@ -1053,26 +1053,45 @@ const Core = (function () {
     for (const bottom of patchRows()) {
       for (let i = 0; i < 3; i++) {
         const r = patchRect(i, bottom), sel = bottom ? i === action : i === channel;
-        // erase on the selected channel patch (opt.patchErase, the game's recycle): striped, "-G";
-        // draw (opt.patchDraw): cross-hatched, "+G". The field's tools (opt.fieldTools): "+G"
-        // solid (paintbrush; the others too, which a click gives), "×G" a blurred disc (soft brush), "−G" striped (eraser)
+        // erase on the selected channel patch (opt.patchErase, the game's recycle): black disks on the
+        // colour, "-G"; draw (opt.patchDraw): the colour's disks on black, "+G". The field's tools (opt.fieldTools), each a thick
+        // 45° stripe (lower left to upper right) through the patch: "+G" the colour's on black
+        // (paintbrush; the others too, which a click gives), "×G" the same with soft edges (soft brush,
+        // a watercolour stroke), "−G" a black one on the colour (eraser)
         const fm = !bottom && opt.fieldTools(), ft = fm ? (sel ? fieldTool : 0) : -1;
-        const striped = fm ? ft > 0 : !bottom && sel && ((action === 1 && opt.patchErase()) || (action === 2 && opt.patchDraw()));
-        const hatched = !fm && striped && action === 2, speckled = ft === 1;
+        const striped = !fm && !bottom && sel && ((action === 1 && opt.patchErase()) || (action === 2 && opt.patchDraw()));
+        const hatched = striped && action === 2;
         ctx.globalAlpha = sel ? 1 : 0.4;
         ctx.fillStyle = CH_COLORS[bottom ? channel : i];
-        if (striped) {
+        if (fm) {
           ctx.save();
           ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
-          ctx.fillStyle = '#111'; ctx.fillRect(r.x, r.y, r.w, r.h);
-          ctx.strokeStyle = CH_COLORS[i]; ctx.lineWidth = 7;
-          if (speckled) {   // the soft brush: its blurred disc, the colour full in the middle fading to the dark at the edges
-            const cx = r.x + r.w / 2, cy = r.y + r.h / 2, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r.w / 2);
-            g.addColorStop(0, CH_COLORS[i]); g.addColorStop(0.35, CH_FILLS[i]); g.addColorStop(1, 'rgba(0,0,0,0)');
+          const col = CH_COLORS[i], cx = r.x + r.w / 2, cy = r.y + r.h / 2, hw = Math.min(r.w, r.h) * 0.36;   // the stripe's half width
+          ctx.fillStyle = ft === 2 ? col : '#111'; ctx.fillRect(r.x, r.y, r.w, r.h);
+          if (ft === 1) {   // soft edges: a gradient across the stripe (along (1, 1)), full in its middle fading out past its edges
+            const u = (hw * 1.8) / Math.SQRT2, g = ctx.createLinearGradient(cx - u, cy - u, cx + u, cy + u);
+            g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.3, CH_FILLS[i]); g.addColorStop(0.42, col);
+            g.addColorStop(0.58, col); g.addColorStop(0.7, CH_FILLS[i]); g.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = g; ctx.fillRect(r.x, r.y, r.w, r.h);
-          } else
-          for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y + r.h); ctx.lineTo(r.x + d + r.h, r.y); ctx.stroke(); }
-          if (hatched) for (let d = -r.h; d < r.w + r.h; d += 16) { ctx.beginPath(); ctx.moveTo(r.x + d, r.y); ctx.lineTo(r.x + d + r.h, r.y + r.h); ctx.stroke(); }
+          } else {
+            const L = r.w + r.h;
+            ctx.strokeStyle = ft === 2 ? '#111' : col; ctx.lineWidth = 2 * hw; ctx.lineCap = 'butt';
+            ctx.beginPath(); ctx.moveTo(cx - L, cy + L); ctx.lineTo(cx + L, cy - L); ctx.stroke();
+          }
+          ctx.restore();
+        } else if (striped) {
+          ctx.save();
+          ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+          // disks on a staggered grid, centred on the patch: the colour's on black (draw), black on the colour (erase)
+          ctx.fillStyle = hatched ? '#111' : CH_COLORS[i]; ctx.fillRect(r.x, r.y, r.w, r.h);
+          ctx.fillStyle = hatched ? CH_COLORS[i] : '#111';
+          const gap = 22, rad = 7, cx = r.x + r.w / 2, cy = r.y + r.h / 2, ny = Math.ceil(r.h / gap / 2) + 1, nx = Math.ceil(r.w / gap / 2) + 1;
+          ctx.beginPath();
+          for (let j = -ny; j <= ny; j++) for (let k = -nx; k <= nx; k++) {
+            const x = cx + (k + (j & 1) / 2) * gap, y = cy + j * gap * 0.866;
+            ctx.moveTo(x + rad, y); ctx.arc(x, y, rad, 0, 2 * Math.PI);
+          }
+          ctx.fill();
           ctx.restore();
         } else ctx.fillRect(r.x, r.y, r.w, r.h);
         ctx.globalAlpha = 1;
@@ -1084,7 +1103,7 @@ const Core = (function () {
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = bottom ? '700 17px system-ui, sans-serif' : '700 22px system-ui, sans-serif';
         const label = bottom ? ACTIONS[i] : fm ? FIELD_SYMS[ft] + CH_NAMES[i] : (striped ? (hatched ? '+' : '\u2212') : '') + CH_NAMES[i];
-        if (striped) {   // on the stripes: dark text in a light halo
+        if (striped || fm) {   // on the stripes: dark text in a light halo
           ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.strokeText(label, r.x + r.w / 2, r.y + r.h / 2);
         }
         ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
