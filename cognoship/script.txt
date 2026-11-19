@@ -4,7 +4,7 @@
 [morph_book_action:clear_put][retry_action:clear_put]
 #[add_bullet:all:Orbium]
 
-[stars:0:3:2]
+[stars:0:3:2:3]
 [clear_world:empty]
 This is the story of the Cognoship.
 
@@ -118,7 +118,7 @@ When you are ready, we will continue our interstellar journey.
 
 [species:Aquarium originale:5N7KKM]
 [allow_morph:limus]
-[stars:follow:0.1:2]
+[stars:follow:0.1]
 [clear_world:scroll][put_player:limus]
 There is no mission, no objective while we are wandering through space.
 But to navigate the vastness of space, we still need one more technology.
@@ -140,7 +140,6 @@ Our _Lenium_ ships keep evolving to survive the interstellar medium ...
 Here are some of our Leniologists' favorite species.
 
 [new_scene]
-[stars:follow:0.1]
 [species:Aquarium virgatus:KZ2BLD]
 [allow_morph:rectus,limus,virgatus]
 [clear_world:scroll][put_player:rectus]
@@ -186,7 +185,7 @@ We are heading to the center of our Galaxy.
 
 
 [chapter:5:Megastructure]
-[stars:135:3:2]
+[stars:135]
 
 [world_draw:off]
 
@@ -227,7 +226,7 @@ Discover all 3 morphs. {Retry:←} if necessary.[need:discover_morph:rectus,tach
 You endured.
 
 [new_scene]
-[stars:0:3:2]
+[stars:0:3:2:3]
 [clear_world:empty]
 Escaped from the Galactic Center, we wander into unknown places.
 
@@ -256,7 +255,7 @@ Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
 
 [new_scene]
-[stars:270:3:2]
+[stars:270:3:2:3]
 [clear_world:empty]
 Peace has been restored. Thank you for your service.
 
@@ -265,6 +264,7 @@ Peace has been restored. Thank you for your service.
 [chapter:final:Galactic Immune System]
 
 # immune system
+[stars:270]
 [species:Cilium immunitatis:G6G6CR]
 [allow_morph:rectus,limus,tardus,lithos,munitus]
 [clear_world][put_player:lithos]
@@ -291,7 +291,7 @@ Red Goo and Gray Goo are now in perfect balance.
 #ending
 
 [new_scene]
-[stars:0:3:2]
+[stars:0:3:2:3]
 [species]
 [speed:1][gun:off][new_bullet:off][clone:off][erase:off][draw:off][morph_book:off]
 [energy:off]
@@ -305,7 +305,7 @@ Shortly after, the *cognitive masking* capability of _Lenia_ ...
 _Lenium_ technology keeps evolving.
 
 [new_scene]
-[stars:90:3:2]
+[stars:90:3:2:3]
 [music:1:1]
 [clear_world:sky:empty]
 
@@ -313,12 +313,11 @@ _Lenium_ technology keeps evolving.
 👾 Game design: Bert Chan
 💻 Programming: Bert Chan, Claude Opus 🤖
 🧪 Testing: Jesse Cool, Lainey Chan
-🔬 Leniologists: Jesse Cool (Tufts U), Marko Cvjetko (Inria) ...
-🔬 Leniologists: Gautier Hamon (Inria), Bert Chan (ALife Institute)
+🔬 Leniologists: Jesse Cool, Marko Cvjetko, Gautier Hamon, Bert Chan
 🎼 Music: _Long Way_ by Rexlambo; _A Few Jumps Away_ by Arthur Vyncke ...
 🎼 Music: _Out of the Skies, Under the Earth_ by Chris Zabriskie ...
 🎼 Music: _Billions and Billions_ by Stellardrone
 👾 Gameplay inspired by _FTL_ 🚀 and _Asteroids_ 🌠
 
-Your discovered morphs and pulses will be added to Sandbox.
+Your discovered morphs and pulses are in Challenge and Sandbox modes.
 Thank you for your participation.

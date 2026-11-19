@@ -39,6 +39,8 @@ uniform vec2  uStarOff;     // the star drift so far, cells at unit layer speed 
 uniform vec2  uStarDir;     // the drift direction, unit (default (-1, 0): to the left)
 uniform float uStarSpeed;   // drift and sway speed, 1 = default
 uniform float uStarBright;  // brightness, 1 = default
+uniform float uStarTwinkle; // > 0: each star's brightness flickers ([stars:…:<rate>])
+uniform float uTwinkleTime; // the twinkle's clock: seconds times the rate (core.js star.tt; wraps as uTime)
 uniform vec3  uBg;          // the background behind the board (glsim.js setBackground), black by default
 uniform int   uSky;         // 1: instead a sky (glsim.js setSky): a circular gradient, light cyan at the world view's bottom to dark cyan at its top
 
@@ -102,11 +104,22 @@ vec3 starLayer(vec2 b, float pxPerCell, float g, float speed, float bright, floa
     float r = 0.8 + 0.85 * bright;                 // radius in screen px: ~1.05, 1.25, 1.6 by layer
     float a = clamp(r + 0.5 - dpx, 0.0, 1.0);
     if (a <= 0.0) return vec3(0.0);
-    // mostly white, with a faint cyan, red or yellow tint
+    // tints in about the naked-eye sky's shares (bright stars: hot blue-white, orange giants, fewer
+    // yellow): cyan 25% (the game's stand-in for blue-white), orange 30%, yellow 12%, white 33%
     float t = rnd(key + uvec3(0u, 0u, 303u));
-    vec3 tint = t < 0.25 ? vec3(0.7, 1.0, 1.0) : t < 0.4 ? vec3(1.0, 0.75, 0.7)
-              : t < 0.6 ? vec3(1.0, 0.95, 0.7) : vec3(1.0);
+    vec3 tint = t < 0.25 ? vec3(0.4, 0.85, 1.0) : t < 0.55 ? vec3(1.0, 0.62, 0.3)
+              : t < 0.67 ? vec3(1.0, 0.82, 0.35) : vec3(1.0);
     float level = bright * uStarBright * (0.6 + 0.4 * rnd(key + uvec3(0u, 0u, 404u)));
+    // twinkle: two sines per star, each its own speed (about 0.9 to 3 rad/s at rate 1) and phase, on
+    // uTwinkleTime; whole multiples of its wrap rate (core.js: it wraps every 100 sway periods), so no jump there
+    if (uStarTwinkle > 0.0) {
+        float w0 = STAR_SWAY_W / 100.0;
+        float f1 = w0 * floor(300.0 + 700.0 * rnd(key + uvec3(0u, 0u, 505u)));
+        float f2 = w0 * floor(300.0 + 700.0 * rnd(key + uvec3(0u, 0u, 606u)));
+        float p1 = 6.2832 * rnd(key + uvec3(0u, 0u, 707u)), p2 = 6.2832 * rnd(key + uvec3(0u, 0u, 808u));
+        float s = 0.5 + 0.25 * sin(f1 * uTwinkleTime + p1) + 0.25 * sin(f2 * uTwinkleTime + p2);   // 0 .. 1
+        level *= 0.2 + 1.0 * s * s;   // mostly dimmer, now and then a little brighter than still
+    }
     return tint * level * a;
 }
 

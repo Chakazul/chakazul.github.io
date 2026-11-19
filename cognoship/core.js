@@ -139,6 +139,8 @@ const Core = (function () {
                 // (drawn centred on cell at, wrapping round the edges within r px), or null; hover:
                 // the mouse's cell there, or null
                 worldPress: () => false,
+                // worldCursor: the crosshair over the world view (false: the normal arrow, nothing to do there)
+                worldCursor: () => true,
                 worldDrag: () => {},
                 worldGhost: () => null,
                 // patchErase: the selected channel's patch toggles erase (no action patches)
@@ -165,6 +167,8 @@ const Core = (function () {
                 // recorded as wholes, and drawn as one circle with its name (its parts' names hidden)
                 // once named WHOLE_SHOW times in a row (the lab; not yet the game)
                 wholes: () => false,
+                // wholeNames: a shown whole's name above its circle (with opt.circlesAll / Detect: Every)
+                wholeNames: () => true,
                 // worldFrame: the world view framed as the ship panel, all four corners rounded alike
                 worldFrame: () => false,
                 // zoomDrag(off, e): the pointer of a press zoomPress took moves (off as zoomPress's)
@@ -247,6 +251,7 @@ const Core = (function () {
   let focusIdx = -1;         // its index in found.comps (this scan)
   let autoFocus = false;     // after a spawn: focus the creature nearest the board centre
   let kin = null;
+  let lastPtr = null;   // the mouse's last canvas point (null: off the canvas; syncCursor)
   let masking = null;        // { id, view: [x, y] } while the pointer holds a tool
   let hover = null;          // [x, y] view offset of a mouse hovering over the ship view
   let msPerStep = 0;
@@ -818,7 +823,7 @@ const Core = (function () {
   // stars), the middle layer (draw.glsl: 1.5 x the drift speed) at the ship's speed times follow,
   // the dots (dots.js) at that speed too; fv: the ship's velocity reversed, cells per game second,
   // smoothed (FOLLOW_EMA per frame), so the heading's jitter and turns don't jerk the stars
-  const star = { angle: 0, speed: 1, bright: 1, off: [0, 0], t: 0, last: null, follow: 0, fv: [0, 0] };
+  const star = { angle: 0, speed: 1, bright: 1, twinkle: 0, tt: 0, off: [0, 0], t: 0, last: null, follow: 0, fv: [0, 0] };   // twinkle: the stars' flicker rate (0: none; draw.glsl), tt its clock
   const FOLLOW_EMA = 0.08;
   const SWAY_PERIOD = 2 * Math.PI / 0.3;   // s (draw.glsl STAR_SWAY_W)
   function driftTick() {
@@ -827,10 +832,12 @@ const Core = (function () {
     starSec = real;
     driftSec = real;   // while playing, frame() sets it from the steps' rate
     star.t = (star.t + starSec) % (100 * SWAY_PERIOD);
+    star.tt = (star.tt + starSec * star.twinkle) % (100 * SWAY_PERIOD);   // (the same wrap as t: draw.glsl's twinkle runs whole cycles in it)
   }
-  function setStars(angle = 0, speed = 1, bright = 1) { Object.assign(star, { angle, speed, bright, follow: 0 }); }
-  // the drift follows the ship (opposite its motion) at its speed times k (0: as setStars set it); bright as setStars
-  function setStarsFollow(k, bright = 1) { Object.assign(star, { follow: k, bright }); }
+  function setStars(angle = 0, speed = 1, bright = 1, twinkle = 0) { Object.assign(star, { angle, speed, bright, twinkle, follow: 0 }); }
+  // the drift follows the ship (opposite its motion) at its speed times k (0: as setStars set it); bright,
+  // twinkle as setStars (left out: kept)
+  function setStarsFollow(k, bright = star.bright, twinkle = star.twinkle) { Object.assign(star, { follow: k, bright, twinkle }); }
   // the drift's unit direction (board x right, y down) and speed factor (the dots follow it too)
   // (cells: the dots' drift, cells per game second, when following the ship; else theirs times speed)
   const MID_LAYER = 1.5;   // draw.glsl's middle layer speed
@@ -855,8 +862,8 @@ const Core = (function () {
     star.off[1] = (star.off[1] + dir[1] * speed * starSec) % (10 * BH);
     // (following the ship: no sway, whose offset scales with the drift's speed and turns with its
     // direction, draw.glsl: the stars would jump as the ship turns, slows or the game pauses)
-    if (star.follow > 0) return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: [-1, 0], starSpeed: 0, starBright: star.bright };
-    return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: dir, starSpeed: speed, starBright: star.bright };
+    if (star.follow > 0) return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: [-1, 0], starSpeed: 0, starBright: star.bright, starTwinkle: star.twinkle, twinkleTime: star.tt };
+    return { stars: opt.stars(), time: star.t, starOff: star.off, starDir: dir, starSpeed: speed, starBright: star.bright, starTwinkle: star.twinkle, twinkleTime: star.tt };
   }
 
   // The ship view's square on the canvas, and its px per cell: (x0, y0, edge, px per cell)
@@ -1031,6 +1038,7 @@ const Core = (function () {
   // The overlay, drawn in logical px: once on a landscape canvas; on a stacked one, twice, clipped to
   // the world view as it is, then to the ship panel, moved and scaled to its place.
   function drawOverlay() {
+    if (lastPtr) syncCursor(lastPtr);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, layout.w, layout.h);
     if (!layout.stacked) return drawScene();
@@ -1174,6 +1182,7 @@ const Core = (function () {
           for (const [x, y] of wrapCopies(wxp(w.col), wyp(w.row), r + 16)) {
             ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
             ctx.strokeStyle = hueFill(hue, 1); ctx.lineWidth = 3; ctx.stroke();
+            if (!opt.wholeNames()) continue;
             ctx.font = ital() + '600 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(lab, x, y - r - 2);
             ctx.fillStyle = '#fff'; ctx.fillText(lab, x, y - r - 2);
@@ -1515,11 +1524,22 @@ const Core = (function () {
     }
     return '';
   }
+  // The cursor shows what a press does: a hand over the patches; the crosshair over the world view
+  // (unless opt.worldCursor says it has no action) and over the ship view while a ship is followed
+  // (not under the end-of-run banner); elsewhere (no ship, the panel round the view, beside the
+  // stacked panel) the normal arrow. Also each frame (drawOverlay), as the ship comes and goes.
+  function syncCursor(p) {
+    const inWorld = p[0] >= 0 && p[0] < PX && p[1] >= 0 && p[1] < CH;
+    const c = patchTip(p) ? 'pointer'
+      : inWorld ? (opt.worldCursor() ? '' : 'default')
+      : inZoom(p) && focus && !opt.over() ? '' : 'default';
+    if (ui.style.cursor !== c) ui.style.cursor = c;
+  }
   ui.addEventListener('pointermove', e => {
     const p = canvasPoint(e);
     const tip = patchTip(p);
     if (ui.title !== tip) ui.title = tip;
-    ui.style.cursor = tip ? 'pointer' : '';   // a hand over the patches
+    lastPtr = p; syncCursor(p);
     if (masking && e.pointerId === masking.id) masking.view = viewOffset(p);
     if (pageDrag === e.pointerId) {
       if (!dragWorld) opt.zoomDrag(rot(viewOffset(p)), e);
@@ -1530,7 +1550,7 @@ const Core = (function () {
   });
   // (opt.keepHover(el): keep the ship-view hover point when the pointer moves onto el, e.g. a
   // button over the view)
-  ui.addEventListener('pointerleave', e => { if (!opt.keepHover(e.relatedTarget)) { hover = null; worldHover = null; } });
+  ui.addEventListener('pointerleave', e => { lastPtr = null; if (!opt.keepHover(e.relatedTarget)) { hover = null; worldHover = null; } });
   let pageDrag = null;   // the pointer of a press the page took (opt.zoomPress, opt.worldPress), while held
   let dragWorld = false;   // ... in the world view (else the ship view)
   const endMask = e => {

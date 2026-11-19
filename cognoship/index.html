@@ -107,12 +107,15 @@
         <div class="book-box" role="dialog" aria-label="Morph book">
           <h2 id="book-title">Dissolve to respawn</h2>
           <div class="book-grid" id="book-grid"></div>
-          <!-- the settings book (above Close) ([settings:on], the Settings button): Autospawn (Respawn by itself once dissolved),
-               Scroll (a scrolling world, [clear_world:scroll]), Objects (how many other creatures to keep, [min_morph:<n>]) -->
+          <!-- the settings book (above Close) ([settings:on], the Settings button): World (Normal; Centered, the
+               ordinary world rolled to keep the ship in the middle; Scroll, a scrolling world, [clear_world:scroll]),
+               Autospawn (Respawn by itself once dissolved), Objects (how many other creatures to keep, [min_morph:<n>]),
+               Hostile (how many bots to keep, [min_hostile:<n>]) -->
           <div id="book-settings" class="book-settings" hidden>
+            <button id="world" aria-pressed="false" title="World: Normal (the ordinary world); Centered (the same world, rolled round so your ship stays in the middle of the world view); Scroll (a scrolling world that follows your ship; the world starts afresh as the book closes)">World: Normal</button>
             <button id="autospawn" aria-pressed="false" title="Autospawn: once your ship has dissolved, Respawn by itself after a second">Autospawn</button>
-            <button id="scroll" aria-pressed="false" title="Scroll: a scrolling world that follows your ship ([clear_world:scroll]); the world starts afresh as the book closes">Scroll</button>
             <label title="Objects: keep at least this many other creatures in the world (a species chosen, or now)">Objects <input id="objects" type="range" min="0" max="6" step="1"><output id="objects-v"></output></label>
+            <label title="Hostile: keep at least this many hostile creatures, which fire at your ship, in the world (a species chosen, or now)">Hostile <input id="hostiles" type="range" min="0" max="5" step="1"><output id="hostiles-v"></output></label>
           </div>
           <button id="book-close">Close</button>
           <div id="book-species" class="book-species" hidden></div>

@@ -177,7 +177,7 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game: the ship-view controls (.ship-ctl above), on black whatever the page theme */
 .ship-ctl{gap:16px}
 .ship-ctl label{color:#c8c0d6}
-.ship-ctl button.dim{opacity:.45}   /* Undo with nothing to undo (world draw) */
+.ship-ctl button.dim{opacity:.45;cursor:default}   /* Undo with nothing to undo (world draw): no hand either */
 @media (max-width:1000px){ .ship-ctl{gap:10px} }
 @media (max-width:560px){ .ship-ctl{gap:4px} }
 /* Game: when the ship is lost, Respawn and Morphs (#reset, #morphs-dead), one above the other in the
@@ -510,3 +510,16 @@ button,select,input{transition:background .25s,border-color .25s}
 /* ?phone=1 (the phone test's frame): no scrollbar taking width, as on a phone (overlay scrollbars) */
 html.phone-test{scrollbar-width:none}
 html.phone-test::-webkit-scrollbar{display:none}
+/* Game, fullscreen on a phone (landscape: a short window): compact books. The challenge book keeps
+   each title on one line (smaller); the species book (a challenge's, with its record row too) has
+   smaller text and margins, so its rows of thumbnails keep their size (game.js fitBook) */
+@media (max-height:520px){
+  :root.fs .book-box{gap:calc(var(--ui-h) * .2);padding:calc(var(--ui-h) * .25) calc(var(--ui-h) * .4)}
+  :root.fs .book-box h2{font-size:calc(var(--ui-font) * 1.1)}
+  :root.fs .book-slot.challenge{font-size:calc(var(--ui-font) * .9);min-height:var(--ui-h)}
+  :root.fs .book-slot.challenge .label{white-space:nowrap}
+  :root.fs .book-grid.species{gap:4px}
+  :root.fs .book-slot.species{font-size:calc(var(--ui-font) * .85);padding:3px 4px;gap:.15em;min-height:0}
+  :root.fs .book-slot.species .crow{line-height:1}
+  :root.fs .thumbs{gap:2px}
+}

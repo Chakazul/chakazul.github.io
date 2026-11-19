@@ -691,7 +691,7 @@ const SimGL = (function () {
   // view: { canvasW, canvasH, worldScale, worldOff: [col, row] the world view's top-left cell (the scrolling world; default 0, 0), worldInset: cells of black inside its edges (default 0), zoom: [x0, y0, edge, pxPerCell], rot: mat2 (column-
   // major, view (right, down) -> board (col, row)), focus: [col, row, on],
   //   stars: star field on, time: seconds (star sway), starOff: [x, y] drift (cells, at unit
-  //   layer speed), starDir: [x, y] unit drift direction, starSpeed, starBright: 1 = default }
+  //   layer speed), starDir: [x, y] unit drift direction, starSpeed, starBright: 1 = default, starTwinkle: the flicker rate (0: none), twinkleTime: its clock, s times the rate }
   let lastView = null, hideField = false;   // (withoutField)
   function render(view) {
     lastView = view;
@@ -726,6 +726,8 @@ const SimGL = (function () {
     gl.uniform2fv(loc(p, 'uStarDir'), view.starDir || [-1, 0]);
     gl.uniform1f(loc(p, 'uStarSpeed'), view.starSpeed ?? 1);
     gl.uniform1f(loc(p, 'uStarBright'), view.starBright ?? 1);
+    gl.uniform1f(loc(p, 'uStarTwinkle'), view.starTwinkle || 0);
+    gl.uniform1f(loc(p, 'uTwinkleTime'), view.twinkleTime || 0);
     gl.uniform3fv(loc(p, 'uBg'), bgRGB);
     gl.uniform1i(loc(p, 'uSky'), sky ? 1 : 0);
     draw4();

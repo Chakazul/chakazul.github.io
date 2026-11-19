@@ -201,8 +201,8 @@ Set the game speed, as the Speed slider. `<x>`: `1/8`, `1/4`, `1/2`, `1`, `2`, `
 ### `[stars]`
 
 ```
-[stars:<angle>:<speed>:<bright>]
-[stars:follow[:<k>[:<bright>]]]
+[stars:<angle>:<speed>:<bright>:<rate>]
+[stars:follow[:<k>[:<bright>[:<rate>]]]]
 ```
 
 The star field's drift.
@@ -212,6 +212,7 @@ The star field's drift.
 | `<angle>` | Drift direction in degrees, clockwise from left: 0 to the left (default), 90 up, 180 right. |
 | `<speed>` | Times the default speed (1; 0 stops it). |
 | `<bright>` | Times the default brightness (1; 0 hides it). |
+| `<rate>` | Twinkle: each star's brightness flickers on its own, faster the higher (1: about one flicker every 2 to 7 s; 2: twice as fast). Default 0: steady. |
 | `follow:<k>` | Drift opposite the ship's motion, as if it flew past the stars: the middle layer at the ship's speed × `k` (default 1; the near layer faster, the far one slower), turning as the ship turns (smoothed over a few frames); still while the ship stands still or the game is paused. |
 
 - A part left out or empty keeps its default: `[stars:90]`, `[stars::2]`.
@@ -489,9 +490,10 @@ A **Settings** button (`V`) at the lower centre of the world view, opening the s
 
 | Setting | Meaning | Until first set |
 |---|---|---|
+| **World** | A button cycling three modes. *Normal*: the world as the script makes it. *Centered*: the same ordinary world, the world view rolled round it so the ship stays in its middle, at once. *Scroll*: every `[clear_world]` makes a scrolling world; changed to or from it in the book, the current species is chosen again as the book closes. Centered and Scroll add `[stars:follow:0.1]`. | Normal |
 | **Autospawn** | Once the ship has dissolved, Respawn by itself a second later, with no "Dissolved" panel; the ship view stays where the ship was last seen. | off |
-| **Scroll** | Every `[clear_world]` makes a scrolling world, with `[stars:follow:0.1]`. Changed in the book: the current species is chosen again as the book closes. | off |
 | **Objects** | Off, 1, 2, 5, 10, 20 or 40: `[min_morph:<n>]`, run after every `[on_start]` block (overriding its count; its morphs and placing stay) and at once when moved. Lowering it removes nobody. | 2 |
+| **Hostile** | Off, 1, 2, 3, 5 or 10: `[min_hostile:<n>]`, as Objects (the last `[min_hostile]`'s morphs, placing and bullet; none yet: all, random, Scutium). | off |
 
 ## Energy, dots and beacons
 

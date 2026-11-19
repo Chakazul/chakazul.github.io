@@ -56,6 +56,7 @@
   }
   C.opt.circlesAll = () => DEV;
   C.opt.worldFrame = () => true;   // the world view framed as the ship view, its corners rounded alike
+  C.opt.wholeNames = () => false;   // (?dev=1's circles: a twin's without its name; a hostile's named by its red mark)
   C.opt.wholes = () => true;   // twins and trios found, named and followed as one (core.js wholes, ship)
   C.opt.focusCircle = () => true;   // a yellow circle around the ship's detected object, inside the frame
   C.opt.frameColor = () => '#fff';   // the world view's frame around the ship: white      // with the morph's colour dot, as in the morph book
@@ -539,6 +540,7 @@
   const fieldMode = () => !!Bullets.field;
   SimGL.setFieldKeepsDots(true);   // the dots (and beacons, to be eaten) stay while drawing on the world
   C.opt.fieldTools = fieldMode;
+  C.opt.worldCursor = fieldMode;   // the crosshair over the world view only while drawing on it (else nothing to do there)
   C.opt.worldPress = at => { if (!fieldMode()) return false; Field.begin(at, C.channel, C.fieldTool); return true; };
   C.opt.worldDrag = at => Field.move(at);
   C.opt.pressEnd = () => Field.end();
@@ -1424,28 +1426,42 @@
     retake = true; cand = null;   // a fresh world: the morph's picture may be retaken (the sandbox's start too)
   }
   // ---- settings ([settings:on]) -------------------------------------------------------------
-  // The Settings button (V; the ship view's lower right) opens the settings book: Autospawn, Scroll
-  // and Objects, each kept in the browser across runs.
+  // The Settings button (V; the ship view's lower right) opens the settings book: World, Autospawn,
+  // Objects and Hostile, each kept in the browser across runs.
   function openSettingsBook() {
     if (!settingsOn) return;
     if (book.open && book.mode !== 'settings') closeBook();
-    book.mode = 'settings'; scrollWas = scrollSet;
+    book.mode = 'settings'; worldWas = worldMode;
     showBook();
   }
   $('settings').onclick = openSettingsBook;
-  // Scroll: every [clear_world] makes a scrolling world, as [clear_world:scroll] (off: as the script
-  // says). Changed in the book: as it closes, the species is chosen again (the world afresh, with it).
-  const SCROLL_KEY = 'cognoship-scroll';
-  let scrollSet = false, scrollWas = false, scrollStars = false;   // scrollStars: the setting's [stars:follow] is in force
-  try { scrollSet = localStorage.getItem(SCROLL_KEY) === '1'; } catch (e) {}
-  $('scroll').onclick = () => {
-    scrollSet = !scrollSet;
-    try { localStorage.setItem(SCROLL_KEY, scrollSet ? '1' : '0'); } catch (e) {}
+  // World, a button cycling three modes. Normal: the world as the script makes it. Centered: the same
+  // (ordinary) world, the world view rolled round the torus so the ship stays in its middle (roll,
+  // centerFrame), at once. Scroll: every [clear_world] makes a scrolling world, as
+  // [clear_world:scroll]; changed to or from it in the book: as it closes, the species is chosen
+  // again (the world afresh, with it). Centered and Scroll: the stars follow the ship ([stars:follow:0.1]).
+  const WORLD_KEY = 'cognoship-world', WORLDS = ['normal', 'centered', 'scroll'];
+  let worldMode = 'normal', worldWas = 'normal', scrollStars = false;   // scrollStars: the setting's [stars:follow] is in force
+  try {
+    const v = localStorage.getItem(WORLD_KEY);
+    if (WORLDS.includes(v)) worldMode = v;
+    else if (localStorage.getItem('cognoship-scroll') === '1') worldMode = 'scroll';   // (the old Scroll toggle's)
+  } catch (e) {}
+  $('world').onclick = () => {
+    worldMode = WORLDS[(WORLDS.indexOf(worldMode) + 1) % WORLDS.length];
+    try { localStorage.setItem(WORLD_KEY, worldMode); } catch (e) {}
+    if (!scroll) { setRoll(settingsOn && worldMode === 'centered'); followStars(); }   // (Centered on or off: at once)
     syncObjects();
   };
+  // the setting's star drift: on with Centered or Scroll, back off (as the script set them) without
+  function followStars() {
+    const on = settingsOn && worldMode !== 'normal';
+    if (on) { C.setStarsFollow(0.1); scrollStars = true; }   // ([stars:follow:0.1], the brightness and twinkle kept)
+    else if (scrollStars) { C.setStarsFollow(0); scrollStars = false; }
+  }
   function settingsClosed() {
-    if (scrollSet === scrollWas) return;
-    scrollWas = scrollSet;
+    const was = worldWas; worldWas = worldMode;
+    if ((was === 'scroll') === (worldMode === 'scroll')) return;
     const id = chosenSpecies ?? (C.pattern && C.speciesOf(C.pattern));
     if (id && visSpecies.some(e => e.id === id)) pickSpecies(id);
   }
@@ -1462,6 +1478,18 @@
     if (!n) minMorph = null;
     else if (minMorph) minMorph.n = n;
     else { minMorph = { n, ids: minSpec.ids, how: minSpec.how, next: 0 }; edgeQueue = []; }
+    applyHostiles();
+  }
+  // The Hostile slider: [min_hostile:<n>] as Objects is [min_morph:<n>] (its morphs, placing and
+  // bullet the last [min_hostile]'s; none yet: all, random, Scutium). Until first set, off.
+  const HOSTILES = [0, 1, 2, 3, 5, 10], HOST_KEY = 'cognoship-hostiles';
+  let hostSpec = { ids: [], how: 'random', bullet: 'Scutium' }, hostilesIdx = 0;
+  try { const v = parseInt(localStorage.getItem(HOST_KEY), 10); if (v >= 0 && v < HOSTILES.length) hostilesIdx = v; } catch (e) {}
+  function applyHostiles() {
+    const n = HOSTILES[hostilesIdx];
+    if (!n) minHostile = null;
+    else if (minHostile) minHostile.n = n;
+    else { Hostile.set(hostSpec.bullet); minHostile = { n, ids: hostSpec.ids, how: hostSpec.how, next: 0, puts: 0 }; }
   }
   // Autospawn (beside it): once the ship is lost (Respawn shows), Respawn by itself after
   // AUTOSPAWN_MS, as the button would (not while a book, a card or a fade is up). Kept as Objects.
@@ -1482,11 +1510,21 @@
   };
   function syncObjects() {
     $('autospawn').setAttribute('aria-pressed', autospawn);
-    $('scroll').setAttribute('aria-pressed', scrollSet);
+    $('world').setAttribute('aria-pressed', worldMode !== 'normal');
+    $('world').textContent = 'World: ' + worldMode[0].toUpperCase() + worldMode.slice(1);
     $('objects').value = objectsIdx;
     $('objects-v').textContent = OBJECTS[objectsIdx] || 'Off';
     fillRange($('objects'));
+    $('hostiles').value = hostilesIdx;
+    $('hostiles-v').textContent = HOSTILES[hostilesIdx] || 'Off';
+    fillRange($('hostiles'));
   }
+  $('hostiles').oninput = e => {
+    hostilesIdx = +e.target.value;
+    try { localStorage.setItem(HOST_KEY, String(hostilesIdx)); } catch (err) {}
+    syncObjects();
+    applyHostiles();   // (the world now too)
+  };
   $('objects').oninput = e => {
     objectsIdx = +e.target.value;
     try { localStorage.setItem(OBJ_KEY, String(objectsIdx)); } catch (err) {}
@@ -1634,10 +1672,10 @@
     // [clear_world]; scroll: reserved for a scrolling world (not built: an ordinary one)
     clear_world: (...args) => {
       emptySpace = args.includes('empty');
-      const setScroll = settingsOn && scrollSet;   // the Scroll setting: a scrolling world, its stars following the ship ([stars:follow:0.1])
+      const setScroll = settingsOn && worldMode === 'scroll';   // the World setting's Scroll: a scrolling world
       startScroll(args.includes('scroll') || setScroll);   // a scrolling world, or the ordinary torus
-      if (setScroll) { ACTIONS.stars('follow', '0.1'); scrollStars = true; }
-      else if (scrollStars) { C.setStarsFollow(0); scrollStars = false; }   // (Scroll off again: the stars drift as the script set them)
+      setRoll(!scroll && settingsOn && worldMode === 'centered');   // its Centered: the ordinary one, rolled to keep the ship in the middle
+      followStars();   // (Centered, Scroll: the stars follow the ship, [stars:follow:0.1]; off again: they drift as the script set them)
       let bg = args.find(a => a !== 'empty' && a !== 'scroll') || 'black';
       target = null;
       if (!BACKGROUNDS.includes(bg)) { console.warn(`script.txt: unknown background [clear_world:${bg}], using black`); bg = 'black'; }
@@ -1744,6 +1782,8 @@
     settings: (v = 'on') => {
       if (v !== 'on' && v !== 'off') return console.warn(`script.txt: unknown option [settings:${v}], ignored`);
       settingsOn = v === 'on';
+      if (!settingsOn && !scroll) setRoll(false);
+      if (!settingsOn) followStars();
       if (!settingsOn && book.open && book.mode === 'settings') closeBook();
       syncButtons();
     },
@@ -1804,6 +1844,7 @@
       const ids2 = ids === 'all' || !ids ? [] : morphIds([ids]);
       if (ids2.length && !ids2.some(id => findMorph(id))) console.warn(`script.txt: [min_hostile:${n}:${ids}]: none of these morphs is in the species`);
       minHostile = { n: k, ids: ids2, how, next: 0, puts: 0 };
+      hostSpec = { ids: ids2, how, bullet };   // (for the Hostile slider, [settings])
     },
     // dot:<n>|off: the dots channel (dots.js): keep <n> dots on the board, which any creature
     // eats; the player's ship eating one scores 10 (the score shows at the top, from 0 when the
@@ -1936,17 +1977,21 @@
     // left out or empty is the default
     // stars:follow:<k>[:<bright>]: the star field (and the round dots) drift opposite the ship's
     // motion, as if it flew past them: the stars' middle layer and the dots at the ship's speed times k
-    stars: (angle = '', speed = '', bright = '') => {
-      if (angle === 'follow') {
-        const k = speed === '' ? 1 : parseFloat(speed), b = bright === '' ? 1 : parseFloat(bright);
-        if (!(k > 0) || !(b >= 0)) return console.warn(`script.txt: bad value [stars:follow:${speed}:${bright}], ignored`);
-        return C.setStarsFollow(k, b);
-      }
+    // <rate> (the fourth part, also after follow:<k>:<bright>): each star's brightness flickers on
+    // its own, faster the higher (1: about one flicker every 2 to 7 s); 0 or left out: steady (draw.glsl)
+    stars: (angle = '', speed = '', bright = '', rate = '') => {
       const num = (x, d) => x === '' ? d : parseFloat(x);
-      const [a, s, b] = [num(angle, 0), num(speed, 1), num(bright, 1)];
+      const b = num(bright, 1), tw = num(rate, 0);
+      if (!(tw >= 0)) return console.warn(`script.txt: bad twinkle rate [stars:…:${rate}], ignored`);
+      if (angle === 'follow') {
+        const k = num(speed, 1);
+        if (!(k > 0) || !(b >= 0)) return console.warn(`script.txt: bad value [stars:follow:${speed}:${bright}], ignored`);
+        return C.setStarsFollow(k, b, tw);
+      }
+      const [a, s] = [num(angle, 0), num(speed, 1)];
       if (![a, s, b].every(Number.isFinite) || s < 0 || b < 0)
         return console.warn(`script.txt: bad value [stars:${angle}:${speed}:${bright}], ignored`);
-      C.setStars(a, s, b);
+      C.setStars(a, s, b, tw);
     },
     // music:<list>[:<play>]: the background playlist becomes <list> (track numbers separated by
     // commas, 1 = the first of page.js TRACKS), played in turn and looped; <play>: switch to that
@@ -2655,13 +2700,13 @@
   // view follows its mean course, the ship swinging about the middle.
   const CAM_TAU_STEPS = 20, CAM_TAU_S = 1, CAM_SNAP = 3;
   let camT = 0, camSteps = 0, camDamp = 0, camV = null;
-  function moveCamera(sh) {
+  function moveCamera(cam, sh) {   // cam: scroll, or roll (no world point: cx, cy)
     const now = performance.now(), dtS = camT ? Math.min(0.25, (now - camT) / 1000) : 0, dn = C.simSteps - camSteps;
     camT = now; camSteps = C.simSteps;
-    let gx = C.wrapD(sh.col - scroll.bx, C.BW), gy = C.wrapD(sh.row - scroll.by, C.BH);
+    let gx = C.wrapD(sh.col - cam.bx, C.BW), gy = C.wrapD(sh.row - cam.by, C.BH);
     let mx, my;
     const v0 = sh.kin ? sh.kin.vel : [0, 0];
-    if (Math.hypot(gx, gy) > CAM_SNAP * C.R || !scroll.cam) { mx = gx; my = gy; camV = v0.slice(); }   // jump (and the first frame)
+    if (Math.hypot(gx, gy) > CAM_SNAP * C.R || !cam.cam) { mx = gx; my = gy; camV = v0.slice(); }   // jump (and the first frame)
     else {
       const ds = camDamp * C.STEPS_PER_S;   // (in steps)
       if (!camV || !ds) camV = v0.slice();
@@ -2671,15 +2716,28 @@
       const a = 1 - Math.exp(-(dn / (CAM_TAU_STEPS + ds) + dtS / (CAM_TAU_S + camDamp)));
       mx = px + a * gx; my = py + a * gy;
     }
-    scroll.cam = true;
-    scroll.cx += mx; scroll.cy += my;
-    scroll.bx = (((scroll.bx + mx) % C.BW) + C.BW) % C.BW; scroll.by = (((scroll.by + my) % C.BH) + C.BH) % C.BH;
+    cam.cam = true;
+    if (cam.cx !== undefined) { cam.cx += mx; cam.cy += my; }
+    cam.bx = (((cam.bx + mx) % C.BW) + C.BW) % C.BW; cam.by = (((cam.by + my) % C.BH) + C.BH) % C.BH;
+  }
+  // World: Centered ([settings]): the ordinary torus, the world view rolled round it (core
+  // opt.viewShift) so the ship stays in its middle; the camera as the scrolling world's (moveCamera),
+  // with nothing else of it (no seam, no stripe, no arrows)
+  let roll = null;   // { bx, by (the view's centre, cells), cam }, or null: the view unrolled
+  function setRoll(on) {
+    if (!on) roll = null;
+    else if (!roll) { roll = { bx: C.BW / 2, by: C.BH / 2, cam: false }; camT = 0; }
+  }
+  function centerFrame() {
+    if (!roll) return;
+    const sh = C.ship();
+    if (sh && !shipLost()) moveCamera(roll, sh); else camT = 0;
   }
   function scrollFrame() {
     if (!scroll) return;
     const sh = C.ship();
     if (sh && !shipLost()) {
-      moveCamera(sh);
+      moveCamera(scroll, sh);
       const k = sh.kin, moving = k && k.speed >= C.SPEED_MIN;
       scroll.ux = moving ? Math.cos(k.velAng) : 0; scroll.uy = moving ? Math.sin(k.velAng) : 0;
     } else { scroll.ux = scroll.uy = 0; camT = 0; }
@@ -2707,7 +2765,7 @@
       if (b) [target.col, target.row] = b;
     }
   }
-  C.opt.viewShift = () => scroll ? [scroll.bx - C.BW / 2, scroll.by - C.BH / 2] : null;
+  C.opt.viewShift = () => scroll ? [scroll.bx - C.BW / 2, scroll.by - C.BH / 2] : roll ? [roll.bx - C.BW / 2, roll.by - C.BH / 2] : null;
   // a black stripe 2 R wide inside the world view's edges (the seam and the objects being taken away
   // out of sight); only drawn: nothing else reads it
   const STRIPE = () => 2 * C.R;
@@ -3032,7 +3090,7 @@
     syncToolNames();
     Field.tick();
     autospawnFrame();
-    scrollFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostPanel()) syncButtons();
+    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostPanel()) syncButtons();
     const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()]; };
 
   // ---- controls ---------------------------------------------------------------------------
