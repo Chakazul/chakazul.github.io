@@ -189,7 +189,7 @@
     document.documentElement.classList.toggle('stacked', stacked);
     C.setLayout(stacked, BAND, SHIP_SCALE, 1);   // the ship view at the right edge
     const layer = document.querySelector(stacked ? '.layer-ship' : '.layer-world');
-    layer.append($('bullet-nav'), $('fire'));
+    layer.append($('bullet-nav'), $('fire'), $('bullets'));   // (Pulses with them: right of Fire, or above < >)
     let col = $('dev-col');
     if (!col) {   // (made here if the page lacks it, e.g. an index.html cached from before it)
       col = document.createElement('div'); col.id = 'dev-col'; col.className = 'dev-col';
@@ -197,6 +197,12 @@
     }
     (stacked ? col : layer).append($('dev'), $('dev-fps'));   // ?dev=1: left of the ship view, a column
     fitMsg();
+  }
+  // Pulses: beside Fire in the world view (also with an index.html cached from when it was in the
+  // ship view: moved there, its class set)
+  if (!$('bullets').classList.contains('world-bullets')) {
+    $('bullets').className = 'world-bullets';
+    document.querySelector('.layer-world').append($('bullets'));
   }
   window.addEventListener('resize', applyLayout);
   new MutationObserver(applyLayout).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });   // (the first call: at the start, below)
@@ -326,7 +332,7 @@
     }
     // sandbox mode: the species' name goes to the species book
     $('book-species').classList.toggle('link', MODE === 'sandbox');
-    $('book-species').title = MODE === 'sandbox' ? 'Choose another species (C)' : '';
+    $('book-species').title = MODE === 'sandbox' ? 'Choose another species (D)' : '';
     $('book-clear').hidden = MODE === 'story' || book.mode === 'settings';
     // the challenge book's: clears the completion (the ticks) and the best times
     // (the species book for a challenge: that challenge's, with every species)
@@ -420,7 +426,7 @@
     // either way the new creature is followed
     if (book.action === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); }   // (not the script's [clear_world]: background and [min_morph] kept)
     else if (book.action === 'put') ACTIONS.put_player(name, 'random');
-    if (book.action !== 'none') { retake = book.action === 'clear_put'; cand = null; respawns++; respawned(); }   // [need:respawn]; its picture may be retaken after clear_put only (put: into a busy world)
+    if (book.action !== 'none') { retake = true; cand = null; respawns++; respawned(); }   // [need:respawn]; its picture may be retaken
     C.setRunning(true);
   }
   // ---- clone mode ([clone:on]) ------------------------------------------------------------
@@ -428,7 +434,7 @@
   // Picking one closes the book; the morph then follows the pointer over the ship view (instead
   // of the tool circle), turned by ↻ (45 degrees clockwise) and flipped by ↔ (left to right, as
   // seen), until a click on the ship view pastes it there, or the Morphs button cancels it. Keys:
-  // Q turns, W flips, Enter pastes (where it is shown), Escape cancels. Clone mode stays allowed
+  // F flips, G turns, Enter pastes (where it is shown), Escape cancels. Clone mode stays allowed
   // until [clone:off].
   const newBullets = new Set();   // the patterns created in the bullet book, green in it until it is closed
   let bulletNew = false;   // a new pattern can be created ([new_bullet]): the Bullets button reads "Create", green
@@ -520,8 +526,8 @@
   }
   $('clone-rot').onclick = rotateClone;
   $('clone-flip').onclick = flipClone;
-  $('clone-cancel').onclick = () => endClone();
-  $('clone-ok').onclick = () => { if (clone.held && clone.held.at) pasteClone(clone.held.at); };
+  $('clone-cancel').onclick = () => { flashGo('clone-cancel'); endClone(); };
+  $('clone-ok').onclick = () => { if (clone.held && clone.held.at) { flashGo('clone-ok'); pasteClone(clone.held.at); } };
   // Enter: paste where the clone is shown (placed by a touch, else under the mouse on the ship view)
   function confirmClone() {
     const H = clone.held;
@@ -684,7 +690,7 @@
     return img;
   }
   // ---- species book (sandbox mode) ------------------------------------------------------------
-  // The Species button (C), or the species' name in the morph book: a slot per visible species
+  // The Species button (D), or the species' name in the morph book: a slot per visible species
   // ([add_allow_species]), in order: a small thumbnail of each of its visible morphs in a row (the
   // centre of its picture if discovered, else black), and its name. The current one has a
   // yellow border. A click chooses it (chooseSpecies: its [on_start] block sets the world up).
@@ -1186,10 +1192,11 @@
     }
   }
   function setBook(on) { book.on = on; syncButtons(); if (!on) closeBook(); }
-  $('morphs').onclick = () => openBook();   // (holding a clone: the book to pick another one to clone)
-  $('bullets').onclick = () => openBulletBook();
-  $('species').onclick = () => MODE === 'challenge' ? openChallengeBook() : openSpeciesBook();
-  if (MODE === 'challenge') { $('species').textContent = 'Challenges'; $('species').title = 'The challenge book: choose a challenge (C)'; }
+  // the book buttons (and their keys, X S C V) flash yellow as they open their book, as the other controls
+  $('morphs').onclick = () => { flash('morphs'); openBook(); };   // (holding a clone: the book to pick another one to clone)
+  $('bullets').onclick = () => { flash('bullets'); openBulletBook(); };
+  $('species').onclick = () => { flash('species'); MODE === 'challenge' ? openChallengeBook() : openSpeciesBook(); };
+  if (MODE === 'challenge') { $('species').textContent = 'Challenges'; $('species').title = 'The challenge book: choose a challenge (D)'; }
   $('book-species').onclick = () => { if (book.mode === 'morph') openSpeciesBook(); };
   // The species book for a challenge goes back to the challenge book (its Back button, Escape); any other closes
   const bookBack = () => book.mode === 'species' && !!challenge.pending;
@@ -1204,12 +1211,11 @@
   // Each frame: has the followed ship been a visible morph not discovered yet, without a break, for
   // DISCOVER_STEPS (a game second, in steps: paused time does not count)? A passing detection is
   // not a discovery. A discovered one gets a new picture (after SNAPSHOT_STEPS) only once after each
-  // retake: a book pick that clears the world (clear_put), a species chosen (the sandbox's start too), a challenge started or retried,
-  // a sandbox Retry; when the ship is usually alone in a fresh world (not a Respawn, nor boarding a
-  // clone: the world may be chaotic then).
+  // retake: a Respawn, a book pick (Choose), a species chosen (the sandbox's start too), a challenge
+  // started or retried, a sandbox Retry (not boarding a clone: the old ship is still beside it).
   const DISCOVER_STEPS = C.STEPS_PER_S, SNAPSHOT_STEPS = C.STEPS_PER_S;
   let cand = null, lastStep = 0;   // cand: { name, n: steps } the morph the ship is in now, if it would be new
-  let retake = false;   // set by a clear_put book pick, a species chosen, a challenge (re)started, a sandbox Retry: the next known morph held gets a new picture
+  let retake = false;   // set by a Respawn, a book pick, a species chosen, a challenge (re)started, a sandbox Retry: the next known morph held gets a new picture
   function checkDiscovery() {
     const dn = C.simSteps - lastStep;
     lastStep = C.simSteps;
@@ -1426,7 +1432,7 @@
     retake = true; cand = null;   // a fresh world: the morph's picture may be retaken (the sandbox's start too)
   }
   // ---- settings ([settings:on]) -------------------------------------------------------------
-  // The Settings button (V; the ship view's lower right) opens the settings book: World, Autospawn,
+  // The Settings button (no key; the world view's lower right) opens the settings book: World, Autospawn,
   // Objects and Hostile, each kept in the browser across runs.
   function openSettingsBook() {
     if (!settingsOn) return;
@@ -1434,7 +1440,7 @@
     book.mode = 'settings'; worldWas = worldMode;
     showBook();
   }
-  $('settings').onclick = openSettingsBook;
+  $('settings').onclick = () => { flash('settings'); openSettingsBook(); };
   // World, a button cycling three modes. Normal: the world as the script makes it. Centered: the same
   // (ordinary) world, the world view rolled round the torus so the ship stays in its middle (roll,
   // centerFrame), at once. Scroll: every [clear_world] makes a scrolling world, as
@@ -1899,7 +1905,7 @@
     bullet: (...args) => { console.warn('script.txt: [bullet] is now [add_bullet]'); return ACTIONS.add_bullet(...args); },
     // add_bullet:<names>[:<name>]: the patterns the gun can fire: add names (separated by commas),
     // random (one more at random), all, or clear (none); nebula / antimatter put that world-draw
-    // type in the book ([world_draw]); then equip <name> (added too if not listed). With two or more, ◀ ▶ (D / F) switch between them. The patterns it adds are shown:
+    // type in the book ([world_draw]); then equip <name> (added too if not listed). With two or more, ◀ ▶ (C / V) switch between them. The patterns it adds are shown:
     // the bullet book opens and reveals them (not when replayed: [jump_here], Reset, I).
     add_bullet: (names = '', equip) => {
       const before = Bullets.choices;   // (the world-draw types too, revealed as the patterns)
@@ -2059,7 +2065,7 @@
     // first_clone: the player has placed a clone (picked in the morph book while clone mode is
     // allowed, then pasted on the ship view) since the line was reached
     first_clone: () => { const n0 = clonesPlaced; return () => clonesPlaced > n0; },
-    // respawn: the ship has dissolved and the player has put it back, by Respawn (Z) or Choose (a
+    // respawn: the ship has dissolved and the player has put it back, by Respawn (A) or Choose (a
     // pick in the morph book), since the line was reached
     respawn: () => { const n0 = respawns; return () => respawns > n0; },
     // draw:<x>: the player has painted at least x g of mass into the world's R G B fields (Nebula
@@ -2992,10 +2998,13 @@
   // Holding Shift or Alt shows each control's key in a small badge at its top right corner (from
   // its data-key; a slider gets one at each end, from data-key-lo / data-key-hi, over the track),
   // and the channel patches' 1-3 (core opt.showKeys). Space is left out (it moves the messages on).
-  const KEYS = { play: '\u21b5', sound: 'M', headup: 'E', morphs: 'X', reset: 'Z', 'morphs-dead': 'X', fire: 'A',
-                 'book-close': 'Esc', settings: 'V', 'bullet-prev': 'D', 'bullet-next': 'F', bullets: 'S', species: 'C', restart: '\u2190',
+  // Q W E R T: Speed down, up, Upward (Undo), Zoom (Width) out, in; A S D: Respawn, Choose / Morphs /
+  // Clone, Species / Challenges, and holding a clone F flips, G turns; Z X C V: Fire (Clear), Pulses,
+  // the previous / next pulse (Settings: no key)
+  const KEYS = { play: '\u21b5', sound: 'M', headup: 'E', morphs: 'S', reset: 'A', 'morphs-dead': 'S', fire: 'Z',
+                 'book-close': 'Esc', 'bullet-prev': 'C', 'bullet-next': 'V', bullets: 'X', species: 'D', restart: '\u2190',
                  'dev-ch': 'I', 'dev-ok': 'O', 'dev-do': 'P',
-                 'clone-rot': 'Q', 'clone-flip': 'W', 'clone-ok': '\u21b5', 'clone-cancel': 'Esc' };
+                 'clone-rot': 'G', 'clone-flip': 'F', 'clone-ok': '\u21b5', 'clone-cancel': 'Esc' };
   const SLIDER_KEYS = { speed: ['Q', 'W'], zoom: ['R', 'T'] };   // [left end (less), right end (more)]
   const SLIDER_INSET = 10;   // px in from each end of the track
   // (a button with a .kt text span gets its badge there, at the text's top right)
@@ -3058,7 +3067,7 @@
   $('fire').addEventListener('pointerdown', e => { e.preventDefault(); doFire(); });
   $('bullet-prev').addEventListener('pointerdown', e => { e.preventDefault(); if (Bullets.cycle(-1)) flash('bullet-prev'); });
   $('bullet-next').addEventListener('pointerdown', e => { e.preventDefault(); if (Bullets.cycle(1)) flash('bullet-next'); });
-  // the pattern's name under "Fire"; < > above it while the list holds two or more (D / F)
+  // the pattern's name under "Fire"; < > above it while the list holds two or more (C / V)
   Bullets.hooks.change = () => {
     const many = Bullets.on && Bullets.count > 1, fm = fieldMode();
     $('fire').querySelector('.kt').textContent = fm ? 'Clear' : 'Fire';
@@ -3070,7 +3079,7 @@
     syncNew();   // the list changed: as many more creatable?
     saveInventory();   // (a pattern added: into the central inventory)
     if (book.open && book.mode === 'bullet') { if (Bullets.on) renderBook(); else closeBook(); }
-    $('fire').title = (fm ? 'Clear the selected colour\'s field (A)' : 'Fire a pulse the way the ship moves (A)') + (many ? '; D / F: the previous / next type' : '');
+    $('fire').title = (fm ? 'Clear the selected colour\'s field (Z)' : 'Fire a pulse the way the ship moves (Z)') + (many ? '; C / V: the previous / next type' : '');
     if (!fm) Field.end();
   };
   C.hooks.frame = () => {
@@ -3090,7 +3099,7 @@
     syncToolNames();
     Field.tick();
     autospawnFrame();
-    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === lostPanel()) syncButtons();
+    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === (lostPanel() || flashing('reset'))) syncButtons();
     const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()]; };
 
   // ---- controls ---------------------------------------------------------------------------
@@ -3109,18 +3118,21 @@
     st.style.color = cloning ? 'var(--clone)' : ft.style.color;
     st.style.opacity = ft.style.opacity = 1 - worldShade();   // (faded with the views: [new_scene], [chapter])
   }
+  // A button that goes as it is used (Respawn, ✓, ✗) stays until its flash is over (Page.flash: 180 ms)
+  const flashing = id => $(id).classList.contains('flash');
+  function flashGo(id) { flash(id); setTimeout(syncButtons, 200); }
   function syncButtons() {
     $('play').setAttribute('aria-pressed', !C.running);   // "Pause", highlighted while paused
-    $('reset').hidden = !lostPanel();
+    $('reset').hidden = !lostPanel() && !flashing('reset');   // (flashing: kept until the flash is over, so it is seen)
     $('morphs-dead').hidden = !lostPanel() || !book.on;
     $('morphs').hidden = !book.on || shipLost();   // while the ship is lost, Choose takes its place
     if (clone.held && shipLost()) clone.held = null;   // lost while holding: the clone goes
-    $('clone-tools').hidden = !clone.held;
+    $('clone-tools').hidden = !clone.held && !flashing('clone-ok') && !flashing('clone-cancel');
     $('morphs').classList.toggle('clone-on', clone.on);   // pink, and "Clone", while clone mode is allowed
     $('morphs').textContent = clone.on ? 'Clone' : 'Morphs';
-    $('morphs').title = clone.on ? 'Clone a discovered morph into the world: the morph book (X)'
-                                 : 'The morph book: the morphs you have discovered (X)';
-    $('clone-ok').hidden = !(clone.held && clone.held.at);   // ✓ once a touch has placed it
+    $('morphs').title = clone.on ? 'Clone a discovered morph into the world: the morph book (S)'
+                                 : 'The morph book: the morphs you have discovered (S)';
+    $('clone-ok').hidden = !(clone.held && clone.held.at) && !flashing('clone-ok');   // ✓ once a touch has placed it
     $('bullets').classList.toggle('new', bulletNew);
     $('bullets').textContent = bulletNew ? 'Create' : 'Pulses';   // (the UI's name for the bullets)
     $('bullets').hidden = !Bullets.on || shipLost();   // the bullet book's button: while the gun is on, not while lost
@@ -3158,7 +3170,7 @@
     if (type === 'book') openBook();
     else if (type === 'clear_put') { C.clearWorld(); ACTIONS.put_player(name, 'center'); C.setRunning(true); }
     else if (type === 'put') { ACTIONS.put_player(name, 'random'); C.setRunning(true); }
-    if (type === 'clear_put' || type === 'put') { cand = null; respawns++; respawned(); }   // [need:respawn] (no retake: a Respawn may come amid chaos)
+    if (type === 'clear_put' || type === 'put') { retake = true; cand = null; respawns++; respawned(); }   // [need:respawn]; the morph's picture may be retaken
   }
   const doView = () => { if (fieldMode()) return doUndo(); flash('headup'); C.toggleHeadUp(); };
   const doSpeed = d => { flash('speed'); C.changeSpeed(d); };
@@ -3200,8 +3212,15 @@
     retryScene();
   };
   $('restart').onclick = doRestart;
-  $('reset').onclick = doReset;
-  $('morphs-dead').onclick = () => openBook();
+  // Respawn (A): the button flashes first, then the respawn (RESPAWN_DELAY_MS later; a second press meanwhile: nothing)
+  const RESPAWN_DELAY_MS = 180;
+  let respawnPending = false;
+  $('reset').onclick = () => {
+    if (respawnPending) return;
+    respawnPending = true; flashGo('reset');
+    setTimeout(() => { respawnPending = false; if (lostShown()) doReset(); }, RESPAWN_DELAY_MS);
+  };
+  $('morphs-dead').onclick = () => { flash('morphs-dead'); openBook(); };
   $('headup').onclick = doView;
   $('speed').oninput = e => C.setSpeed(+e.target.value - 1);
   $('zoom').value = C.zoomIdx + 1;
@@ -3222,31 +3241,31 @@
       else if (e.code === 'Space') e.preventDefault();   // not even the focused Close button
       return;
     }
-    if (clone.held) {   // holding a clone: Q turns, W flips, Enter pastes, Escape cancels
-      if (k === 'q') { flash('clone-rot'); return rotateClone(); }
-      if (k === 'w') { flash('clone-flip'); return flipClone(); }
-      if (k === 'Enter') { e.preventDefault(); return confirmClone(); }
-      if (k === 'Escape') return endClone();
+    if (clone.held) {   // holding a clone: F flips, G turns, Enter pastes, Escape cancels
+      if (k === 'f') { flash('clone-flip'); return flipClone(); }
+      if (k === 'g') { flash('clone-rot'); return rotateClone(); }
+      if (k === 'Enter') { e.preventDefault(); if (!$('clone-ok').hidden) flashGo('clone-ok'); return confirmClone(); }
+      if (k === 'Escape') { flashGo('clone-cancel'); return endClone(); }
     }
     if (e.code === 'Space') { e.preventDefault(); playerNext(); }
     else if (k === 'o') { if (DEV) flash('dev-ok'); devSkip(); }
     else if (k === 'p') { if (DEV) { flash('dev-do'); Dots.eat(); } }
     else if (k === 'i') { if (DEV) flash('dev-ch'); devChapter(); }
     else if (k === 'Enter') { e.preventDefault(); doPlay(); }
-    else if (k === 'z') { if (lostShown()) doReset(); }   // only while Respawn shows
-    else if (k === 'a') doFire();
-    else if (k === 'x') { if (book.on) openBook(); }   // the morph book, as the Morphs / Choose buttons
-    else if (k === 's') { if (!$('bullets').hidden) openBulletBook(); }   // the bullet book, as the Bullets button
-    else if (k === 'v') { if (settingsOn) openSettingsBook(); }   // the settings book ([settings:on])
-    else if (k === 'c') { if (!$('species').hidden) $('species').onclick(); }   // the species book (sandbox mode), the challenge book (challenge mode)
-    else if (k === 'd') { if (Bullets.cycle(-1)) flash('bullet-prev'); }
-    else if (k === 'f') { if (Bullets.cycle(1)) flash('bullet-next'); }
+    // (the keys: see KEYS)
+    else if (k === 'a') { if (lostShown()) $('reset').onclick(); }   // only while Respawn shows
+    else if (k === 's') { if (book.on) { const b = ['morphs', 'morphs-dead'].find(id => !$(id).hidden); b ? $(b).onclick() : openBook(); } }   // the morph book, as the Morphs / Choose buttons
+    else if (k === 'd') { if (!$('species').hidden) $('species').onclick(); }   // the species book (sandbox mode), the challenge book (challenge mode)
     else if (k === 'q') doSpeed(-1);   // slower
     else if (k === 'w') doSpeed(1);    // faster
-    else if (k === 'Backspace') { e.preventDefault(); doRestart(); }
     else if (k === 'e') doView();
     else if (k === 'r') doZoom(-1);
     else if (k === 't') doZoom(1);
+    else if (k === 'z') doFire();
+    else if (k === 'x') { if (!$('bullets').hidden) $('bullets').onclick(); }   // the bullet book, as the Bullets button
+    else if (k === 'c') { if (Bullets.cycle(-1)) flash('bullet-prev'); }
+    else if (k === 'v') { if (Bullets.cycle(1)) flash('bullet-next'); }
+    else if (k === 'Backspace') { e.preventDefault(); doRestart(); }
     else if (k === 'm') Page.toggleSound();
     else if (e.key >= '1' && e.key <= '3') C.pickChannel(+e.key - 1);   // the same one again: erase on / off
   });

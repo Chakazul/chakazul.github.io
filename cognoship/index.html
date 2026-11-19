@@ -58,19 +58,21 @@
           <button id="dev-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
         </div>
         <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X; Clear while drawing ([world_draw]) -->
-        <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (D / F) -->
+        <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (C / V) -->
         <div id="bullet-nav" class="bullet-nav" hidden>
-          <button id="bullet-prev" title="The previous pulse type (D)">&#9664;</button>
-          <button id="bullet-next" title="The next pulse type (F)">&#9654;</button>
+          <button id="bullet-prev" title="The previous pulse type (C)">&#9664;</button>
+          <button id="bullet-next" title="The next pulse type (V)">&#9654;</button>
         </div>
-        <!-- the world view's lower centre ([settings:on]): opens the settings book -->
-        <button id="settings" class="world-settings" hidden title="Settings (V)">Settings</button>
-        <button id="fire" class="fire" hidden title="Fire a pulse the way the ship moves (A)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
-        <!-- world draw (game.js fieldMode): the brush in use, at the world view's lower right -->
+        <button id="fire" class="fire" hidden title="Fire a pulse the way the ship moves (Z)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
+        <!-- right of Fire ([gun] on): opens the bullet book (the stacked layout: above < > and Fire) -->
+        <button id="bullets" class="world-bullets" hidden title="The pulse book: choose the pulse to fire (X)">Pulses</button>
+        <!-- the world view's lower right ([settings:on]): opens the settings book -->
+        <button id="settings" class="world-settings" hidden title="Settings">Settings</button>
+        <!-- world draw (game.js fieldMode): the brush in use, at the world view's lower centre -->
         <div id="field-tool" class="tool-name field-tool" hidden></div>
       </div>
       <div class="layer layer-ship">
-        <!-- the ship view's lower left, above Upward / Zoom: the tool the R G B patches use on the ship
+        <!-- the ship view's upper centre, between Morphs and Species: the tool the R G B patches use on the ship
              (Masking / Drawing / Erasing; not while drawing on the world) -->
         <div id="ship-tool" class="tool-name ship-tool" hidden></div>
         <!-- in the ship view, along its bottom edge (the lab has the action patches there) -->
@@ -79,27 +81,25 @@
           <!-- world draw (game.js fieldMode): Upward reads Undo, Zoom reads Width (the brush's) -->
           <label title="Zoom of the ship view, in screen px per cell (R out, T in)"><span id="zoom-name">Zoom</span> <input id="zoom" type="range" min="2" max="6" step="1"></label>
         </div>
-        <!-- in the ship view, right of the name box ([morph_book:on]): opens the morph book -->
-        <!-- in the ship view, left of the name box, mirroring Morphs ([gun] on): opens the bullet book -->
-        <button id="bullets" class="ship-bullets" hidden title="The pulse book: choose the pulse to fire (S)">Pulses</button>
-        <button id="morphs" class="ship-morphs" hidden title="The morph book: the morphs you have discovered (X)">Morphs</button>
-        <!-- in the ship view, between Bullets and Morphs, in sandbox mode only: opens the species book -->
-        <button id="species" class="ship-species" hidden title="The species book: choose a species (C)">Species</button>
+        <!-- in the ship view, at its upper left ([morph_book:on]): opens the morph book -->
+        <button id="morphs" class="ship-morphs" hidden title="The morph book: the morphs you have discovered (S)">Morphs</button>
+        <!-- in the ship view, at its upper right, level with Morphs, in sandbox and challenge modes: opens the species / challenge book -->
+        <button id="species" class="ship-species" hidden title="The species book: choose a species (D)">Species</button>
         <!-- below Morphs while a clone is held ([clone:on]): turn it 45 degrees clockwise, flip it; paste it
              where a touch placed it (only then), cancel it -->
         <div id="clone-tools" class="clone-tools" hidden>
-          <button id="clone-rot" title="Turn the clone 45 degrees clockwise (Q)">&#8635;</button>
-          <button id="clone-flip" title="Flip the clone left to right (W)">&#8596;</button>
-          <button id="clone-ok" title="Paste the clone where it is placed (Enter)" hidden>&#10003;</button>
+          <button id="clone-flip" title="Flip the clone left to right (F)">&#8596;</button>
+          <button id="clone-rot" title="Turn the clone 45 degrees clockwise (G)">&#8635;</button>
           <button id="clone-cancel" title="Cancel the clone (Esc)">&#10007;</button>
+          <button id="clone-ok" title="Paste the clone where it is placed (Enter)" hidden>&#10003;</button>
         </div>
         <!-- the stacked layout: ?dev=1's buttons and stats, left of the ship view at its top, in a column
              (game.js applyLayout moves #dev and #dev-fps in here, and back) -->
         <div id="dev-col" class="dev-col"></div>
         <!-- in the ship view, between "Dissolved" and Upward / Zoom, when the world needs a reset (everything dissolved) -->
         <div class="ship-dead">
-          <button id="reset" class="major" hidden title="Start again with your morph (Z)"><span class="kt">Respawn</span></button>
-          <button id="morphs-dead" class="major" hidden title="Choose a morph to start again with (X)"><span class="kt">Choose</span></button>
+          <button id="reset" class="major" hidden title="Start again with your morph (A)"><span class="kt">Respawn</span></button>
+          <button id="morphs-dead" class="major" hidden title="Choose a morph to start again with (S)"><span class="kt">Choose</span></button>
         </div>
       </div>
       <!-- the morph book, over the whole game window; a click outside the box closes it -->

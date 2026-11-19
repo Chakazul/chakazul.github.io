@@ -423,7 +423,7 @@ One at a time (a new one replaces it); `[clear_world]` removes it. Example: `[ta
 [morph_book:on|off]
 ```
 
-Show or hide the Morphs button (`X`) and the name box of the ship's morph at the bottom of the ship view. Default `on`.
+Show or hide the Morphs button (`S`) and the name box of the ship's morph at the bottom of the ship view. Default `on`.
 
 - The book closes only by Escape; letter keys pick slots.
 - `off` also closes the book; while off, no morph is discovered (they are still detected).
@@ -444,7 +444,7 @@ Keys pick slots, the book's rows on the keyboard's: `A` `S` `D` `F` the first ro
 [retry_action[:clear_put|put|none|book]]
 ```
 
-What Respawn (and `Z`) does, with the player's morph: as `[morph_book_action]`, or `book` (open the morph book). No type: the default, `clear_put`.
+What Respawn (and `A`) does, with the player's morph: as `[morph_book_action]`, or `book` (open the morph book). No type: the default, `clear_put`.
 
 ### `[clone]`
 
@@ -455,7 +455,7 @@ What Respawn (and `Z`) does, with the player's morph: as `[morph_book_action]`, 
 Allow clone mode. Default `on`.
 
 - While allowed and the ship is alive, the Morphs button has a pink border and reads **Clone**; the book, "Choose a morph to clone", lets discovered morphs be picked (pink borders). `off`: the book is read-only while the ship is alive.
-- The picked morph follows the pointer over the ship view; ↻ and ↔ below Morphs turn it 45° clockwise and flip it; a click pastes it. Keys: `Q` turn, `W` flip, `Enter` paste, `Escape` cancel (they replace Q / W's speed and Enter's Play while a clone is held).
+- The picked morph follows the pointer over the ship view; ↔ and ↻ below Morphs flip it and turn it 45° clockwise; a click pastes it. Keys: `G` turn, `F` flip, `Enter` paste, `Escape` cancel (Enter replaces Play while a clone is held).
 - Touch: a tap (or drag) places the copy, which can still be turned, flipped or moved; the ✓ button pastes it. Buttons below Morphs: ↻ ↔ / ✓ 🗙.
 - The game pauses from the pick until the paste or cancel.
 - The player **boards the clone**: once pasted, it is the followed ship (the old one goes on as another creature; a clone pasted onto the ship makes one object with it), and its morph is what Respawn puts back. So a morph can be changed without dissolving, and a twin engineered by becoming one half and pasting the other next to it.
@@ -486,7 +486,7 @@ Allow the draw tool (add mass: the selected R G B patch clicked again after eras
 [settings:on|off]
 ```
 
-A **Settings** button (`V`) at the lower centre of the world view, opening the settings book. Default `off`. Each setting is remembered in the browser.
+A **Settings** button at the world view's lower right, opening the settings book. Default `off`. Each setting is remembered in the browser.
 
 | Setting | Meaning | Until first set |
 |---|---|---|
@@ -589,7 +589,7 @@ The player's gun and its bullets channel (`bullets.js`). Options in any order, `
 | `color_now` / `rgb` / `r` / `g` / `b` | The channels it acts on: the R G B patch selected (live: bullets in flight switch too), all three (white bullets), or one. | `color_now` |
 | `wear_color` / `wear_all` | Which creature channels wear a bullet down: those it acts on, or all three. | `wear_color` |
 
-- **Firing:** `A` or the round Fire button (lower left of the world view; dimmed while it can't fire). A bullet is put just in front of the ship (its back edge 8 cells from the ship's edge; a twin or trio ship fires from the whole) and flies the way the ship moves; a ship standing still fires at a random angle. *Asterium* and *Tetralapillium*, which barely move, are dropped behind like bombs. *Helicium* is still fired ahead, to run into: it changes the ship's shape.
+- **Firing:** `Z` or the round Fire button (lower left of the world view; dimmed while it can't fire). A bullet is put just in front of the ship (its back edge 8 cells from the ship's edge; a twin or trio ship fires from the whole) and flies the way the ship moves; a ship standing still fires at a random angle. *Asterium* and *Tetralapillium*, which barely move, are dropped behind like bombs. *Helicium* is still fired ahead, to run into: it changes the ship's shape.
 - **Effect:** where a bullet overlaps a creature, it masks (or erases) gradually while the creature's mass wears it down, so a bullet sinks some way into a body. A ship faster than its bullets runs into them.
 - **Limits:** at most one shot every 0.7 game s. Past `[bullet_limit]` bullets' worth of mass, the channel is emptied; under 1% of a bullet's mass, it is wiped and goes idle (no cost) until the next shot.
 - Changing the pattern empties the channel.
@@ -610,8 +610,8 @@ Add bullet types to the gun's list, which starts empty (no list, no shots).
 
 - The types added are shown: the pulse book opens and reveals them as new cards one after another; the equipped one shows as in use once all are revealed. Not when redone by Retry, `[jump_here]` or dev `I`, nor while a book or chapter card shows.
 - Each costs `[new_bullet]`'s price while that is on.
-- The type in use is named under Fire. With two or more, ◀ ▶ above Fire (`D` / `F`) switch type (emptying the bullets channel).
-- **The pulse book:** the **Pulses** button (top left of the ship view) or `S`; only Escape closes it. Every pattern by name with a small picture, 4 to a row; listed ones clickable (the one in use with a yellow border), the others "?". Keys: `1`–`4`, `Q`–`R`, `A`–`F`, `Z` `X` by row.
+- The type in use is named under Fire. With two or more, ◀ ▶ above Fire (`C` / `V`) switch type (emptying the bullets channel).
+- **The pulse book:** the **Pulses** button (right of Fire) or `X`; only Escape closes it. Every pattern by name with a small picture, 4 to a row; listed ones clickable (the one in use with a yellow border), the others "?". Keys: `1`–`4`, `Q`–`R`, `A`–`F`, `Z` `X` by row.
 
 Examples: `[add_bullet:Orbium:Orbium]`, `[add_bullet:antimatter:antimatter]`
 
@@ -660,7 +660,7 @@ Put the world-draw types **Antimatter** and / or **Nebula** into the pulse book,
 
 - **Painting:** in use, they fire nothing: the player paints three static fields, R, G and B, onto the world with a press in the world view or the ship view (`field.js`). A field never grows, moves or wears down. **Antimatter** erases its channel of every creature (caps it at 1 − field each step, at once; drawn dark). **Nebula** masks it (hides it from the creature's own kernels; drawn as a translucent glow).
 - **Tools:** the R G B patches pick the colour; the selected one again cycles **Paintbrush** (+, raises the field to full), **Watercolor** (×, a soft disc fading to its edge; going over it adds nothing), **Eraser** (−). The tool's name shows at the world view's lower right.
-- **Controls:** Zoom becomes **Width** (2–32 cells; `R` `T`; watercolor and eraser twice as wide), Fire becomes **Clear** (the selected colour's field; `A`), Upward becomes **Undo** / **Redo** (`E`, one level).
+- **Controls:** Zoom becomes **Width** (2–32 cells; `R` `T`; watercolor and eraser twice as wide), Fire becomes **Clear** (the selected colour's field; `Z`), Upward becomes **Undo** / **Redo** (`E`, one level).
 - **With other channels:** the player's bullets are replaced (those in flight emptied). The bots keep firing: with Antimatter their bullets act as usual; with Nebula the two masks merge (per channel the stronger; 2 more FFTs per step), but with erasing bots (`[hostile_gun:erase]`, testing only) Nebula alone acts. The dots and beacons stay.
 - The fields are kept (hidden, no effect) while another type is in use, and emptied by `[clear_world]` and `[world_draw:off]`.
 - See also `[world_draw_cost]`, `[need:draw]`.
@@ -959,7 +959,7 @@ One of `<ids>` (`any`, default) or every one (`all`) is in the morph book: disco
 
 ### `[need:respawn]`
 
-The ship has dissolved and the player has put it back since the line was reached: by Respawn (`Z`), or Choose (`X`) and a pick in the morph book.
+The ship has dissolved and the player has put it back since the line was reached: by Respawn (`A`), or Choose (`S`) and a pick in the morph book.
 
 ### `[need:recycle]`
 

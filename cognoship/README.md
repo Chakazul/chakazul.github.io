@@ -49,23 +49,23 @@ and the challenges completed.
   *recycling* (erasing that channel's mass); again goes back.
 - **Upward** (`E`): turns the ship view so the ship always heads up. **Zoom** (`R` `T`).
 - **Morphs:** hold a new morph steady for about a second to discover it. The **Morphs** button
-  (`X`) opens the morph book.
-- **Dissolved:** if your ship falls apart, **Respawn** (`Z`) brings it back, or **Choose** (`X`)
+  (`S`) opens the morph book.
+- **Dissolved:** if your ship falls apart, **Respawn** (`A`) brings it back, or **Choose** (`S`)
   another morph you've discovered.
 - **Energy:** steer into the glowing dots to collect energy. Other ships eat them too.
-- **Fire** (`A`, the round button): shoots the bullet type in use the way the ship is heading
+- **Fire** (`Z`, the round button): shoots the bullet type in use the way the ship is heading
   (a standing ship fires at random). Bullets confuse the senses of what they hit, including your
-  own ship if you fly into them. ◀ ▶ (`D` `F`) or the **Bullets** button (`S`) switch types; when
+  own ship if you fly into them. ◀ ▶ (`C` `V`) or the **Pulses** button (`X`) switch types; when
   it reads **Create**, you have enough energy for a new type: open it and pick a **?** (it costs
   that energy).
 - **Clone:** when the Morphs button reads **Clone**, pick a discovered morph and place a copy of
-  it (↻ or `Q` turns it, ↔ or `W` flips it, `Enter` pastes it, `Esc` cancels). You board the copy: it becomes your ship, and the old one drifts
+  it (↔ or `F` flips it, ↻ or `G` turns it, `Enter` pastes it, `Esc` cancels). You board the copy: it becomes your ship, and the old one drifts
   on. Paste it away from your ship to switch morph; paste another next to you, and the two may
   become a new twin morph.
-- **Species** (`C`, Sandbox Mode): switch to another species you have reached.
+- **Species** (`D`, Sandbox Mode): switch to another species you have reached.
 - **Nebula / Antimatter** (Sandbox Mode, in the bullet book): paint on the world instead of
   firing. **R G B** pick the colour, the selected one again the tool (+ paintbrush, × soft brush,
-  − eraser); **Width** (`R` `T`), **Clear** (`A`) and **Undo** (`E`) take the places of Zoom, Fire
+  − eraser); **Width** (`R` `T`), **Clear** (`Z`) and **Undo** (`E`) take the places of Zoom, Fire
   and Upward. Nebula hides that channel from the creatures' senses; Antimatter wipes it out.
 
 ## Controls
@@ -76,15 +76,16 @@ and the challenges completed.
 | `Enter` | Pause / play |
 | `Backspace` | Retry: choose a morph, then start the current scene (Challenge Mode: the challenge) again with it |
 | `Q` / `W` | Slower / faster |
+| `E` | Upward (drawing on the world: Undo) |
+| `R` / `T` | Zoom out / in (drawing on the world: Width) |
+| `A` | Respawn when dissolved |
+| `S` | Morph book (Morphs / Clone); Choose when dissolved |
+| `D` | Species book (Sandbox Mode), challenge book (Challenge Mode) |
+| `F` / `G` | Holding a clone: flip / turn it |
+| `Z` | Fire (drawing on the world: Clear) |
+| `X` | Pulse book |
+| `C` / `V` | Previous / next pulse type |
 | `1` `2` `3` | Hide the R, G or B channel (the selected one again: draw, where allowed; again: recycle) |
-| `E` | Upward |
-| `R` / `T` | Zoom out / in |
-| `A` | Fire |
-| `D` / `F` | Previous / next bullet type |
-| `S` | Bullet book |
-| `X` | Morph book; Choose when dissolved |
-| `C` | Species book (Sandbox Mode), challenge book (Challenge Mode) |
-| `Z` | Respawn when dissolved |
 | Letters, in a book | Pick that slot (hold Shift to see them) |
 | `Escape` | Close a book |
 | `Enter` (in a book) | Pick the highlighted entry (the lighter one: your morph, the bullet in use, the current species or challenge) |

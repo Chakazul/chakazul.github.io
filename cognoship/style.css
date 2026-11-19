@@ -213,17 +213,17 @@ button,select,input{transition:background .25s,border-color .25s}
 .fire>span:first-child{position:absolute;left:50%;top:50%;transform:translate(-50%,-110%);line-height:1;white-space:nowrap}   /* "Fire", on its own, well above the centre */
 .fire-id[hidden]{display:none}
 /* the tool in use, in italic, in the selected channel's colour (game.js): the ship's (ship view,
-   lower left, above Upward / Zoom), the world draw's brush (world view, lower right) */
+   upper centre, between Morphs and Species), the world draw's brush (world view, lower centre) */
 .tool-name{position:absolute;z-index:3;pointer-events:none !important;font-style:italic;font-weight:400;
   font-size:calc(var(--ui-font) * 1.2);line-height:1;color:#e8e2f2;text-shadow:0 0 5px #000,0 0 2px #000;white-space:nowrap}
 .tool-name[hidden]{display:none}
-.ship-tool{left:24px;bottom:calc(11.72% + 14px)}
-.field-tool{right:24px;bottom:24px}
-/* Game: the Morphs button, right-aligned in the ship view, at canvas y 97 of 512 (18.95%: where the
+.ship-tool{left:50%;top:calc(18.95% - 2px);transform:translate(-50%,-50%)}   /* upper centre, level with Morphs and Species */
+.field-tool{left:50%;bottom:calc(14px + var(--ui-h) * .5);transform:translate(-50%,50%)}   /* lower centre, level with Pulses and Settings */
+/* Game: the Morphs button, left-aligned in the ship view, at canvas y 97 of 512 (18.95%: where the
    name box was; it is now at the bottom, core.js opt.nameBoxLow), 2 px higher by eye */
-.clone-tools{position:absolute;right:12px;top:calc(18.95% + var(--ui-h) * .5 + 6px);z-index:3;
-  display:grid;grid-template-columns:repeat(2,var(--ui-h));gap:6px}   /* below Morphs: ↻ ↔ / ✓ ✗, two to a row */
-#clone-ok[hidden]{display:block;visibility:hidden}   /* keeps its place, so ✗ stays put */
+.clone-tools{position:absolute;left:12px;top:calc(18.95% + var(--ui-h) * .5 + 6px);z-index:3;
+  display:grid;grid-template-columns:repeat(2,var(--ui-h));gap:6px}   /* below Morphs: ↔ ↻ / ✗ ✓, two to a row */
+#clone-ok[hidden]{display:block;visibility:hidden}   /* keeps its place */
 .clone-tools[hidden]{display:none}
 #morphs.clone-on{border:2px solid var(--clone)}
 /* Lab: the same buttons in a row at the top left of the world view (lab.html, Add) */
@@ -234,13 +234,13 @@ button,select,input{transition:background .25s,border-color .25s}
 #bullets.new{border:2px solid var(--new);color:var(--new)}   /* a bullet pattern can be created ([new_bullet]): "Create" */
 #clone-tools button{width:var(--ui-h);padding:0;border-radius:50%;font-size:calc(var(--ui-font) * 1.3);line-height:1;
   border:2px solid var(--clone)}
-.ship-morphs{position:absolute;right:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
-/* Game (sandbox mode): the Species button, centred in the ship view, level with Bullets and Morphs */
-.ship-species{position:absolute;left:50%;top:calc(18.95% - 2px);transform:translate(-50%,-50%);z-index:3}
-/* Game: the Bullets button, mirroring Morphs at the left */
-.ship-bullets{position:absolute;left:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
-/* Game ([settings:on]): the Settings button, at the world view's lower right (mirroring Fire's corner) */
-.world-settings{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:3}   /* lower centre */
+.ship-morphs{position:absolute;left:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
+/* Game (sandbox, challenge mode): the Species / Challenges button, mirroring Morphs at the right */
+.ship-species{position:absolute;right:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
+/* Game: the Pulses button, right of Fire, along the bottom (a row with the brush name and Settings) */
+.world-bullets{position:absolute;left:calc(14px + var(--ui-h) * 2.6 + 24px);bottom:14px;z-index:3}
+/* Game ([settings:on]): the Settings button, at the world view's lower right (a row with Pulses and the brush name) */
+.world-settings{position:absolute;right:14px;bottom:14px;z-index:3}
 .world-settings[hidden]{display:none}
 /* Game: the morph book, centred over the whole game window; the dimmed rest closes it on a click */
 .book{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
@@ -322,12 +322,12 @@ button,select,input{transition:background .25s,border-color .25s}
   0%,100%{box-shadow:0 0 0 0 transparent,inset 0 0 0 2px var(--new)}
   30%{box-shadow:0 0 22px 6px color-mix(in srgb,var(--new) 70%,transparent),inset 0 0 0 2px var(--new)}}
 /* the Bullets button turning "Create" (game.js revealButton): the glint and the glow, no flip */
-.ship-bullets.reveal{overflow:hidden;animation:card-glow 1.6s ease-out .2s}
-.ship-bullets.reveal::before{content:'';position:absolute;inset:-30% -60%;z-index:2;pointer-events:none;
+.world-bullets.reveal{overflow:hidden;animation:card-glow 1.6s ease-out .2s}
+.world-bullets.reveal::before{content:'';position:absolute;inset:-30% -60%;z-index:2;pointer-events:none;
   background:linear-gradient(110deg,transparent 40%,rgba(255,255,255,.7) 50%,transparent 60%);
   transform:translateX(-100%);animation:card-shine .9s ease-in-out both}
-@media (prefers-reduced-motion:reduce){.book-slot.reveal,.book-slot.reveal::before,.ship-bullets.reveal,.ship-bullets.reveal::before{animation:none}
-  .book-slot.reveal::before,.ship-bullets.reveal::before{display:none}}
+@media (prefers-reduced-motion:reduce){.book-slot.reveal,.book-slot.reveal::before,.world-bullets.reveal,.world-bullets.reveal::before{animation:none}
+  .book-slot.reveal::before,.world-bullets.reveal::before{display:none}}
 :root{--new:#3ddc6a}
 :root[data-theme="light"]{--new:#1e9e46}
 .book-slot .dot{flex:none;width:.6em;height:.6em;border-radius:50%}
@@ -480,6 +480,7 @@ button,select,input{transition:background .25s,border-color .25s}
 :root.stacked .dev-col>*{position:static;pointer-events:auto}
 :root.stacked .dev-col .dev{flex-wrap:wrap}
 :root.stacked .dev-col .dev-fps{white-space:pre-line;pointer-events:none}   /* a stat per row */
+:root.stacked .world-bullets{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 18px + var(--ui-h) * 3.2);width:calc(var(--ui-h) * 2.2)}   /* (left of the ship view: above < >, above Fire) */
 :root.stacked .bullet-nav{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 12px + var(--ui-h) * 2.2);width:calc(var(--ui-h) * 2.2)}
 /* the chapter card fits a narrow window: smaller, the title's long words whole */
 :root.stacked .chapter-box{max-width:92%;box-sizing:border-box;padding:calc(var(--ui-h) * .6) min(calc(var(--ui-h) * 1.6), 5vw)}

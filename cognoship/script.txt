@@ -53,7 +53,7 @@ This morph is _tardus_.
 Try to discover the hidden morph. (Hint: pat the side of its tail)[need:discover_morph:lithos]
 Nice, you have a delicate touch.
 Also try out the other controls in the panel.
-When necessary, {Retry:←}, {Pause:↵}, or change the {Speed:Q}{:W}.
+{Retry:←}, {Pause:↵}, or change {Speed:Q}{:W} when needed.
 On a keyboard, hold {:Shift} to show their keys.
 Now we are leaving for deeper space.
 
@@ -73,15 +73,15 @@ Steer your ship to collect 30 energy. Changing {Speed:Q}{:W} may help.[need:ener
 
 # bullets
 [gun:on]
-Enough energy for the *Lenium gun*!
+Enough energy for the *Lenium accelerator*!
 [new_bullet:30]
 [add_bullet:Orbium:Orbium]
-{Fire:A} to fire _Lenium_ pulses.
+{Fire:Z} to fire _Lenium_ pulses.
 They disrupt other ships' cognitive fields.
 This _Orbium_ pulse type is relatively weak, though.
-Collect 30 more energy, then {Create:S} a new pulse type.[need:create_bullet]
+Collect 30 more energy, then {Create:X} a new pulse type.[need:create_bullet]
 [new_bullet:50]
-Switch types using {Pulses:S} or {◀:D} {▶:F}.
+Switch types using {Pulses:X} or {◀:C} {▶:V}.
 Each pulse type has unique effects.
 Now we embark for a stellar nursery.
 
@@ -105,7 +105,7 @@ New species, new morph possibilities.
 [dot:7][min_morph:2:antigyrans,paragyrans:random]
 To engineer new morphs, we developed advanced *cloning* technology.
 [clone:on]
-{Clone:X} a morph, try {↻:Q} {↔:W}, and place it near your ship.[need:first_clone]
+{Clone:S} a morph, try {↔:F} {↻:G}, and place it near your ship.[need:first_clone]
 Great! Cloning position, angle, and timing are all important.
 Clone to combine two _gyrans_ into a twin morph. {Zoom:R}{:T} may help.[need:discover_morph:paragyrans,antigyrans]
 Bravo! You engineered a twin morph.
@@ -128,9 +128,9 @@ But to navigate the vastness of space, we still need one more technology.
 In the world view, dispense antimatter to guide the ship.[need:draw:10]
 Each color affects each morph differently.
 Select a color {R}{G}{B}{:1}{:2}{:3}; click again to select tools.
-Other controls become {Clear:A}, {Undo:E}, and {Width:R}{:T}.
+Other controls become {Clear:Z}, {Undo:E}, and {Width:R}{:T}.
 There is a lot to experiment with in cosmic painting.
-To leave Antimatter mode, change {Pulses:S} to another type.
+To leave Antimatter mode, change {Pulses:X} to another type.
 [add_bullet::Orbium]
 
 [new_scene]
@@ -250,7 +250,7 @@ To deal with these self-replicating machines, ...
 [add_bullet:Paraptera,Heptapteryx:Paraptera]
 [bullet_limit:40]
 ... you are equipped with powerful pulses, _Paraptera_ and _Heptapteryx_.
-{Fire:A} to suppress their growth.
+{Fire:Z} to suppress their growth.
 Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
 
