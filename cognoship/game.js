@@ -1871,9 +1871,10 @@
         for (const n of added) if (!named.includes(n)) unsavedBullets.add(n);
       }
       payBullets(added.filter(n => !unsavedBullets.has(n) && !fieldsAdded.includes(n)).length);   // each costs [new_bullet]'s price, as a created one ([bullet:all]'s extras free)
-      // Antimatter / Nebula named: revealed even if the book had them already ([world_draw], free)
+      // every pulse named is revealed, even if the book had it already (created by the player, or
+      // Antimatter / Nebula by [world_draw]); only the new ones are paid for
       const named = names.split(',').concat(equip ?? []).map(t => t.trim().toLowerCase());
-      const shown = added.concat(Bullets.fieldKinds.filter(n => !added.includes(n) && named.includes(n.toLowerCase())));
+      const shown = added.concat(Bullets.choices.filter(n => !added.includes(n) && named.some(t => t === n.toLowerCase() || Bullets.kindOf(t) === n)));
       if (!replaying && shown.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(shown);
     },
     // bullet_limit:<x>: the bullets channel is emptied once it holds more than x bullets' worth of
@@ -3037,15 +3038,17 @@
   // ---- controls ---------------------------------------------------------------------------
   // The tool in use, by name, in italic: the ship's (C.action) at the ship view's lower left while
   // a ship is there; drawing on the world (fieldMode), the brush (C.fieldTool) at the world view's
-  // lower right instead; both in the selected channel's colour
+  // lower right instead; both in the selected channel's colour. Holding a clone: "Cloning", pink
   const SHIP_TOOLS = ['Masking', 'Erasing', 'Drawing'], FIELD_TOOLS = ['Paintbrush', 'Watercolor', 'Eraser'];
   function syncToolNames() {
     const fm = fieldMode(), st = $('ship-tool'), ft = $('field-tool');
-    const shipText = !fm && !shipLost() && !emptySpace ? SHIP_TOOLS[C.action] ?? '' : '', fieldText = fm ? FIELD_TOOLS[C.fieldTool] ?? '' : '';
+    const cloning = !!clone.held && !fm;   // holding a clone (↻ ↔ ✓ ✗ shown): "Cloning", in the clone pink
+    const shipText = cloning ? 'Cloning' : !fm && !shipLost() && !emptySpace ? SHIP_TOOLS[C.action] ?? '' : '', fieldText = fm ? FIELD_TOOLS[C.fieldTool] ?? '' : '';
     if (st.textContent !== shipText) st.textContent = shipText;
     if (ft.textContent !== fieldText) ft.textContent = fieldText;
     st.hidden = !shipText; ft.hidden = !fieldText;
-    st.style.color = ft.style.color = C.CH_COLORS[C.channel] || '';
+    ft.style.color = C.CH_COLORS[C.channel] || '';
+    st.style.color = cloning ? 'var(--clone)' : ft.style.color;
     st.style.opacity = ft.style.opacity = 1 - worldShade();   // (faded with the views: [new_scene], [chapter])
   }
   function syncButtons() {

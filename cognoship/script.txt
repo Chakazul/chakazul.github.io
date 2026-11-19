@@ -96,13 +96,13 @@ Now we embark for a stellar nursery.
 [dot:3][min_morph:10:rectus,gyrans,tardus,lithos,paragyrans,antigyrans:far]
 _Orion Nebula_, where stars are born, 1,344 light-years from home.
 To survive the interstellar medium, our ship evolved into a new *species*.
-Evolved from _Aquarium originale_ into _A. novus_.
+Evolved from _Aquarium originale_ into _Aq. novus_.
 New species, new morph possibilities.
 
 # clone
 [new_scene]
 [clear_world][put_player:rectus]
-[dot:7][min_morph:2:antigyrans:random]
+[dot:7][min_morph:2:antigyrans,paragyrans:random]
 To engineer new morphs, we developed advanced *cloning* technology.
 [clone:on]
 {Clone:X} a morph, try {↻:Q} {↔:W}, and place it near your ship.[need:first_clone]
@@ -127,8 +127,8 @@ But to navigate the vastness of space, we still need one more technology.
 *Antimatter* is equipped. Now space is your canvas.
 In the world view, dispense antimatter to guide the ship.[need:draw:10]
 Each color affects each morph differently.
-Select a color {R}{G}{B}{:1}{:2}{:3}; repeat to choose brush or eraser.
-The controls become {Clear:A}, {Undo:E}, and {Width:R}{:T}.
+Select a color {R}{G}{B}{:1}{:2}{:3}; click again to select tools.
+Other controls become {Clear:A}, {Undo:E}, and {Width:R}{:T}.
 There is a lot to experiment with in cosmic painting.
 To leave Antimatter mode, change {Pulses:S} to another type.
 [add_bullet::Orbium]
@@ -201,7 +201,7 @@ This gargantuan black hole releases massive bursts of radiation.
 We need to construct megastructure shields to survive.
 _Aquarium vorticosus_, mildly reproductive, is well suited to this task.
 Cloning technology is also useful here.
-Construct a megastructure.[need:object:50:min]
+Construct a megastructure.[need:object:40:min]
 Shield in operation. We survived.
 
 # survive time
@@ -244,12 +244,12 @@ Escaped from the Galactic Center, we wander into unknown places.
 We have arrived at a distant, ancient part of our Galaxy.
 Our ships have been over-engineering themselves.
 And finally, they have gone out of control.
-_A. replicans_ relentlessly copy themselves, consume every star and planet ...
+_Aq. replicans_ relentlessly copy themselves, consume every star and planet ...
 ... and turn all matter into a massive, homogeneous, grayish sludge.
 A so-called *Gray Goo* incident.
 To deal with these self-replicating machines, ...
 [add_bullet:Paraptera,Heptapteryx:Paraptera]
-[bullet_limit:50]
+[bullet_limit:40]
 ... you are equipped with powerful pulses, _Paraptera_ and _Heptapteryx_.
 {Fire:A} to suppress their growth.
 Dissolve all morphs. Including yourself. Good luck.[need:object:0]
@@ -274,17 +274,17 @@ At the edge of the Galaxy, a new genus _Cilium_ was born.
 They are peaceful creatures, and they move differently.
 [draw:if:G6G6CR]
 {R:1} twice to switch to drawing. Add red mass to make _Cilium_ move.[need:discover_morph:rectus,limus]
-That's correct. _Cilium_ are propelled by red devices on their membranes.
+Correct. _Cilium_ are propelled by the red bits on their membranes.
 
 [new_scene]
 [clear_world][put_player:rectus]
-[min_morph:15:rectus,limus]
+[min_morph:15:rectus,limus:random]
 _Cilium_ could serve as the nascent immune system of a healthy galaxy.
 "_They may release plenty of red mass that neutralizes Gray Goo,_ ...
 _... if only they work together_," Leniologists suspect.
-Produce an abundance of red mass.[need:mass:r:50]
+Produce an abundance of red mass.[need:mass:r:40]
 The immune system works! Cooperation triumphs.
-Red Goo and Gray Goo are now perfectly balanced.
+Red Goo and Gray Goo are now in perfect balance.
 
 
 #[jump_here]
@@ -313,6 +313,8 @@ _Lenium_ technology keeps evolving.
 👾 Game design: Bert Chan
 💻 Programming: Bert Chan, Claude Opus 🤖
 🧪 Testing: Jesse Cool, Lainey Chan
+🔬 Leniologists: Jesse Cool (Tufts U), Marko Cvjetko (Inria) ...
+🔬 Leniologists: Gautier Hamon (Inria), Bert Chan (ALife Institute)
 🎼 Music: _Long Way_ by Rexlambo; _A Few Jumps Away_ by Arthur Vyncke ...
 🎼 Music: _Out of the Skies, Under the Earth_ by Chris Zabriskie ...
 🎼 Music: _Billions and Billions_ by Stellardrone
