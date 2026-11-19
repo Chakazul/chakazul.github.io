@@ -1,7 +1,8 @@
 # script file for challenge mode, see SCRIPT.md for syntax
 [next_msg::≫:⧗]
-[speed:1][new_bullet:off][erase:off][draw:if:G6G6CR][morph_book:on]
+[speed:1][erase:off][draw:if:G6G6CR][morph_book:on]
 [gun:on,mask,color_now,wear_color][hostile_gun:on,mask,rgb,wear_all]
+[new_bullet:off]
 [morph_book_action:put][retry_action:put]
 [music:1,2,3,4:2]
 

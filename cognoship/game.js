@@ -1755,6 +1755,9 @@
     // jump_here: the script starts at this line, after running every action before it, with no
     // messages, conditions or chapter cards (see the start, at the end of this file)
     jump_here: () => {},
+    // sub_chapter:<name>: (authoring) a place dev mode's I (devChapter) also stops at; nothing else
+    // (<name> for reference only)
+    sub_chapter: () => {},
     // chapter:<no>:<title>: a title card over the game window, "Chapter <no>" (<no> final: "FINAL
     // CHAPTER") above <title>, faded in; Space or a
     // click anywhere closes it (fading out) and is used up. The game plays on meanwhile, and the
@@ -2094,7 +2097,8 @@
       };
     },
     // clear_hostile: no bots left ([put_hostile]; one missing from detection counts until dropped)
-    clear_hostile: () => { const t = () => bots.length === 0; t.progress = () => `bots: ${bots.length}`; return t; },
+    // (counted as the red circles show: a twin or composite bot is one, whatever its parts)
+    clear_hostile: () => { const t = () => bots.length === 0; t.progress = () => `hostile: ${hostileCount()}`; return t; },
     // object:<n>[:exact|min|max]: the world holds exactly (the default) / at least / at most n
     // objects (creatures detected), the ship included; the count smoothed (smoothed).
     // Progress: "morph: <count>/<n>".
@@ -2395,7 +2399,7 @@
   function devChapter() {
     if (!DEV || line < 0 || resetting) return;
     const cur = deferred >= 0 ? deferred : line + 1;   // a deferred line has not run its actions yet
-    const to = SCRIPT.findIndex((L, i) => i > line && L.actions.some(a => a.name === 'chapter'));
+    const to = SCRIPT.findIndex((L, i) => i > line && L.actions.some(a => a.name === 'chapter' || a.name === 'sub_chapter'));   // the next [chapter] or [sub_chapter]
     if (to < 0) return;
     if (clone.held) endClone();
     if (chapterOpen) closeChapter();
@@ -2839,6 +2843,10 @@
     }
     return out;
   }
+  // The bots as shown, for [need:clear_hostile]'s count: the red circles (botMarks), one per hostile
+  // object (a twin or composite as one). Bots missing from detection a moment (BOT_GRACE) have no
+  // circle and aren't counted, but the count shows at least 1 until every bot is gone (the test).
+  const hostileCount = () => bots.length ? Math.max(1, C.found ? hostileObjects().length : 0) : 0;
   // Each frame: every hostile object whose time has come (its bots' earliest) fires at the ship
   // (none: anywhere), from the object as a whole (its centre and reach: a twin fires as one); not
   // under a card, in a species fade, or after a failure

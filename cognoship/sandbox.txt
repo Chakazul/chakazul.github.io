@@ -1,6 +1,11 @@
 # script file for sandbox mode, see SCRIPT.md for syntax
-[speed:1][gun:on][new_bullet:50][clone:on][morph_book:on]
+[speed:1][clone:on][morph_book:on]
 [morph_book_action:put][retry_action:put]
+[gun:on,mask,color_now,wear_color][hostile_gun:on,mask,rgb,wear_all]
+[new_bullet:50]
+[bullet_limit:8][hostile_bullet_limit:8]
+[hostile_bullet_wait:5:10:2]
+[bullet_mutual:wear:2]
 [erase:on][draw:on][world_draw:antimatter,nebula][settings:on]
 [music:1,2,3,4:3]
 

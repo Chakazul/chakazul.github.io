@@ -52,10 +52,26 @@ _Lenium_ recycled. Ship restored.
 This morph is _tardus_.
 Try to discover the hidden morph. (Hint: pat the side of its tail)[need:discover_morph:lithos]
 Nice, you have a delicate touch.
-Also try out the other controls in the panel.
-{Retry:←}, {Pause:↵}, or change {Speed:Q}{:W} when needed.
-On a keyboard, hold {:Shift} to show their keys.
-Now we are leaving for deeper space.
+
+
+[sub_chapter:explanation]
+
+[new_scene]
+[stars:0:3:2:2]
+[allow_morph:limus,gyrans,tardus,lithos,paragyrans]
+[hide_morph:paragyrans]
+[clear_world][put_player:paragyrans]
+So what are these bizarre structures?
+Scientists have fancy ways to describe them, ...
+... like *self-organization*, *complex systems*, or *emergence*.
+But simply put, every bit of _Lenium_ connects only to its nearby bits.
+Together, they form a self-contained, distributed structure.
+No central control. Nothing is designed.
+Leniologists study them as if they were living organisms.
+They are *artificial life*.
+Enough talk.
+We are now leaving _Proxima Centauri_ for deeper space.
+[stars:0]
 
 
 [chapter:2:You Are Not Alone]
@@ -67,12 +83,13 @@ Now we are leaving for deeper space.
 #[discover_morph:limus,tardus]
 [clear_world][put_player:limus]
 [dot:5][min_morph:6:paragyrans,paratardus,lithos+gyrans:far]
-The _Pleiades_, a.k.a. the Seven Sisters, 444 light-years from home.
+The _Pleiades_, a beautiful star cluster, 444 light-years from home.
 Other ships appear, and so do *energy* packets.
 Steer your ship to collect 30 energy. Changing {Speed:Q}{:W} may help.[need:energy:30]
 
 # bullets
-[gun:on]
+[gun:on,mask,color_now,wear_color]
+[bullet_limit:8]
 Enough energy for the *Lenium accelerator*!
 [new_bullet:30]
 [add_bullet:Orbium:Orbium]
@@ -80,11 +97,33 @@ Enough energy for the *Lenium accelerator*!
 They disrupt other ships' cognitive fields.
 This _Orbium_ pulse type is relatively weak, though.
 Collect 30 more energy, then {Create:X} a new pulse type.[need:create_bullet]
-[new_bullet:50]
 Switch types using {Pulses:X} or {◀:C} {▶:V}.
 Each pulse type has unique effects.
-Now we embark for a nearby stellar nursery.
 
+# hostile ship
+[new_scene]
+[hostile_gun:on,mask,rgb,wear_all]
+[hostile_bullet_limit:4]
+[hostile_bullet_wait:5:10:5]
+[bullet_mutual:wear:2]
+[allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos,circumgyrans]
+[clear_world][put_player:limus]
+[dot:5][put_hostile:paragyrans:far:Triscutium]
+A hostile ship suddenly appears.
+[add_bullet:Triscutium:Triscutium]
+It fires _Triscutium_. We have it too. Prepare to fight.[need:clear_hostile]
+Thank Gaia. That was close.
+Ships don't usually turn hostile. Something is wrong.
+
+[new_scene]
+[allow_morph:limus,gyrans,tardus,lithos]
+[clear_world][put_player:limus]
+Now that it seems safe, check out the other controls in the panel.
+{Retry:←}, {Pause:↵}, or change {Speed:Q}{:W} when needed.
+On a keyboard, hold {:Shift} to show their keys.
+Next, we embark for a stellar nursery nearby.
+
+[new_bullet:50]
 
 [music:3,1:3]
 [chapter:3:Brave New World]
@@ -127,19 +166,21 @@ But to navigate the vastness of space, we need one more technology.
 *Antimatter* is equipped. Now space is your canvas.
 In the world view, dispense antimatter to guide the ship.[need:draw:10]
 Each color affects each morph differently.
-Select a color {R}{G}{B}{:1}{:2}{:3}; click again to select tools.
+Select a color {R}{G}{B}{:1}{:2}{:3}. Click again to select tools.
 Other controls become {Clear:Z}, {Undo:E}, and {Width:R}{:T}.
 There is a lot to experiment with in cosmic painting.
 To leave Antimatter mode, change {Pulses:X} to another type.
 [add_bullet::Orbium]
 
 [new_scene]
-[clear_world:scroll][put_player:limus]
-Our _Lenium_ ships keep evolving to survive the interstellar medium ...
+[stars:0:3:2:2]
+[clear_world:empty]
+Our _Lenium_ ships keep evolving to adapt to new environments ...
 ... and to survive magnetic storms, black holes, supernovae, and so on.
 Here are some of our Leniologists' favorite species.
 
 [new_scene]
+[stars:follow:0.1]
 [species:Aquarium virgatus:KZ2BLD]
 [allow_morph:rectus,limus,virgatus]
 [clear_world:scroll][put_player:rectus]
@@ -195,7 +236,7 @@ We are heading to the center of our galaxy.
 [clear_world:radiation][put_player:lithos]
 [dot:1]
 The Galactic Center of the Milky Way, 27,000 light-years from home.
-Here sits _Sagittarius A*_, a supermassive black hole.
+We are just outside _Sagittarius A*_, a supermassive black hole.
 This gargantuan black hole releases massive bursts of radiation.
 We need to construct megastructure shields to survive.
 _Aquarium vorticosus_, mildly reproductive, is well suited to this task.
@@ -243,6 +284,7 @@ Escaped from the Galactic Center, we wander into unknown places.
 We have arrived at a distant, ancient part of our galaxy.
 Our ships have been over-engineering themselves.
 And finally, they have gone out of control.
+Like the hostile ship at the _Pleiades_, only far worse.
 _Aq. replicans_ relentlessly copy themselves, consume every star and planet ...
 ... and turn all matter into a massive, homogeneous, grayish sludge.
 A so-called *Gray Goo* incident.
@@ -288,7 +330,7 @@ Red Goo and Gray Goo are now in perfect balance.
 
 
 #[jump_here]
-#ending
+[sub_chapter:ending]
 
 [new_scene]
 [stars:0:3:2:2]

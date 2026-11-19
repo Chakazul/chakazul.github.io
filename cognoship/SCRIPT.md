@@ -52,6 +52,7 @@ sets everything up.
 | [`[blank]`](#blank) | An empty message. |
 | [`[next_msg]`](#next_msg) | The continue tip and the ≫ / ⧗ marks. |
 | [`[jump_here]`](#jump_here) | (Authoring) start the script here. |
+| [`[sub_chapter]`](#sub_chapter) | (Authoring) a stop for dev mode's `I`. |
 | [`[music]`](#music) | The background playlist. |
 | [`[speed]`](#speed) | The game speed. |
 | [`[stars]`](#stars) | The star field's drift and brightness. |
@@ -171,6 +172,14 @@ A part left out or empty goes back to its default. Not redone by Retry.
 ```
 
 For writing the script: start at the first line that has it. Every action on the lines before it runs first, in order, so the set-up is as if the game had been played to there; their messages, conditions and chapter cards are skipped. Not redone by Retry.
+
+### `[sub_chapter]`
+
+```
+[sub_chapter:<name>]
+```
+
+For writing the script: dev mode's `I` (`?dev=1`) stops here as at a `[chapter]`. Nothing else: no card, no checkpoint for Retry; `<name>` is for reference only.
 
 ### `[music]`
 
@@ -939,7 +948,7 @@ Where noted, the ⧗ mark is followed by the progress in grey. Counts in game se
 | [`stay_target`](#needstay_target) | The ship stayed in the target `s` s. | time: 4/10 |
 | [`clear_beacon`](#needclear_beacon) | Every beacon eaten by the ship. | |
 | [`clear_dot`](#needclear_dot) | The dots channel is empty. | left: 1 |
-| [`clear_hostile`](#needclear_hostile) | No bots left. | bots: 2 |
+| [`clear_hostile`](#needclear_hostile) | No bots left. | hostile: 2 |
 
 ### `[need:first_touch]`
 
@@ -1054,7 +1063,7 @@ The dots channel holds nothing: every dot or beacon eaten (beacons off the board
 
 ### `[need:clear_hostile]`
 
-(Challenge) No bots left: every one destroyed or hijacked. Other creatures (e.g. `[put_morph]`'s) may stay.
+(Challenge) No bots left: every one destroyed or hijacked. Other creatures (e.g. `[put_morph]`'s) may stay. The count shown is the number of red circles (hostile objects as named: a twin or composite bot is one, whatever its parts), at least 1 until the last bot is gone.
 
 ## Example
 
