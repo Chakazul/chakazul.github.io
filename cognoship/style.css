@@ -196,7 +196,7 @@ button,select,input{transition:background .25s,border-color .25s}
   height:calc(var(--ui-h) * 2.6) !important;font-size:calc(var(--ui-font) * 1.3) !important;padding:0 !important;border-radius:50% !important;
   font-weight:700;letter-spacing:.04em;color:#fff !important;background:rgba(0,0,0,.45) !important;
   border:3px solid var(--fire,#fff) !important;touch-action:manipulation;user-select:none;-webkit-user-select:none}
-.fire:not(.ready){border-color:color-mix(in srgb,var(--fire,#fff) 40%,transparent) !important}
+.fire:not(.ready){border-color:color-mix(in srgb,var(--fire,#fff) 40%,transparent) !important;color:rgba(255,255,255,.45) !important}   /* not ready (cooling down, or can't pay): ring and text dimmed */
 .fire{transition:background .06s,border-color .06s}   /* the press colour comes and goes quickly */
 .fire.flash{background:color-mix(in srgb,var(--fire,#fff) 45%,#000) !important;border-color:var(--fire,#fff) !important;outline:none}   /* a bullet fired (by the button or A): the border colour (the bullets'), darker, as background; a press that fires nothing shows nothing */
 .fire[hidden]{display:none}
@@ -213,12 +213,12 @@ button,select,input{transition:background .25s,border-color .25s}
 .fire>span:first-child{position:absolute;left:50%;top:50%;transform:translate(-50%,-110%);line-height:1;white-space:nowrap}   /* "Fire", on its own, well above the centre */
 .fire-id[hidden]{display:none}
 /* the tool in use, in italic, in the selected channel's colour (game.js): the ship's (ship view,
-   upper centre, between Morphs and Species), the world draw's brush (world view, lower centre) */
+   upper centre, between Morphs and Species), the world draw's brush (world view, below the energy) */
 .tool-name{position:absolute;z-index:3;pointer-events:none !important;font-style:italic;font-weight:400;
   font-size:calc(var(--ui-font) * 1.2);line-height:1;color:#e8e2f2;text-shadow:0 0 5px #000,0 0 2px #000;white-space:nowrap}
 .tool-name[hidden]{display:none}
 .ship-tool{left:50%;top:calc(18.95% - 2px);transform:translate(-50%,-50%)}   /* upper centre, level with Morphs and Species */
-.field-tool{left:50%;bottom:calc(14px + var(--ui-h) * .5);transform:translate(-50%,50%)}   /* lower centre, level with Pulses and Settings */
+.field-tool{left:50%;top:calc(18.95% - 2px);transform:translate(-50%,-50%)}   /* upper centre, below the energy, level with the ship's tool name */
 /* Game: the Morphs button, left-aligned in the ship view, at canvas y 97 of 512 (18.95%: where the
    name box was; it is now at the bottom, core.js opt.nameBoxLow), 2 px higher by eye */
 .clone-tools{position:absolute;left:12px;top:calc(18.95% + var(--ui-h) * .5 + 6px);z-index:3;
@@ -480,7 +480,7 @@ button,select,input{transition:background .25s,border-color .25s}
 :root.stacked .dev-col>*{position:static;pointer-events:auto}
 :root.stacked .dev-col .dev{flex-wrap:wrap}
 :root.stacked .dev-col .dev-fps{white-space:pre-line;pointer-events:none}   /* a stat per row */
-:root.stacked .world-bullets{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 18px + var(--ui-h) * 3.2);width:calc(var(--ui-h) * 2.2)}   /* (left of the ship view: above < >, above Fire) */
+:root.stacked .world-bullets{left:calc(-100% / 3 + 8px);bottom:calc(11.72% - 2px - var(--ui-h));width:calc(var(--ui-h) * 2.2)}   /* (left of the ship view: below Fire, 8 px under it) */
 :root.stacked .bullet-nav{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 12px + var(--ui-h) * 2.2);width:calc(var(--ui-h) * 2.2)}
 /* the chapter card fits a narrow window: smaller, the title's long words whole */
 :root.stacked .chapter-box{max-width:92%;box-sizing:border-box;padding:calc(var(--ui-h) * .6) min(calc(var(--ui-h) * 1.6), 5vw)}

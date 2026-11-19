@@ -4,7 +4,7 @@
 Usage: python3 tools/gen_aquarium.py [path/to/Lenia/Python/found/233.json]
 
 Takes the entries from 5N7KKM to HAESRE (file lines 2-76: 5N7KKM to GDNQYX, then HGMLH8, PJ1EF7,
-KZ2BLD, XEH4YR, HAESRE), skips "G6G6CR metamorpha beaked" and "VT049W gyrotachus"
+KZ2BLD, XEH4YR, HAESRE), skips "G6G6CR metamorpha beaked" and "VT049W gyrotachus", gives HAESRE zigzag its second entry's cells (CELLS_FROM),
 (its own kernels: a different species), renames VT049W's first "para" to "rectogyrans" (was "paralimus"), KZ2BLD's
 unnamed second entry to "virgatus" and its "gyrans tachus" to "limus", HGMLH8's "parapedes" to
 "tardus" and "para" to "tachus", numbers a repeated name
@@ -26,6 +26,10 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'aquarium23
 # m = 0.302 instead of VT049W's 0.272.
 SKIP = {('G6G6CR', 'metamorpha beaked'), ('VT049W', 'gyrotachus')}
 SKIP_IDS = {'XEH4YR-auctus-2', 'HAESRE-zigzag-2'}   # repeated names, left out (after numbering)
+# A repeated entry whose cells replace an earlier one's (same params; the earlier one keeps its id,
+# name and place): HAESRE zigzag's first entry starts mid-turn, hard to clone; its second (file
+# line 76) is on a straight stretch (2026-11-19)
+CELLS_FROM = {'HAESRE-zigzag-2': 'HAESRE-zigzag'}
 Z18A9R_NAMES = ['gyrans', 'paragyrans', 'antigyrans']   # unnamed in the file (lines 32-34)
 KEYS = ['b', 'm', 's', 'h', 'r', 'c']
 
@@ -92,6 +96,10 @@ for e in entries:
         while f'{pid}-{n}' in seen: n += 1
         pid, name = f'{pid}-{n}', f'{name} {n}'
     seen[pid] = 1
+    if pid in CELLS_FROM:
+        tgt = next(p for p in pats if p['id'] == CELLS_FROM[pid])
+        assert tgt['R'] == p0['R'] and ks == (tgt.get('kernels') or rules[code]['kernels']), pid
+        tgt['cells'] = e['cells']
     if pid in SKIP_IDS: continue
     if name.endswith(' (replicating)') or (code, name) in BOOM:   # display: an emoji in place
         name = name.replace(' (replicating)', '') + ' 💥'

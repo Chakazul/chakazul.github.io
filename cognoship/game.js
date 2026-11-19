@@ -1918,9 +1918,10 @@
         for (const n of added) if (!named.includes(n)) unsavedBullets.add(n);
       }
       payBullets(added.filter(n => !unsavedBullets.has(n) && !fieldsAdded.includes(n)).length);   // each costs [new_bullet]'s price, as a created one ([bullet:all]'s extras free)
-      // every pulse named is revealed, even if the book had it already (created by the player, or
-      // Antimatter / Nebula by [world_draw]); only the new ones are paid for
-      const named = names.split(',').concat(equip ?? []).map(t => t.trim().toLowerCase());
+      // every pulse named in the list is revealed, even if the book had it already (created by the
+      // player, or Antimatter / Nebula by [world_draw]); only the new ones are paid for. The one to
+      // equip only if it is new (added): [add_bullet::<name>] just equipping one reveals nothing
+      const named = names.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       const shown = added.concat(Bullets.choices.filter(n => !added.includes(n) && named.some(t => t === n.toLowerCase() || Bullets.kindOf(t) === n)));
       if (!replaying && shown.length && Bullets.on && !book.open && !chapterShowing()) showNewBullets(shown);
     },
@@ -2469,7 +2470,10 @@
 
   // ---- scene fades ([new_scene], [chapter]) -----------------------------------------------------
   const WORLD_FADE_MS = 500;
-  let worldFade = { from: 0, to: 0, t0: 0, ms: WORLD_FADE_MS };
+  // (the start, every mode: the views black (START_FADE) until the script's set-up has run, then faded
+  // in as after a [new_scene]; unless a fade of the set-up's own has taken over: a chapter card, a species pick)
+  const START_FADE = { from: 1, to: 1, t0: 0, ms: WORLD_FADE_MS };
+  let worldFade = START_FADE;
   function worldShade() {
     const f = worldFade.ms > 0 ? Math.min(1, (performance.now() - worldFade.t0) / worldFade.ms) : 1;
     return worldFade.from + (worldFade.to - worldFade.from) * f;
@@ -3308,5 +3312,5 @@
     replaying = false;
     if (from < SCRIPT.length) run(from);
   }, err => { console.error(err); say(`Could not load the script (${SCRIPT_FILE}).`); }), Page.showError)
-    .finally(() => Page.releaseMusic());   // (the music was held until the script set its playlist: page.js; with no [music], the default)
+    .finally(() => { Page.releaseMusic(); if (worldFade === START_FADE) fadeWorld(0); });   // (the views fade in: START_FADE)   // (the music was held until the script set its playlist: page.js; with no [music], the default)
 })();

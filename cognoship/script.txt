@@ -4,7 +4,7 @@
 [morph_book_action:clear_put][retry_action:clear_put]
 #[add_bullet:all:Orbium]
 
-[stars:0:3:2:3]
+[stars:0:3:2:2]
 [clear_world:empty]
 This is the story of the Cognoship.
 
@@ -83,7 +83,7 @@ Collect 30 more energy, then {Create:X} a new pulse type.[need:create_bullet]
 [new_bullet:50]
 Switch types using {Pulses:X} or {◀:C} {▶:V}.
 Each pulse type has unique effects.
-Now we embark for a stellar nursery.
+Now we embark for a nearby stellar nursery.
 
 
 [music:3,1:3]
@@ -121,7 +121,7 @@ When you are ready, we will continue our interstellar journey.
 [stars:follow:0.1]
 [clear_world:scroll][put_player:limus]
 There is no mission, no objective while we are wandering through space.
-But to navigate the vastness of space, we still need one more technology.
+But to navigate the vastness of space, we need one more technology.
 
 [add_bullet:Antimatter:Antimatter]
 *Antimatter* is equipped. Now space is your canvas.
@@ -144,7 +144,7 @@ Here are some of our Leniologists' favorite species.
 [allow_morph:rectus,limus,virgatus]
 [clear_world:scroll][put_player:rectus]
 [dot:5][min_morph:5:rectus,limus:far]
-_Veil Nebula_, the remains of a supernova, 2,400 light-years from home.
+At _Veil Nebula_, the remains of a supernova, 2,400 light-years from home.
 The striped species _Aquarium virgatus_.
 Find morph _virgatus_.[need:discover_morph:virgatus]
 Next species ...
@@ -154,7 +154,7 @@ Next species ...
 [allow_morph:limus,gyrans,impetus,antigyrans]
 [clear_world:scroll][put_player:limus]
 [dot:5][min_morph:3:gyrans,impetus,antigyrans]
-_Crab Nebula_, another supernova remnant, 6,500 light-years from home.
+At _Crab Nebula_, another supernova remnant, 6,500 light-years from home.
 The dancing species _Aquarium saltans_.
 Find morph _impetus_.[need:discover_morph:impetus]
 Next species ...
@@ -166,7 +166,7 @@ Next species ...
 [allow_morph:zigzag,lithos,antigyrans,paragyrans,circumgyrans]
 [clear_world:scroll][put_player:zigzag]
 [dot:5][min_morph:4:antigyrans,paragyrans:far]
-_Cygnus X-1_, the first known black hole, 7,200 light-years from home.
+At _Cygnus X-1_, the first known black hole, 7,200 light-years from home.
 The zigzagging species _Aquarium sinuosus_.
 Engineer twin morph _paragyrans_ or _antigyrans_.[need:discover_morph:antigyrans,paragyrans]
 Next species ...
@@ -175,13 +175,13 @@ Next species ...
 [species:Aquarium metamorpha:HGMLH8]
 [allow_morph:metamorpha,paratardus,paratachus]
 [clear_world:scroll][put_player:metamorpha]
-[dot:5][min_morph:3:metamorpha]
-The _Pistol Star_, a violent blue hypergiant, 25,000 light-years from home.
+[dot:5][min_morph:4:paratardus,paratachus]
+At the _Pistol Star_, a violent hypergiant, 25,000 light-years from home.
 The shapeshifting species _Aquarium metamorpha_.
 Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus]
 
 The journey continues.
-We are heading to the center of our Galaxy.
+We are heading to the center of our galaxy.
 
 
 [chapter:5:Megastructure]
@@ -226,7 +226,7 @@ Discover all 3 morphs. {Retry:←} if necessary.[need:discover_morph:rectus,tach
 You endured.
 
 [new_scene]
-[stars:0:3:2:3]
+[stars:0:3:2:2]
 [clear_world:empty]
 Escaped from the Galactic Center, we wander into unknown places.
 
@@ -240,7 +240,7 @@ Escaped from the Galactic Center, we wander into unknown places.
 [allow_morph:rectus,gyrans,tachus,lithos,paragyrans,pararectus,rectogyrans,sequerectus]
 [clear_world:gray][put_player:tachus][put_morph:gyrans:far][put_morph:gyrans:far][put_morph:gyrans:far]
 #[dot:3]
-We have arrived at a distant, ancient part of our Galaxy.
+We have arrived at a distant, ancient part of our galaxy.
 Our ships have been over-engineering themselves.
 And finally, they have gone out of control.
 _Aq. replicans_ relentlessly copy themselves, consume every star and planet ...
@@ -255,7 +255,7 @@ Dissolve all morphs. Including yourself. Good luck.[need:object:0]
 [bullet_limit]
 
 [new_scene]
-[stars:270:3:2:3]
+[stars:270:3:2:2]
 [clear_world:empty]
 Peace has been restored. Thank you for your service.
 
@@ -270,7 +270,7 @@ Peace has been restored. Thank you for your service.
 [clear_world][put_player:lithos]
 [min_morph:3:lithos]
 To prevent future Gray Goo events, we accelerated our evolution.
-At the edge of the Galaxy, a new genus _Cilium_ was born.
+At the edge of the galaxy, a new genus _Cilium_ was born.
 They are peaceful creatures, and they move differently.
 [draw:if:G6G6CR]
 {R:1} twice to switch to drawing. Add red mass to make _Cilium_ move.[need:discover_morph:rectus,limus]
@@ -281,7 +281,7 @@ Correct. _Cilium_ are propelled by the red bits on their membranes.
 [min_morph:15:rectus,limus:random]
 _Cilium_ could serve as the nascent immune system of a healthy galaxy.
 "_They may release plenty of red mass that neutralizes Gray Goo,_ ...
-_... if only they work together_," Leniologists suspect.
+_... if a lot of them work together_," Leniologists suspect.
 Produce an abundance of red mass.[need:mass:r:40]
 The immune system works! Cooperation triumphs.
 Red Goo and Gray Goo are now in perfect balance.
@@ -291,12 +291,12 @@ Red Goo and Gray Goo are now in perfect balance.
 #ending
 
 [new_scene]
-[stars:0:3:2:3]
+[stars:0:3:2:2]
 [species]
 [speed:1][gun:off][new_bullet:off][clone:off][erase:off][draw:off][morph_book:off]
 [energy:off]
 [clear_world:empty]
-The Galaxy remains a peaceful place.
+The galaxy remains a peaceful place.
 
 _Lenia_, the precursor of _Lenium_ technology, ...
 ... was discovered by scientist Chan in the early 21st century.
@@ -305,19 +305,18 @@ Shortly after, the *cognitive masking* capability of _Lenia_ ...
 _Lenium_ technology keeps evolving.
 
 [new_scene]
-[stars:90:3:2:3]
+[stars:90:3:2:2]
 [music:1:1]
 [clear_world:sky:empty]
 
 *Credits*
 👾 Game design: Bert Chan
 💻 Programming: Bert Chan, Claude Opus 🤖
-🧪 Testing: Jesse Cool, Lainey Chan
-🔬 Leniologists: Jesse Cool, Marko Cvjetko, Gautier Hamon, Bert Chan
+🧪 Testing: Jesse Cool, Marko Cvjetko, Gautier Hamon, Lainey Chan
 🎼 Music: _Long Way_ by Rexlambo; _A Few Jumps Away_ by Arthur Vyncke ...
 🎼 Music: _Out of the Skies, Under the Earth_ by Chris Zabriskie ...
 🎼 Music: _Billions and Billions_ by Stellardrone
 👾 Gameplay inspired by _FTL_ 🚀 and _Asteroids_ 🌠
 
-Your discovered morphs and pulses are in Challenge and Sandbox modes.
+Your discovered morphs and pulses go to Challenge and Sandbox modes.
 Thank you for your participation.
