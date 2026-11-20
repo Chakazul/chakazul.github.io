@@ -1,9 +1,8 @@
 #version 300 es
 // FFT mode (?fft=1, fftsim.js): the creatures' step from the convolutions the FFT made, the same
-// update as sim.glsl (read that first): U per kernel from the inverse FFTs uP0..uP7 (kernel 2j in
-// .x of uPj, 2j + 1 in .z; so group g is (P[2g].xz, P[2g+1].xz)), already K*(A (1 - bullets))
-// where the bullets mask; uD0..uD3 (gathered by fftgather.glsl, kernel 4g + i in component i of
-// group g) how much of each kernel the bullets hide (K*b, times src . bulletCh): visible 1 - D.
+// update as sim.glsl (read that first): U per kernel from the inverse FFTs uP0..uP3 (kernel 4g + i
+// in component i of uPg: fftmul.glsl), already K*(A (1 - bullets)) where the bullets mask; uD0..uD3
+// (laid out alike) how much of each kernel the bullets hide (K*b, times src . bulletCh): visible 1 - D.
 // The cognitive mask's circle is small, so instead of more FFTs its cells are taken out directly:
 // for a pixel within reach of it, each circle cell q takes w(q - p) of its hidden channel out of the
 // numerator and the denominator (w from uKimg, the kernels as an image). Erase / draw and the
@@ -12,7 +11,7 @@ precision highp float;
 precision highp sampler2D;
 precision highp int;
 
-uniform sampler2D uP0, uP1, uP2, uP3, uP4, uP5, uP6, uP7;
+uniform sampler2D uP0, uP1, uP2, uP3;
 uniform sampler2D uD0, uD1, uD2, uD3;
 uniform sampler2D uState;
 uniform sampler2D uBullets;
@@ -40,8 +39,12 @@ uniform float uBulletHit;
 uniform sampler2D uCap;     // Antimatter (the world-draw field, erasing) beside the bullets: each channel capped at 1 - its field (glsim.js capOn)
 uniform int   uCapOn;
 uniform int   uBulletVec;   // 1: the bullets texture is the world-draw field, its rgb one per channel (sim.glsl)
+uniform float uInvK;        // 1 / kernel count
 
-out vec4 fragColor;
+layout(location = 0) out vec4 fragColor;
+// the potential, for the creature finder (blocks.glsl): the mean over kernels of U, as the FFT gave
+// it (the cognitive mask's circle not taken out; where the bullets mask, what they leave visible)
+layout(location = 1) out vec4 potColor;
 
 vec2 wrapDelta(vec2 d) {
     vec2 s = vec2(uSize);
@@ -80,10 +83,9 @@ void main() {
     bool bmask = uBulletMode == 2;
     bool masked = near || bmask;
 
-    vec4 U0 = vec4(texelFetch(uP0, p, 0).xz, texelFetch(uP1, p, 0).xz);
-    vec4 U1 = vec4(texelFetch(uP2, p, 0).xz, texelFetch(uP3, p, 0).xz);
-    vec4 U2 = vec4(texelFetch(uP4, p, 0).xz, texelFetch(uP5, p, 0).xz);
-    vec4 U3 = vec4(texelFetch(uP6, p, 0).xz, texelFetch(uP7, p, 0).xz);
+    vec4 U0 = texelFetch(uP0, p, 0), U1 = texelFetch(uP1, p, 0);
+    vec4 U2 = texelFetch(uP2, p, 0), U3 = texelFetch(uP3, p, 0);
+    potColor = vec4(dot(U0 + U1 + U2 + U3, vec4(1.0)) * uInvK, 0.0, 0.0, 0.0);
     vec4 N0 = vec4(1.0), N1 = vec4(1.0), N2 = vec4(1.0), N3 = vec4(1.0);
     if (bmask) {
         N0 -= texelFetch(uD0, p, 0); N1 -= texelFetch(uD1, p, 0);

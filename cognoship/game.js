@@ -2469,7 +2469,7 @@
   const byContinue = () => deferred < 0 && line >= 0 && SCRIPT[line].msg && !tests.length && !challenge.failed;
   // ?dev=1: O completes the waiting line's [need] conditions at once (a line waiting only on an
   // action, a chapter card, is left alone); P scores as if the ship ate a dot (+10 energy); I goes
-  // to the next chapter
+  // to the next chapter; L records the frame times (devRecord)
   function devSkip() { if (DEV && deferred < 0 && line >= 0 && tests.length && SCRIPT[line].conds.length) { showSuccess(); next(); } }
   // I: on to the next [chapter] line. Every action on the lines in between runs first, in order
   // (as [jump_here] does), with their messages, conditions and chapter cards skipped.
@@ -2489,9 +2489,87 @@
   // its buttons, at the top left of the world view: Ch (I), Ok (O), Do (P)
   $('dev').hidden = !DEV;
   $('dev-ch').onclick = devChapter; $('dev-ok').onclick = devSkip; $('dev-do').onclick = () => { if (DEV) Dots.eat(); };
+  $('dev-rc').onclick = () => devRecord();
+  // L (Rc): record every frame's times (core prof: the steps' GPU time, the analyses' readback and
+  // CPU parts, ...) and what flies (the ship's pulses, the bots', both, none), up to REC_MAX_S; L again
+  // stops and downloads a summary by those four cases (devRecSummary), to paste back
+  const REC_MAX_S = 300;
+  let rec = null;
+  function devRecord() {
+    if (!DEV) return;
+    if (!rec) { rec = { t0: performance.now(), last: 0, rows: [] }; C.prof.on = true; $('dev-rc').classList.add('rec'); return; }
+    const text = devRecSummary(rec);
+    rec = null; C.prof.on = false; $('dev-rc').classList.remove('rec'); $('dev-rc').textContent = 'Rc';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = `cognoship-perf-${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '')}.txt`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  // a frame's row (at the end of C.hooks.frame: hook = the game's frame work)
+  function devRecFrame(hookT0) {
+    if (!rec) return;
+    const now = performance.now(), P = C.prof;
+    rec.rows.push({ t: (now - rec.t0) / 1000, dt: rec.last ? hookT0 - rec.last : NaN, steps: P.steps,
+      loop: P.loop, gpu: P.gpu, read: P.read, cpu: P.cpu, blocks: P.blocks, detect: P.detect, render: P.render, hook: now - hookT0,
+      me: !SimGL.bulletsIdle, bot: !SimGL.hostileIdle, mask: SimGL.maskOn, vec: SimGL.vecOn, ...SimGL.regionStats,
+      comps: C.found ? C.found.comps.length : 0, hostiles: hostileCount(), speed: C.SPEEDS[C.speedIdx] });
+    rec.last = hookT0;
+    const s = Math.floor((now - rec.t0) / 1000);
+    $('dev-rc').textContent = `${s}s`;
+    if (s >= REC_MAX_S) devRecord();
+  }
+  function devRecSummary(rec) {
+    const rows = rec.rows.filter(r => !isNaN(r.dt));
+    const f = (v, d = 1) => isFinite(v) ? v.toFixed(d) : '-';
+    const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN;
+    const pct = (a, p) => { if (!a.length) return NaN; const b = [...a].sort((x, y) => x - y); return b[Math.min(b.length - 1, Math.floor(p * b.length))]; };
+    const sum = (a, k) => a.reduce((x, r) => x + r[k], 0);
+    const caseOf = r => r.steps === 0 ? 'paused' : r.me && r.bot ? 'both' : r.me ? 'me' : r.bot ? 'bot' : 'none';
+    const out = [];
+    out.push('# Cognoship frame-time recording (dev L)');
+    out.push(`url: ${location.search || '(none)'}  batch=${C.BATCH ? 1 : 0}  FFT=${FFTSim.on ? 1 : 0}  board ${SimGL.W}x${SimGL.H}  R=${C.R}`);
+    out.push(`screen ${innerWidth}x${innerHeight} @${devicePixelRatio.toFixed(2)}  ${navigator.userAgent}`);
+    const dbg = document.createElement('canvas').getContext('webgl2'), ext = dbg && dbg.getExtension('WEBGL_debug_renderer_info');
+    if (ext) out.push(`gpu: ${dbg.getParameter(ext.UNMASKED_RENDERER_WEBGL)}`);
+    out.push(`recorded ${f(rows.length ? rows[rows.length - 1].t : 0)} s, ${rows.length} frames, ${sum(rows, 'steps')} steps`);
+    out.push('');
+    out.push('Per case: frame = per frame, ms; step = per step, ms (gpu: the GPU work, read: the blocks readback, cpu: detection + tracking).');
+    out.push('other = frame interval - (loop + blocks + detect + render + hook): the browser, compositing, the wait for vsync.');
+    out.push('');
+    const H = ['case', 'sec', 'frames', 'fps', 'steps/s', 'st/fr', 'n=1/2/3/4 %', 'int p50/p90', 'loop', 'gpu/st', 'read/st', 'cpu/st', 'blocks', 'detect', 'render', 'hook', 'other', 'mask%', 'vec%', 'stepped me/bot/dot', 'comps', 'hostile', 'speed'];
+    const T = [H];
+    for (const c of ['none', 'me', 'bot', 'both', 'paused']) {
+      const a = rows.filter(r => caseOf(r) === c);
+      if (!a.length) continue;
+      const sec = sum(a, 'dt') / 1000, st = sum(a, 'steps'), n = a.length;
+      const hist = [1, 2, 3, 4].map(k => Math.round(100 * a.filter(r => r.steps === k).length / n)).join('/');
+      const pf = k => sum(a, k) / n, ps = k => st ? sum(a, k) / st : NaN;
+      const other = mean(a.map(r => r.dt - r.loop - r.blocks - r.detect - r.render - r.hook));
+      const ints = a.map(r => r.dt);
+      T.push([c, f(sec), n, f(n / sec, 0), f(st / sec, 0), f(st / n, 2), hist, `${f(pct(ints, 0.5))}/${f(pct(ints, 0.9))}`,
+        f(pf('loop')), f(ps('gpu'), 2), f(ps('read'), 2), f(ps('cpu'), 2), f(pf('blocks'), 2), f(pf('detect'), 2), f(pf('render'), 2), f(pf('hook'), 2), f(other),
+        Math.round(100 * a.filter(r => r.mask).length / n), Math.round(100 * a.filter(r => r.vec).length / n),
+        `${f(pf('bul'), 0)}/${f(pf('hos'), 0)}/${f(pf('dot'), 0)}%`, f(pf('comps'), 0), f(pf('hostiles'), 1), [...new Set(a.map(r => r.speed))].join(',')]);
+    }
+    const w = H.map((_, i) => Math.max(...T.map(r => String(r[i]).length)));
+    for (const r of T) out.push(r.map((v, i) => String(v).padStart(w[i])).join('  '));
+    out.push('');
+    out.push('Per second: t, case (most frames), fps, steps/s, gpu/st, read/st, cpu/st, frame hook+detect+render ms, % of the board the pulses stepped me/bot');
+    for (let s = 0; ; s++) {
+      const a = rows.filter(r => Math.floor(r.t) === s);
+      if (!a.length) { if (s > (rows.length ? rows[rows.length - 1].t : 0)) break; continue; }
+      const cnt = {}; for (const r of a) cnt[caseOf(r)] = (cnt[caseOf(r)] || 0) + 1;
+      const c = Object.entries(cnt).sort((x, y) => y[1] - x[1])[0][0];
+      const sec = sum(a, 'dt') / 1000, st = sum(a, 'steps');
+      out.push(`${String(s).padStart(4)}  ${c.padEnd(6)} ${f(a.length / sec, 0).padStart(3)} fps ${f(st / sec, 0).padStart(4)} st/s  gpu ${f(st ? sum(a, 'gpu') / st : NaN, 2)}  read ${f(st ? sum(a, 'read') / st : NaN, 2)}  cpu ${f(st ? sum(a, 'cpu') / st : NaN, 2)}  rest ${f((sum(a, 'hook') + sum(a, 'detect') + sum(a, 'render')) / a.length)}  stepped ${f(sum(a, 'bul') / a.length, 0)}/${f(sum(a, 'hos') / a.length, 0)}%`);
+    }
+    return out.join('\n') + '\n';
+  }
   // the frame rate and the simulation steps per second, over the last half second
   $('dev-fps').hidden = !DEV;
   const fps = { t: 0, frames: 0, steps: 0 };
+  // the tiles the bullets, the bots' bullets and the dots last stepped, of all (glsim.js regions)
+  function regionText() { const r = SimGL.regionStats; return `stepped ${r.bul}/${r.hos}/${r.dot}%`; }
   function devFps() {
     if (!DEV) return;
     const now = performance.now();
@@ -2499,8 +2577,8 @@
     fps.frames++;
     if (now - fps.t < 500) return;
     const s = (now - fps.t) / 1000;
-    const parts = [`${Math.round(fps.frames / s)} fps`, `${Math.round((C.simSteps - fps.steps) / s)} steps/s`, `${C.stepMs.toFixed(1)} ms/step`,
-                   ...(FFTSim.on ? ['FFT'] : []), `${innerWidth}×${innerHeight}`, `@${devicePixelRatio.toFixed(2)}`];   // (the CSS viewport and pixel ratio: for the phone test's sizes)
+    const parts = [`${Math.round(fps.frames / s)} fps`, `${Math.round((C.simSteps - fps.steps) / s)} steps/s`, `${C.stepMs.toFixed(1)} ms/step`, ...(C.DEBUG ? [`gpu ${C.msPerStep.toFixed(1)} · read ${C.msRead.toFixed(1)} · cpu ${C.msCpu.toFixed(1)} ms`] : []),
+                   ...(FFTSim.on ? ['FFT'] : []), regionText(), `${innerWidth}×${innerHeight}`, `@${devicePixelRatio.toFixed(2)}`];   // (the CSS viewport and pixel ratio: for the phone test's sizes)
     $('dev-fps').textContent = parts.join(stacked ? '\n' : ' · ');   // stacked: one per row
     Object.assign(fps, { t: now, frames: 0, steps: C.simSteps });
   }
@@ -3172,6 +3250,7 @@
     if (!fm) Field.end();
   };
   C.hooks.frame = () => {
+    const hookT0 = performance.now();
     devFps();
     updateBackground();
     // Respawn / Choose fade with the views ([new_scene], [chapter]), as "Dissolved" (core)
@@ -3189,7 +3268,8 @@
     Field.tick();
     autospawnFrame();
     scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); autofireFrame(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === (lostPanel() || flashing('reset'))) syncButtons();
-    const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()]; };
+    const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()];
+    devRecFrame(hookT0); };
 
   // ---- controls ---------------------------------------------------------------------------
   // The tool in use, by name, in italic: the ship's (C.action) at the ship view's lower left while
@@ -3340,6 +3420,7 @@
     else if (k === 'o') { if (DEV) flash('dev-ok'); devSkip(); }
     else if (k === 'p') { if (DEV) { flash('dev-do'); Dots.eat(); } }
     else if (k === 'i') { if (DEV) flash('dev-ch'); devChapter(); }
+    else if (k === 'l') { if (DEV) devRecord(); }
     else if (k === 'Enter') { e.preventDefault(); doPlay(); }
     // (the keys: see KEYS)
     else if (k === 'a') { if (lostShown()) $('reset').onclick(); }   // only while Respawn shows

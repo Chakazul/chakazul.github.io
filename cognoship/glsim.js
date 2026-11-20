@@ -47,6 +47,11 @@ const SimGL = (function () {
   let prog = {}, uCache = new Map();
   let W = 0, H = 0, dt = 0.5, gain = [1, 1, 1], growthFn = 1, reach = 0;
   let state = [], stateFbo = [], cur = 0;
+  // The potential (the mean over kernels of K * A, as blocks.glsl's): a by-product of the FFT step
+  // (fftgrow.glsl's 2nd target, through growFbo), of the board before that step; readBlocks takes it
+  // from there while potValid, so it skips its own ~1,000-tap sum per block. Anything else that
+  // writes the board (seed, add, paint, the seam, the direct step, a new rule) makes it invalid.
+  let potTex = null, growFbo = [], potValid = false;
   let tapTex = null, tapCount = 0, params = null, kernelCount = 1;
   let redTex = [], redFbo = null, redBlock = 1;
   let comTex = null, comFbo = null;
@@ -69,6 +74,28 @@ const SimGL = (function () {
   let bulletsIdle = true;
   let bul = { mode: 1, ch: [1, 1, 1], wearCh: [1, 1, 1], hit: 0.2, wear: 0.05, sub: 2 };
   let bblkTex = null, bblkFbo = null, BBW = 0, BBH = 0, bblkBuf = null;
+  // Regions: the bullets, the bots' bullets and the dots are sparse, so each field is stepped only
+  // over the TILE x TILE tiles that hold mass, and their neighbours (round the torus), as the last
+  // coarse maps (refreshBlocks, once a frame) found them, plus wherever something was put in since
+  // (put: that rect's tiles and their neighbours). A tile leaving a field's region is cleared in both
+  // textures of its pair, so a step's target holds nothing outside the region either (the step only
+  // writes inside it). tiles null: the whole board (no map yet, or more than REGION_MAX_AGE steps
+  // since the last: always correct, only slower). The region reaches MARGIN cells past every coarse
+  // block with mass (then out to whole tiles): the kernel's reach (R 13 for the bullets, at most ~18
+  // for the dots) plus the travel until the next map (a pulse: ~1-3 cells a step, a frame of at most
+  // 4 steps; the dots stay put). Tiles are small (TILE = BUL_BLOCK) so the region hugs the pulses: a
+  // 32-cell tile and its neighbours stepped ~3x the cells a pulse needs.
+  // ?region=0: off (the whole board always), to compare.
+  // The dots stay put (in their own frame) and change slowly, so their map is only made every
+  // DOT_REFRESH frames when nothing else needs one (a readback is a stall), their region kept that
+  // much longer (REGION_MAX_AGE in steps: the bullets', then the dots').
+  const TILE = 8, REGION_EPS = 1e-3, REGION_MAX_AGE = { bul: 6, dot: 60 }, MARGIN = { bul: 24, dot: 32 }, DOT_REFRESH = 10;
+  const REGIONS_ON = new URLSearchParams(location.search).get('region') !== '0';
+  let TW = 0, TH = 0;
+  const newRegion = (maxAge, margin) => ({ tiles: null, rects: null, age: 0, stepped: 0, maxAge, margin });
+  const reg = { bul: newRegion(REGION_MAX_AGE.bul, MARGIN.bul), hos: newRegion(REGION_MAX_AGE.bul, MARGIN.bul), dot: newRegion(REGION_MAX_AGE.dot, MARGIN.dot) };
+  let frameNo = 0;
+  let blocksValid = false, bulBlk = null, hosBlk = null, dotBlk = null;   // refreshBlocks' maps, until the next change
   // hostile bullets channel: as the bullets', with its own pair, rule and options (hit, wear, sub)
   const hos = { tex: [], fbo: [], cur: 0, on: false, idle: true, tapTex: null, tapCount: 0, rule: null,
                 opt: { hit: 0.2, wear: 0.03, sub: 3, mode: 2, ch: [0, 1, 0], wearCh: [0, 1, 0] } };
@@ -166,6 +193,8 @@ const SimGL = (function () {
     if (Math.max(W, H) > GRID * 64) throw new Error('board too large for the reduction');
     state = [makeTex(W, H), makeTex(W, H)];
     stateFbo = state.map(t => makeFbo([t]));
+    potTex = makeTex(W, H);
+    growFbo = state.map(t => makeFbo([t, potTex])); potValid = false;
     redBlock = Math.ceil(Math.max(W, H) / GRID);
     redTex = [0, 1, 2, 3].map(() => makeTex(GRID, GRID));
     redFbo = makeFbo(redTex);
@@ -185,6 +214,8 @@ const SimGL = (function () {
     bblkTex = makeTex(BBW, BBH);
     bblkFbo = makeFbo([bblkTex]);
     bblkBuf = new Float32Array(BBW * BBH * 4);
+    bulBlk = new Float32Array(BBW * BBH); hosBlk = new Float32Array(BBW * BBH); dotBlk = new Float32Array(BBW * BBH);
+    TW = Math.ceil(W / TILE); TH = Math.ceil(H / TILE);
     hos.tex = [makeTex(W, H), makeTex(W, H)];
     hos.fbo = hos.tex.map(t => makeFbo([t]));
     fieldTex = makeTex(W, H);
@@ -199,6 +230,7 @@ const SimGL = (function () {
 
   // kn: kernel core (LeniaF numbering, see rule.js shell).
   function setRule(kernels, R, kn = 1) {
+    potValid = false;
     const taps = Rule.buildTaps(kernels, R, kn);
     tapCount = taps.count;
     if (tapCount > gl.getParameter(gl.MAX_TEXTURE_SIZE)) throw new Error('kernel too large');
@@ -230,7 +262,7 @@ const SimGL = (function () {
 
   // ---- board ----------------------------------------------------------------------------
   function clear() {
-    bulletsIdle = true; hos.idle = true;
+    bulletsIdle = true; hos.idle = true; potValid = false;
     for (const f of stateFbo.concat(dotFbo, bulFbo, hos.fbo)) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, f);
       gl.clearColor(0, 0, 0, 0);
@@ -240,6 +272,7 @@ const SimGL = (function () {
 
   // Place a pattern (formCells output) with its top-left at (row0, col0), on a cleared board.
   function seed(form, row0, col0) {
+    potValid = false;
     const buf = new Float32Array(W * H * 4);
     for (let c = 0; c < 3; c++)
       for (let y = 0; y < form.h; y++)
@@ -266,6 +299,7 @@ const SimGL = (function () {
   // Add a form onto the current board (cell-wise max with what is there), top-left at
   // (row0, col0), wrapping round the torus. Reads the board back once, so only for clicks.
   function add(form, row0, col0) {
+    potValid = false;
     const buf = new Float32Array(W * H * 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[cur]);
     gl.readPixels(0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
@@ -317,6 +351,115 @@ const SimGL = (function () {
       gl.clear(gl.COLOR_BUFFER_BIT);
     }
   }
+  // ---- regions (see TILE) ----
+  // A field's region emptied (its field cleared): nothing to step until something is put in
+  function regionEmpty(g) {
+    if (!TW || !REGIONS_ON) { g.tiles = null; g.rects = null; return; }
+    g.tiles = new Uint8Array(TW * TH); g.rects = []; g.cells = 0; g.age = 0; g.stepped = 0;
+  }
+  // tiles: the region's tile set, the rects to draw it with (tileRects), its cells
+  function regionSet(g, tiles) {
+    const { rects, cells } = tileRects(tiles);
+    g.tiles = tiles; g.rects = rects; g.cells = cells;
+  }
+  // A tile set as rects, in cells: each row's runs of tiles, a run the same as the one on the row
+  // above joining its rect (fewer draws); and the cells they cover
+  function tileRects(tiles) {
+    const rects = [], open = new Map();   // x0,x1 -> the rect whose last row is the row above
+    let cells = 0;
+    for (let ty = 0; ty < TH; ty++) {
+      const next = new Map();
+      for (let tx = 0; tx < TW; tx++) {
+        if (!tiles[ty * TW + tx]) continue;
+        let e = tx; while (e + 1 < TW && tiles[ty * TW + e + 1]) e++;
+        const x = tx * TILE, y = ty * TILE, w = Math.min(W, (e + 1) * TILE) - x, h = Math.min(H, y + TILE) - y, key = tx + ',' + e;
+        const r = open.get(key);
+        if (r) r[3] += h; else rects.push(next.set(key, [x, y, w, h]).get(key));
+        if (r) next.set(key, r);
+        cells += w * h;
+        tx = e;
+      }
+      open.clear(); for (const [k, r] of next) open.set(k, r);
+    }
+    return { rects, cells };
+  }
+  // the tiles of the cell rect (col0, row0, w, h) widened by m cells (round the torus), set in t
+  function markTiles(t, col0, row0, w, h, m) {
+    const x0 = Math.floor((col0 - m) / TILE), x1 = Math.floor((col0 + w - 1 + m) / TILE);
+    const y0 = Math.floor((row0 - m) / TILE), y1 = Math.floor((row0 + h - 1 + m) / TILE);
+    for (let ty = y0; ty <= y1; ty++)
+      for (let tx = x0; tx <= x1; tx++) t[((ty % TH + TH) % TH) * TW + ((tx % TW + TW) % TW)] = 1;
+  }
+  // Something put into a field: its region grows to cover it (a whole-board region stays so)
+  function regionPut(g, col0, row0, w, h) {
+    blocksValid = false;
+    if (!g.tiles) return;
+    const t = g.tiles.slice();
+    markTiles(t, col0, row0, w, h, g.margin);
+    regionSet(g, t);
+  }
+  // From a fresh coarse map (blk, BBW x BBH): the region afresh; the tiles leaving it cleared in both
+  // of the pair's textures (fbos)
+  function regionFromBlocks(g, blk, fbos) {
+    if (!REGIONS_ON) { g.tiles = null; g.rects = null; return; }
+    const t = new Uint8Array(TW * TH);
+    for (let by = 0; by < BBH; by++)
+      for (let bx = 0; bx < BBW; bx++)
+        if (blk[by * BBW + bx] > REGION_EPS) markTiles(t, bx * BUL_BLOCK, by * BUL_BLOCK, BUL_BLOCK, BUL_BLOCK, g.margin);
+    const old = g.tiles, gone = new Uint8Array(TW * TH);
+    let any = false;
+    for (let i = 0; i < t.length; i++) if (!t[i] && (!old || old[i])) gone[i] = any = 1;
+    if (any) {
+      const { rects } = tileRects(gone);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.clearColor(0, 0, 0, 0);
+      for (const f of fbos) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+        for (const [x, y, w, h] of rects) { gl.scissor(x, y, w, h); gl.clear(gl.COLOR_BUFFER_BIT); }
+      }
+      gl.disable(gl.SCISSOR_TEST);
+    }
+    regionSet(g, t);
+    g.age = 0;
+  }
+  // Draw the current pass over a field's region (the whole board if none, or too old)
+  function drawRegion(g) {
+    if (!g.rects || g.age > g.maxAge) { g.stepped = W * H; return draw4(); }
+    gl.enable(gl.SCISSOR_TEST);
+    for (const [x, y, w, h] of g.rects) { gl.scissor(x, y, w, h); draw4(); }
+    gl.disable(gl.SCISSOR_TEST);
+    g.stepped = g.cells;
+  }
+  // The coarse mass maps of the bullets, the bots' bullets and the dots (BBW x BBH, row-major, one
+  // float per BUL_BLOCK x BUL_BLOCK block), in one pass and one readback, kept until something
+  // changes them; and from them each field's region. Called once a frame after the steps (core.js),
+  // then read through readBulletBlocks, readHostileBlocks, readDotBlocks at no further cost.
+  function refreshBlocks() {
+    if (blocksValid) return;
+    const p = prog.blocksum;
+    gl.useProgram(p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bblkFbo);
+    gl.viewport(0, 0, BBW, BBH);
+    bindTex(0, bulTex[bcur], p, 'uA');
+    bindTex(1, hos.tex[hos.cur], p, 'uB');
+    bindTex(2, dotTex[dcur], p, 'uC');
+    gl.uniform2i(loc(p, 'uSize'), W, H);
+    gl.uniform1i(loc(p, 'uBlock'), BUL_BLOCK);
+    draw4();
+    gl.readPixels(0, 0, BBW, BBH, gl.RGBA, gl.FLOAT, bblkBuf);
+    for (let i = 0; i < BBW * BBH; i++) { bulBlk[i] = bblkBuf[i * 4]; hosBlk[i] = bblkBuf[i * 4 + 1]; dotBlk[i] = bblkBuf[i * 4 + 2]; }
+    blocksValid = true;
+    regionFromBlocks(reg.bul, bulBlk, bulFbo);
+    regionFromBlocks(reg.hos, hosBlk, hos.fbo);
+    regionFromBlocks(reg.dot, dotBlk, dotFbo);
+  }
+  // Once a frame, after the steps (core.js): the maps and regions afresh while the bullets or the bots'
+  // bullets fly; for the dots alone, every DOT_REFRESH frames
+  function frameBlocks() {
+    frameNo++;
+    const bullets = !field.on && bulletsOn && bulTapTex && !bulletsIdle;
+    if (bullets || hostileActive() || (dotsLive() && dotTapTex && frameNo % DOT_REFRESH === 0)) refreshBlocks();
+  }
   // Write an h x w block (row-major `flat`, or zeros if null) into the R of tex, top-left at
   // (row0, col0), replacing what is there. The block must lie inside the board (no wrap).
   function putField(tex, flat, h, w, row0, col0) {
@@ -326,9 +469,9 @@ const SimGL = (function () {
     gl.texSubImage2D(gl.TEXTURE_2D, 0, col0, row0, w, h, gl.RGBA, gl.FLOAT, buf);
   }
   // Dots on or off. Either way the field starts empty.
-  function setDots(on) { dotsOn = on; clearFbos(dotFbo); }
+  function setDots(on) { dotsOn = on; clearFbos(dotFbo); regionEmpty(reg.dot); blocksValid = false; }
   // Write an h x w block of dot values (row-major `flat`, or zeros if null), top-left at (row0, col0).
-  function putDots(flat, h, w, row0, col0) { putField(dotTex[dcur], flat, h, w, row0, col0); }
+  function putDots(flat, h, w, row0, col0) { putField(dotTex[dcur], flat, h, w, row0, col0); regionPut(reg.dot, col0, row0, w, h); }
 
   // ---- bullets channel ------------------------------------------------------------------
   // rule: { R, betas, mu, sigma, dt }: the classic Lenia rule, one kernel of quad4 rings (betas,
@@ -345,10 +488,10 @@ const SimGL = (function () {
     const was = bulletsOn;
     bulletsOn = !!opts;
     if (opts) bul = { ...bul, ...opts };
-    if (was !== bulletsOn) { clearFbos(bulFbo); bulletsIdle = true; }
+    if (was !== bulletsOn) clearBullets();
   }
-  function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); bulletsIdle = false; }
-  function clearBullets() { clearFbos(bulFbo); bulletsIdle = true; }
+  function putBullets(flat, h, w, row0, col0) { putField(bulTex[bcur], flat, h, w, row0, col0); bulletsIdle = false; regionPut(reg.bul, col0, row0, w, h); }
+  function clearBullets() { clearFbos(bulFbo); bulletsIdle = true; regionEmpty(reg.bul); blocksValid = false; }
   // f: { tex, fbo, cur, tapTex, tapCount, rule, wear, wearCh, sub, other: the other bullets field's
   // texture (always one: never this field's own, which the sub-steps write into, a feedback loop
   // WebGL refuses: the draw dropped), otherWear: whether it wears this one down }: f.cur is updated
@@ -376,32 +519,20 @@ const SimGL = (function () {
       bindTex(0, f.tex[f.cur], p, 'uField');
       bindTex(1, state[cur], p, 'uState');
       bindTex(2, f.tapTex, p, 'uTaps');
-      draw4();
+      drawRegion(f.reg);
       f.cur = 1 - f.cur;
     }
+    f.reg.age++;
   }
   function stepBullets() {
-    const f = { tex: bulTex, fbo: bulFbo, cur: bcur, tapTex: bulTapTex, tapCount: bulTapCount, rule: bulRule, wear: bul.wear, wearCh: bul.wearCh, sub: bul.sub,
+    const f = { reg: reg.bul, tex: bulTex, fbo: bulFbo, cur: bcur, tapTex: bulTapTex, tapCount: bulTapCount, rule: bulRule, wear: bul.wear, wearCh: bul.wearCh, sub: bul.sub,
                 other: hos.tex[hos.cur], otherWear: mutual === 'wear' && hostileActive() };
     stepField(f);
     bcur = f.cur;
   }
   // The bullets' coarse mass map: BBW x BBH sums over BUL_BLOCK x BUL_BLOCK cells, row-major
-  // (row 0 = board row 0), one float per block.
-  function readBulletBlocks(tex = bulTex[bcur]) {
-    const p = prog.blocksum;
-    gl.useProgram(p);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, bblkFbo);
-    gl.viewport(0, 0, BBW, BBH);
-    bindTex(0, tex, p, 'uField');
-    gl.uniform2i(loc(p, 'uSize'), W, H);
-    gl.uniform1i(loc(p, 'uBlock'), BUL_BLOCK);
-    draw4();
-    gl.readPixels(0, 0, BBW, BBH, gl.RGBA, gl.FLOAT, bblkBuf);
-    const out = new Float32Array(BBW * BBH);
-    for (let i = 0; i < out.length; i++) out[i] = bblkBuf[i * 4];
-    return out;
-  }
+  // (row 0 = board row 0), one float per block (refreshBlocks', made now if out of date).
+  function readBulletBlocks() { refreshBlocks(); return bulBlk.slice(); }
   function setBulletColor(rgb) { bulRGB = rgb; }
 
   // ---- hostile bullets channel --------------------------------------------------------------
@@ -417,8 +548,8 @@ const SimGL = (function () {
     if (opts) hos.opt = { ...hos.opt, ...opts };
     if (was !== hos.on) clearHostile();
   }
-  function putHostile(flat, h, w, row0, col0) { putField(hos.tex[hos.cur], flat, h, w, row0, col0); hos.idle = false; }
-  function clearHostile() { clearFbos(hos.fbo); hos.idle = true; }
+  function putHostile(flat, h, w, row0, col0) { putField(hos.tex[hos.cur], flat, h, w, row0, col0); hos.idle = false; regionPut(reg.hos, col0, row0, w, h); }
+  function clearHostile() { clearFbos(hos.fbo); hos.idle = true; regionEmpty(reg.hos); blocksValid = false; }
   const hostileActive = () => hos.on && !!hos.tapTex && !hos.idle;   // (the bots fire on while the player draws on the world too)
   // The two bullets fields together ([bullet_mutual]): 'none' (apart), or 'wear': where they
   // overlap each wears the other down, at its own wear rate per unit of the other's mass (as the
@@ -481,7 +612,7 @@ const SimGL = (function () {
     return { tex: mixTex, mode: bul.mode, ch: bul.ch, hit: bul.hit };
   }
   function stepHostile() {
-    const f = { tex: hos.tex, fbo: hos.fbo, cur: hos.cur, tapTex: hos.tapTex, tapCount: hos.tapCount, rule: hos.rule,
+    const f = { reg: reg.hos, tex: hos.tex, fbo: hos.fbo, cur: hos.cur, tapTex: hos.tapTex, tapCount: hos.tapCount, rule: hos.rule,
                 wear: hos.opt.wear, wearCh: hos.opt.wearCh, sub: hos.opt.sub,
                 other: bulTex[bcur], otherWear: mutual === 'wear' && bulletsOn && !!bulTapTex && !bulletsIdle };
     stepField(f);
@@ -494,7 +625,7 @@ const SimGL = (function () {
     const was = field.on;
     field.on = !!opts;
     if (opts) Object.assign(field, opts);
-    if (field.on && !was) { clearFbos(bulFbo); bulletsIdle = true; clearHostile(); }
+    if (field.on && !was) { clearBullets(); clearHostile(); }
   }
   // Rows y0 .. y1 - 1 of a W x H x 4 field (row-major, rgb used), uploaded as they are
   function putFieldRows(buf, y0, y1) {
@@ -509,9 +640,9 @@ const SimGL = (function () {
   function setFieldKeepsDots(keep) { fieldKeepsDots = !!keep; }
   const dotsLive = () => dotsOn && (!field.on || fieldKeepsDots);
 
-  const readHostileBlocks = () => readBulletBlocks(hos.tex[hos.cur]);
+  const readHostileBlocks = () => { refreshBlocks(); return hosBlk.slice(); };
   // the dots channel's coarse mass map (as readBulletBlocks: BBW x BBH, in the field's own frame)
-  const readDotBlocks = () => readBulletBlocks(dotTex[dcur]);
+  const readDotBlocks = () => { refreshBlocks(); return dotBlk.slice(); };
   // The dots step, on the board the creatures' step just wrote (state[cur]).
   function stepDots() {
     const p = prog.dotsim;
@@ -529,7 +660,8 @@ const SimGL = (function () {
     gl.uniform1f(loc(p, 'uDt'), dotRule.dt);
     gl.uniform1f(loc(p, 'uEat'), DOT_EAT);
     gl.uniform2i(loc(p, 'uOff'), Math.round(dotOff[0]) % W, Math.round(dotOff[1]) % H);
-    draw4();
+    drawRegion(reg.dot);
+    reg.dot.age++;
     dcur = 1 - dcur;
   }
   // The dot mass within `radius` cells (a square window) of each site [col, row], as an array
@@ -566,6 +698,7 @@ const SimGL = (function () {
   // radius r, cells; round the torus) on the board as it is, with no step: the tools while paused.
   // Reads the board back, so only while a tool is held.
   function paint(tool) {
+    potValid = false;
     const buf = new Float32Array(W * H * 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[cur]);
     gl.readPixels(0, 0, W, H, gl.RGBA, gl.FLOAT, buf);
@@ -593,6 +726,7 @@ const SimGL = (function () {
   // tool: null, or { col, row, r, ch, action }: absolute circle centre in board cells;
   // action 0 = occlude (mask), 1 = erase (set to 0), 2 = draw (set to 1) inside the circle.
   function step(tool) {
+    blocksValid = false;
     eff = effBullets();
     if (ext.step) {   // a plug-in's sim pass (fftsim.js)
       ext.step(tool);
@@ -600,6 +734,7 @@ const SimGL = (function () {
       stepOthers();
       return;
     }
+    potValid = false;
     const p = prog.sim;
     gl.useProgram(p);
     gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[1 - cur]);
@@ -654,6 +789,8 @@ const SimGL = (function () {
     gl.uniform1i(loc(p, 'uTapCount'), tapCount);
     for (let g = 0; g < 4; g++) gl.uniformMatrix3x4fv(loc(p, `uSrc[${g}]`), false, params.src[g]);
     gl.uniform1f(loc(p, 'uInvK'), 1 / kernelCount);
+    bindTex(2, potTex, p, 'uPot');
+    gl.uniform1i(loc(p, 'uPotOn'), potValid ? 1 : 0);
     draw4();
     gl.readBuffer(gl.COLOR_ATTACHMENT0);
     gl.readPixels(0, 0, BW, BH, gl.RGBA, gl.FLOAT, blkBuf);
@@ -747,6 +884,8 @@ const SimGL = (function () {
   // copied into its other texture of the pair. The dots' field is in its own frame (dotOff).
   // discs: [[col, row, r], ...] (at most 8): in the creatures' field, also cleared (objects taken away)
   function clearSeam(col, row, band, discs = []) {
+    potValid = false;
+    blocksValid = false;
     const p = prog.seamclear;
     gl.useProgram(p);
     gl.viewport(0, 0, W, H);
@@ -768,7 +907,13 @@ const SimGL = (function () {
     if (hos.on && !hos.idle) { pass(hos.tex[hos.cur], hos.fbo[1 - hos.cur], col, row, 0); hos.cur = 1 - hos.cur; }
   }
 
-  function finish() { gl.finish(); }
+  // Wait until the GPU has done all the work queued (?debug=1's timing). gl.finish() doesn't (Chrome
+  // returns at once), a readback does: one texel of the board.
+  const syncBuf = new Float32Array(4);
+  function finish() {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[cur]);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, syncBuf);
+  }
 
   // For plug-ins (fftsim.js): the engine's context, helpers and live state. Read the getters each
   // time: the values change (cur, the rule, the bullets).
@@ -778,6 +923,7 @@ const SimGL = (function () {
     link: fsSrc => { const vs = compile(gl.VERTEX_SHADER, VERTEX_SRC, 'vertex'), p = link(vs, fsSrc, 'plugin'); p.__id = 'x' + (++pluginIds); return p; },
     get gl() { return gl; }, get W() { return W; }, get H() { return H; },
     get state() { return state; }, get stateFbo() { return stateFbo; }, get cur() { return cur; },
+    get growFbo() { return growFbo; }, potDone() { potValid = true; }, get kernelCount() { return kernelCount; },
     get params() { return params; }, get dt() { return dt; }, get gain() { return gain; }, get growthFn() { return growthFn; },
     get reach() { return reach; }, get taps() { return lastTaps; },
     // the bullets as this step's creatures see them (effBullets: the player's and the bots' as one)
@@ -791,10 +937,14 @@ const SimGL = (function () {
 
   return { init, setRule, setUpdate, seed, add, readState, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, setSky, MAX_SITES,
-           setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, setBulletColor, BUL_BLOCK,
+           setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, refreshBlocks, frameBlocks, setBulletColor, BUL_BLOCK,
            setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks, setBulletMutual,
            setField, putFieldRows, setFieldEmpty, withoutField, setFieldKeepsDots, setBulletSeam, get fieldOn() { return field.on; },
            get hostileIdle() { return hos.idle; },
+           // (dev recorder) the creatures' step takes the bullets' mask path (the FFT's x 2), the bullets mixed (vec)
+           get maskOn() { return !!eff && eff.mode === 2; }, get vecOn() { return !!(eff && eff.vec); },
+           // the % of the board each field's last step stepped (dev readout)
+           get regionStats() { const p = n => Math.round(100 * n / (W * H)); return { bul: p(reg.bul.stepped), hos: p(reg.hos.stepped), dot: p(reg.dot.stepped) }; },
            get bulletsIdle() { return bulletsIdle; }, get BBW() { return BBW; }, get BBH() { return BBH; },
            get W() { return W; }, get H() { return H; }, get BW() { return BW; }, get BH() { return BH; },
            get blockChannels() { return blkChanBuf; },

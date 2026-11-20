@@ -7,17 +7,21 @@
 //  shaders/fft*.glsl (glsim.js keeps two small hooks, ext and internals, which do nothing then).
 //
 //  Per step (step):
-//    fftpack   the fields as complex pairs: (R, G), (B, b), and where the bullets mask, (R b, G b),
-//              (B b) (b the bullets field, times the channels they act on)
-//    fft x 2   forward FFTs of those (4 while the bullets mask)
-//    fftmul    per pair of kernels: the spectrum of the channel each reads (less its bullets
-//              part) times the kernel's spectrum; and the bullets' spectrum times the kernel's
-//    fft x 8   inverse FFTs: U for every kernel (8 more for the bullets' hidden shares; gathered
-//              by fftgather into 4 textures)
+//    fftpack   the fields two real ones to a complex number: (R + i G, B + i b), and where the
+//              bullets mask, (R b + i G b, B b) (b the bullets field, times the channels they act on)
+//    fft x 1   forward FFT of those (2 while the bullets mask)
+//    fftmul    per group of 4 kernels: the fields' spectra separated (fftmul.glsl), the spectrum
+//              of the channel each kernel reads (less its bullets part) times the kernel's; and
+//              the bullets' spectrum times the kernel's; out two kernels to a complex number
+//    fft x 4   inverse FFTs: U for every kernel, 4 to a texture (4 more for the bullets' hidden
+//              shares)
+//  (Every texel holds two complex numbers; packing two real fields into each, in and out, halves
+//  the FFTs against one real field per complex number, exactly: float rounding aside.)
 //    fftgrow   the update, as sim.glsl, with the cognitive mask's small circle taken out of U
-//              directly (its cells only), and erase / draw / the bullets' erase after it
+//              directly (its cells only), and erase / draw / the bullets' erase after it; and, a
+//              2nd target, the potential for the creature finder (glsim.js potTex)
 //  The world-draw field (glsim.js setField) masks per channel, its R, G, B each hiding that channel
-//  only: its spectra, (bR, bG) and (bB, 0), are made once per change (it is static), into FB, and
+//  only: its spectra, FFT(bR + i bG, bB), are made once per change (it is static), into FB, and
 //  fftmul picks each kernel's channel of them in place of b's.
 //  The kernels' spectra are made once per rule (ext.rule): each kernel as an image of the board,
 //  flipped (sim.glsl's U(p) = sum w(o) A(p + o) is a correlation), forward FFT'd.
@@ -33,15 +37,16 @@ const FFTSim = (function () {
   const ON = new URLSearchParams(location.search).get('fft') !== '0';   // on by default
   if (!ON) return { on: false };
 
-  const NAMES = ['fft', 'fftpack', 'fftmul', 'fftgather', 'fftgrow'];
-  const PAIRS = 8;   // kernel slots (16) in pairs, two complex numbers per texel
+  const NAMES = ['fft', 'fftpack', 'fftmul', 'fftgrow'];
+  const PAIRS = 8;   // kernel slots (16) in pairs, two complex numbers per texel (the kernels' spectra)
+  const GROUPS = 4;  // and in groups of 4 (U, the bullets' shares: two real results to a complex number)
   let I = null, gl = null, W = 0, H = 0;
   const prog = {};
   let passes = [];   // { axis, N, R, Ns }
   let twTex = null, scratch = null;
-  let F = [], Kspec = [], P = [], D = [];   // fields' spectra (4), kernels' spectra, U, bullets' shares (8 each)
+  let F = [], Kspec = [], P = [], D = [];   // fields' spectra (2), kernels' spectra (8 pairs), U, bullets' shares (4 groups each)
   const fbo = new Map();   // texture -> its own framebuffer (an FFT pass writes one texture)
-  let packFbo = null, mulFbo = [], kimgTex = null, KR = 0, pairsUsed = PAIRS, ready = false;
+  let packFbo = null, mulFbo = [], kimgTex = null, KR = 0, groupsUsed = GROUPS, ready = false;
   let FB = [], fbFbo = null, fbVersion = -1;   // the world-draw field's spectra, and the field version they are of
 
   // Radices for a length: 4s, then 2s, then 3s (384 = 4 4 4 2 3, 256 = 4 4 4 4)
@@ -83,12 +88,12 @@ const FFTSim = (function () {
     for (let m = 0; m < H; m++) { const i = (Math.max(W, H) + m) * 4; tw[i] = Math.cos(-2 * Math.PI * m / H); tw[i + 1] = Math.sin(-2 * Math.PI * m / H); }
     twTex = I.makeTex(Math.max(W, H), 2, tw);
     scratch = tex();
-    F = [0, 1, 2, 3].map(tex);
+    F = [0, 1].map(tex);
     Kspec = Array.from({ length: PAIRS }, tex);
-    P = Array.from({ length: PAIRS }, tex);
-    D = Array.from({ length: PAIRS }, tex);
+    P = Array.from({ length: GROUPS }, tex);
+    D = Array.from({ length: GROUPS }, tex);
     packFbo = I.makeFbo(F);
-    FB = [0, 1].map(tex);
+    FB = [tex()];
     fbFbo = I.makeFbo(FB);
     mulFbo = P.map((t, j) => I.makeFbo([t, D[j]]));
     I.ext.rule = buildKernels;
@@ -139,7 +144,7 @@ const FFTSim = (function () {
         kimg[((dy + KR) * kw + g * side + dx + KR) * 4 + i] = w;
       }
     });
-    pairsUsed = Math.ceil(used / 2);
+    groupsUsed = Math.ceil(used / 4);
     if (kimgTex) gl.deleteTexture(kimgTex);
     kimgTex = I.makeTex(kw, side, kimg);
     imgs.forEach((img, j) => {
@@ -147,7 +152,7 @@ const FFTSim = (function () {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.FLOAT, img);
       fft(Kspec[j], -1);
     });
-    for (const t of P.concat(D)) {   // pairs left unused stay 0
+    for (const t of P.concat(D)) {   // groups left unused stay 0
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.get(t));
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     }
@@ -176,7 +181,7 @@ const FFTSim = (function () {
       gl.uniform1i(I.loc(p, 'uBMask'), 0);
       gl.uniform1i(I.loc(p, 'uBVec'), 0);
       I.draw4();
-      fft(FB[0], -1); fft(FB[1], -1);
+      fft(FB[0], -1);
       gl.viewport(0, 0, W, H);
     }
 
@@ -188,44 +193,36 @@ const FFTSim = (function () {
     gl.uniform1i(I.loc(p, 'uBVec'), bvec ? 1 : 0);
     gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
     I.draw4();
-    for (let i = 0; i < (bmask ? 4 : 2); i++) fft(F[i], -1);
+    fft(F[0], -1); if (bmask) fft(F[1], -1);
 
     p = prog.fftmul;
-    for (let j = 0; j < pairsUsed; j++) {
+    for (let g = 0; g < groupsUsed; g++) {
       gl.useProgram(p);
       gl.viewport(0, 0, W, H);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, mulFbo[j]);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, mulFbo[g]);
       F.forEach((t, i) => I.bindTex(i, t, p, 'uF' + i));
-      I.bindTex(4, Kspec[j], p, 'uK');
-      gl.uniform3fv(I.loc(p, 'uSrc0'), srcOf(params, 2 * j));
-      gl.uniform3fv(I.loc(p, 'uSrc1'), srcOf(params, 2 * j + 1));
+      I.bindTex(2, Kspec[2 * g], p, 'uK0');
+      I.bindTex(3, Kspec[2 * g + 1], p, 'uK1');
+      gl.uniform3fv(I.loc(p, 'uSrc'), [0, 1, 2, 3].flatMap(i => srcOf(params, 4 * g + i)));
       gl.uniform1i(I.loc(p, 'uBMask'), bmask ? 1 : 0);
       gl.uniform1i(I.loc(p, 'uBVec'), bvec ? 1 : 0);
-      FB.forEach((t, i) => I.bindTex(5 + i, t, p, 'uFB' + i));
+      I.bindTex(4, FB[0], p, 'uFB0');
       gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
       gl.uniform1f(I.loc(p, 'uScale'), 1 / (W * H));
+      gl.uniform2i(I.loc(p, 'uSize'), W, H);
       I.draw4();
     }
-    for (let j = 0; j < pairsUsed; j++) { fft(P[j], 1); if (bmask) fft(D[j], 1); }
-
-    if (bmask) {   // the bullets' hidden shares, by kernel group, into F (free now)
-      p = prog.fftgather;
-      gl.useProgram(p);
-      gl.viewport(0, 0, W, H);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, packFbo);
-      D.forEach((t, j) => I.bindTex(j, t, p, 'uP' + j));
-      I.draw4();
-    }
+    for (let g = 0; g < groupsUsed; g++) { fft(P[g], 1); if (bmask) fft(D[g], 1); }
 
     p = prog.fftgrow;
     gl.useProgram(p);
     gl.viewport(0, 0, W, H);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, I.stateFbo[1 - I.cur]);
-    P.forEach((t, j) => I.bindTex(j, t, p, 'uP' + j));
-    F.forEach((t, g) => I.bindTex(8 + g, t, p, 'uD' + g));
-    I.bindTex(12, state, p, 'uState');
-    I.bindTex(13, I.bulTex, p, 'uBullets');
-    I.bindTex(14, kimgTex, p, 'uKimg');
+    gl.bindFramebuffer(gl.FRAMEBUFFER, I.growFbo[1 - I.cur]);   // (and the potential: glsim.js potTex)
+    P.forEach((t, g) => I.bindTex(g, t, p, 'uP' + g));
+    D.forEach((t, g) => I.bindTex(4 + g, t, p, 'uD' + g));
+    I.bindTex(8, state, p, 'uState');
+    I.bindTex(9, I.bulTex, p, 'uBullets');
+    I.bindTex(10, kimgTex, p, 'uKimg');
     gl.uniform1i(I.loc(p, 'uKR'), KR);
     gl.uniform2i(I.loc(p, 'uSize'), W, H);
     for (let g = 0; g < 4; g++) {
@@ -247,9 +244,11 @@ const FFTSim = (function () {
     gl.uniform1i(I.loc(p, 'uBulletVec'), bvec ? 1 : 0);
     gl.uniform3fv(I.loc(p, 'uBulletCh'), bul.ch);
     gl.uniform1f(I.loc(p, 'uBulletHit'), bul.hit);
-    I.bindTex(15, I.fieldTex, p, 'uCap');
+    I.bindTex(11, I.fieldTex, p, 'uCap');
     gl.uniform1i(I.loc(p, 'uCapOn'), I.capOn ? 1 : 0);
+    gl.uniform1f(I.loc(p, 'uInvK'), 1 / I.kernelCount);
     I.draw4();
+    I.potDone();
   }
 
   // Plug in once the engine is up

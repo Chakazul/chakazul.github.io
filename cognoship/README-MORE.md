@@ -279,14 +279,18 @@ Not built yet: locked challenges and the scrolling world.
 - `?zoom=8`: ship-view px per cell at start, snapped to the nearest slot (2–16).
 - `?radius=4`: mask radius at start, in cells (default 2.5 · R / 12, rounded to 0.5).
 - `?headup=vel|axis`: start in heading-up or body-axis-up view (`1` = `vel`).
-- `?debug=1`: show GPU ms per step and the tap count in the readout.
+- `?debug=1`: show a step's GPU, readback and CPU ms (gpu · read · cpu) and the tap count in the readout.
+- `?batch=1` (the game, a timing test): a frame's steps run with no readback between them and one analysis a frame (one stats sample a frame, so the morph stats drift from the recorded ones).
 - `?fft=0` (game and lab): FFT mode off: the creatures' convolution by the direct sum (`sim.glsl`) instead of by FFT on the GPU (`fftsim.js`, on by default, see *FFT mode* below). With `?dev=1` the game's readout ends in "· FFT" while FFT mode is on.
 - `?all=1` (the game, either mode): all discovered, for testing. Every visible morph of every species counts as discovered (no picture until the ship holds it), and the gun has every bullet pattern from the start. The central inventory is neither read nor written.
 - `?phone=<device>` (the game): the phone test (`1`: the default device). Opened on its own, the page goes to `phone.html`, which shows the game in a phone-sized frame (a phone's CSS viewport, upright, scaled down to fit; picked from a list or by the parameter: `pixel9` (Google Pixel 9, 412 × 923, the default), `iphone14` (390 × 844), `iphone15max` (430 × 932), `iphonese` (375 × 667), `galaxys24` (360 × 780), or a size of one's own in the boxes beside the list (or `&w=` `&h=`); the whole screen, so a little taller than a browser leaves; no scrollbar takes width in the frame, as on a phone. Text may still wrap a little differently: a phone's `system-ui` font (Roboto on Android, SF on iPhone) differs from the desktop's. A phone's real viewport also depends on its display-size setting: `?dev=1` shows it, as width×height @pixel ratio, at the end of the readout), so its phone sizes and the stacked portrait layout apply; the other parameters are kept (e.g. `?phone=iphone14&dev=1&fft=0`). In the frame the game acts as a phone (the small music files) and the music card asks every time, whatever was chosen before.
 - `?dev=1` (the game): dev mode. Test aids, as keys and as buttons at the top left of the world view (**Ch**,
-  **Ok**, **Do**): `I` goes to the next `[chapter]` or `[sub_chapter]`, running every action on the lines in between
+  **Ok**, **Do**, **Rc**): `I` goes to the next `[chapter]` or `[sub_chapter]`, running every action on the lines in between
   (as `[jump_here]` does); `O` completes the waiting line's `[need]` conditions at once; `P` scores
-  as if the ship ate a dot (+10 energy). The frame rate, simulation steps per second (over the last
+  as if the ship ate a dot (+10 energy); `L` records every frame's times (up to 5 min; the button counts
+  the seconds) and `L` again stops and downloads a text summary: by what flies (none, the ship's pulses,
+  the bots', both) the fps, steps/s, a step's GPU, readback and CPU time, and the frame's other parts,
+  then one line a second. The frame rate, simulation steps per second (over the last
   half second) and the measured time of a step at the top right of the world view. A grey circle around every detected object in the
   world view, besides the ship's yellow one (the one under the pointer brighter).
 
@@ -352,18 +356,21 @@ A plug-in (`fftsim.js`, `shaders/fft*.glsl`) that replaces the creatures' sim pa
 file does nothing; to remove it, delete it, its `<script>` tags and `shaders/fft*.glsl` (`glsim.js`
 keeps two small hooks, `internals.ext.step` / `.rule`, inert then).
 
-- **Per step:** `fftpack` writes the fields as complex pairs, (R, G) and (B, bullets); two forward
-  FFTs; `fftmul`, per pair of kernels, multiplies the spectrum of the channel each reads by the
-  kernel's spectrum (made once per rule, from the kernel as an image of the board, flipped: the
-  direct sum is a correlation); eight inverse FFTs give U for all 16 kernel slots; `fftgrow` does
-  the update exactly as `sim.glsl`.
+- **Per step:** `fftpack` writes the fields two real ones to a complex number, (R + iG, B + i·bullets);
+  one forward FFT; `fftmul`, per group of 4 kernels, separates the fields' spectra (for real x, y and
+  z = FFT(x + iy): X = (z + conj z₋ₖ)/2, Y = (z − conj z₋ₖ)/2i) and multiplies the spectrum of the
+  channel each kernel reads by the kernel's spectrum (made once per rule, from the kernel as an image
+  of the board, flipped: the direct sum is a correlation), writing two kernels to a complex number
+  (S₀ + iS₁, whose inverse is U₀ + iU₁); four inverse FFTs give U for all 16 kernel slots; `fftgrow`
+  does the update exactly as `sim.glsl`. (Packing two real fields into each complex number halved
+  the FFTs, exactly up to float rounding.)
 - **The cognitive mask:** its circle is small, so `fftgrow` takes its cells out of U and of the
   normaliser directly, for the pixels within reach of it (the kernels as a small image, `uKimg`):
   the same U = K∗(A·(1−B)) / K∗(1−B).
-- **The bullets' mask:** it covers the board, so it is done in the FFT: two more forward FFTs ((R,
-  G)·b and B·b, b the bullets field on the channels they act on) taken out of the numerators, and
-  eight more inverse ones for each kernel's hidden share (K∗b), so while bullets fly a step costs
-  about twice as much. Erase, draw and the bullets' erase act after the update, as in `sim.glsl`.
+- **The bullets' mask:** it covers the board, so it is done in the FFT: one more forward FFT ((R + iG)·b
+  and B·b, b the bullets field on the channels they act on) taken out of the numerators, and four
+  more inverse ones for each kernel's hidden share (K∗b), so while bullets fly a step costs about
+  twice as much. Erase, draw and the bullets' erase act after the update, as in `sim.glsl`.
 - **The FFT:** mixed-radix (4, 3, 2) Stockham passes in gather form (`fft.glsl`), along x (384 =
   4·4·4·2·3) then y (256 = 2·2·4·4·4, a 4 split so the count is even and each transform ends in its
   own texture); twiddles from a table computed on the CPU in double precision (`sin` / `cos` are

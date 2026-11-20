@@ -33,6 +33,10 @@ const Core = (function () {
     replicating: 'VT049W-gyrans-replicating', gyrans: 'VT049W-gyrans-replicating', gyransR: 'VT049W-gyrans-replicating' };
   const findPattern = id => PATTERNS.find(p => p.id === id) || PATTERNS.find(p => p.id === DEFAULT_PATTERN);
   const DEBUG = q.get('debug') === '1';
+  // ?batch=1 (a test of the cost of the readback after every step): a frame's steps run together, then
+  // one analysis (one stats sample a frame, not a step: the morph stats and detection drift from the
+  // recorded ones, so for timing only)
+  const BATCH = q.get('batch') === '1';
 
   // Canvas layout, in canvas px (the canvas is 1152 x 512 and scales with CSS).
   const CW = 1152, CH = 512;
@@ -254,7 +258,12 @@ const Core = (function () {
   let lastPtr = null;   // the mouse's last canvas point (null: off the canvas; syncCursor)
   let masking = null;        // { id, view: [x, y] } while the pointer holds a tool
   let hover = null;          // [x, y] view offset of a mouse hovering over the ship view
-  let msPerStep = 0;
+  let msPerStep = 0, msRead = 0, msCpu = 0;   // (?debug=1) a step's GPU time; analysis: the blocks' readback, the CPU's part
+  // The last frame's times, ms (game.js's dev recorder: prof.on): steps run; the step loop, and in it
+  // the steps' GPU time (each advance waits for the GPU: a 1-texel readback), the analyses' blocks
+  // readback and CPU part; then the coarse maps' readback (frameBlocks), detectMorphs, render + overlay
+  const prof = { on: false, steps: 0, loop: 0, gpu: 0, read: 0, cpu: 0, blocks: 0, detect: 0, render: 0 };
+  const timing = () => DEBUG || prof.on;
   // A reset keeps the play / pause state the user chose (wantRun), even if the sim stopped because
   // everything dissolved.
   let wantRun = true;
@@ -411,7 +420,7 @@ const Core = (function () {
   // Run n steps. The tool's centre is extrapolated along the focus velocity within the frame,
   // since the focus CoM is only measured once per frame.
   function advance(n) {
-    const t0 = DEBUG ? performance.now() : 0;
+    const t0 = timing() ? performance.now() : 0;
     const off = toolOffset();
     for (let i = 0; i < n; i++) {
       let tool = null;
@@ -424,12 +433,19 @@ const Core = (function () {
       SimGL.step(tool);
     }
     steps += n; simSteps += n;
-    if (DEBUG) { SimGL.finish(); msPerStep = 0.9 * msPerStep + 0.1 * (performance.now() - t0) / n; }
+    if (timing()) { SimGL.finish(); const ms = performance.now() - t0; prof.gpu += ms; msPerStep = 0.9 * msPerStep + 0.1 * ms / n; }
   }
 
   // Find the creatures, follow the focus, update velocity and heading. n = steps since last call.
   function analyze(n) {
+    analyzeBody(n);
+    if (timing()) { const ms = performance.now() - aT0; prof.cpu += ms; msCpu = 0.9 * msCpu + 0.1 * ms; }
+  }
+  let aT0 = 0;
+  function analyzeBody(n) {
+    const t0 = timing() ? performance.now() : 0;
     const blk = SimGL.readBlocks();
+    if (timing()) { const t1 = performance.now(); prof.read += t1 - t0; msRead = 0.9 * msRead + 0.1 * (t1 - t0); aT0 = t1; }
     found = Creatures.find(blk, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH, opt.wholes() ? DETECT : { ...DETECT, wholeSaddle: null });
 
     // No "Exploded" check: a board full of copies just keeps running.
@@ -889,6 +905,7 @@ const Core = (function () {
 
   function frame() {
     let n = 0;
+    Object.assign(prof, { steps: 0, loop: 0, gpu: 0, read: 0, cpu: 0, blocks: 0, detect: 0, render: 0 });
     driftTick();
     if (!ruleLoaded) {   // started empty, no species yet (the game's script loads one)
       // (opt.emptyView, the game's [clear_world:empty]: the ship view shows the world's centre, its
@@ -911,15 +928,21 @@ const Core = (function () {
       // (at most maxN per frame)
       const t0 = performance.now();
       let k = 0;
-      for (; k < n && running; k++) { advance(1); analyze(1); }
-      if (k > 0) { const ms = (performance.now() - t0) / k; stepMs = stepMs > 0 ? 0.85 * stepMs + 0.15 * ms : ms; }
+      if (BATCH && n > 0) { advance(n); analyze(n); k = n; }   // (?batch=1, a test: the n steps queued with no readback between them, one analysis)
+      else for (; k < n && running; k++) { advance(1); analyze(1); }
+      const t1 = performance.now();
+      if (k > 0) { const ms = (t1 - t0) / k; stepMs = stepMs > 0 ? 0.85 * stepMs + 0.15 * ms : ms; }
+      if (k > 0) SimGL.frameBlocks();   // the bullets' and dots' maps and regions (glsim.js TILE), one readback
+      prof.steps = k; prof.loop = t1 - t0; prof.blocks = performance.now() - t1;
     } else if (masking && focus && action !== 0) {
       // paused: erase / draw still act, at once (the mask has nothing to act on without a step)
       const off = toolOffset(), sh = ship();
       SimGL.paint({ col: sh.col + off[0], row: sh.row + off[1], r: maskR, ch: channel, action });
     }
     if (n === 0) analyze(0);
+    const t2 = performance.now();
     if (detectMode !== 'none' && (n > 0 || md.dirty || stats.long.len !== md.len)) detectMorphs();
+    const t3 = performance.now(); prof.detect = t3 - t2;
     const ev = focus ? null : opt.emptyView(), at = Array.isArray(ev) ? ev : null;
     const p = focus ? viewAngle() : at ? at[2] || 0 : 0, c = Math.cos(p), s = Math.sin(p), sh = ship();
     VS = opt.viewShift() || [0, 0]; VI = opt.viewInset() * WS;
@@ -931,6 +954,7 @@ const Core = (function () {
       ...starView(),   // the star field (opt.stars: the lab's Stars button)
     });
     drawOverlay();
+    prof.render = performance.now() - t3;
     hooks.frame();
     requestAnimationFrame(frame);
   }
@@ -1702,8 +1726,9 @@ const Core = (function () {
   }
 
   const core = {
+    prof,   // (the dev recorder's frame times: see prof)
     // constants
-    q, R, DEBUG, BW, BH, WS, PX, CW, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
+    q, R, DEBUG, BATCH, BW, BH, WS, PX, CW, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
     CH_NAMES, CH_COLORS, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
     // live objects (mutated in place)
     stats, md, opt, hooks,
@@ -1725,7 +1750,7 @@ const Core = (function () {
                found: () => found, masking: () => masking, tracks: () => tracks, wholeTracks: () => wholeTracks, speedIdx: () => speedIdx,
                maskR: () => maskR, viewMode: () => viewMode, zoomIdx: () => zoomIdx, CELL_PX: () => CELL_PX,
                ZOOM_CELLS: () => ZOOM_CELLS, detectMode: () => detectMode, everyObject: () => everyObject,
-               msPerStep: () => msPerStep, simSteps: () => simSteps, driftSec: () => driftSec, stepMs: () => stepMs };
+               msPerStep: () => msPerStep, msRead: () => msRead, msCpu: () => msCpu, simSteps: () => simSteps, driftSec: () => driftSec, stepMs: () => stepMs };
   for (const [k, [get, set]] of Object.entries(rw)) Object.defineProperty(core, k, { get, set, enumerable: true });
   for (const [k, get] of Object.entries(ro)) Object.defineProperty(core, k, { get, enumerable: true });
   return core;

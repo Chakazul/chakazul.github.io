@@ -6,7 +6,8 @@
 //   a   = the potential at the patch's centre cell: the mean over kernels of K_k * A_src(k)
 //         (each kernel normalised, no mask), how the rule "sees" the world. Creatures are the
 //         catchment basins of its peaks (the method of ~/github/complexity, individuality.py).
-// The potential is smooth on the scale of R, so one sample per block is enough.
+// The potential is smooth on the scale of R, so one sample per block is enough. In FFT mode it is
+// the step's by-product (uPot, fftgrow.glsl: of the board one step before, near enough), not summed here.
 // Second target: (mass R, mass G, mass B, 0) over the patch, for the per-channel mass stats.
 precision highp float;
 precision highp sampler2D;
@@ -18,6 +19,8 @@ uniform ivec2 uSize;        // board (W, H)
 uniform int   uTapCount;
 uniform mat3x4 uSrc[4];
 uniform float uInvK;        // 1 / kernel count
+uniform sampler2D uPot;     // the potential the FFT step made (fftgrow.glsl), if uPotOn: the sum below skipped
+uniform int   uPotOn;
 
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 chanColor;
@@ -39,6 +42,11 @@ void main() {
     }
 
     ivec2 c = min(b + BLOCK / 2, uSize - 1);
+    if (uPotOn == 1) {
+        fragColor = vec4(m, mx, my, texelFetch(uPot, c, 0).r);
+        chanColor = vec4(mc, 0.0);
+        return;
+    }
     vec4 U = vec4(0.0);
     for (int t = 0; t < uTapCount; t++) {
         ivec2 off = ivec2(texelFetch(uTaps, ivec2(t, 0), 0).xy);
