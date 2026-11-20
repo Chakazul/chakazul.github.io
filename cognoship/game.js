@@ -189,7 +189,7 @@
     document.documentElement.classList.toggle('stacked', stacked);
     C.setLayout(stacked, BAND, SHIP_SCALE, 1);   // the ship view at the right edge
     const layer = document.querySelector(stacked ? '.layer-ship' : '.layer-world');
-    layer.append($('bullet-nav'), $('fire'), $('bullets'));   // (Pulses with them: right of Fire, or above < >)
+    layer.append($('bullet-nav'), $('fire'), $('bullets'));   // (Pulses with them: right of Fire, < > above it; stacked, top down: Fire, < >, Pulses)
     let col = $('dev-col');
     if (!col) {   // (made here if the page lacks it, e.g. an index.html cached from before it)
       col = document.createElement('div'); col.id = 'dev-col'; col.className = 'dev-col';
@@ -313,12 +313,12 @@
   // was found in play) above its name, else "?".
   // Title: "New morph discovered!" when a discovery opened the book.
   function renderBook() {
-    $('book-grid').classList.toggle('bullets', book.mode === 'bullet');
+    $('book-grid').classList.toggle('bullets', book.mode === 'bullet' || book.mode === 'hostile');
     $('book-grid').classList.toggle('species', book.mode === 'species' || book.mode === 'challenge');
     document.querySelector('.book-box').classList.toggle('wide', book.mode !== 'morph');   // the bullet and species books: wider
     document.querySelector('.book-box').classList.toggle('challenges', book.mode === 'challenge');   // the challenge book: a little wider still (the ticks)
     $('book-close').textContent = bookBack() ? 'Back' : 'Close';   // the species book for a challenge: back to the challenge book
-    $('book-close').title = bookBack() ? 'Back to the challenge book (Esc)' : '';
+    $('book-close').title = !bookBack() ? '' : book.mode === 'hostile' ? 'Back to the settings (Esc)' : 'Back to the challenge book (Esc)';
     $('book-close').dataset.key = 'Esc';   // only Escape closes a book (its letters pick slots)   // its key badge: the key that closes this book
     // the morph book's species, at its lower right (a morph is only a morph of its species)
     $('book-species').hidden = book.mode !== 'morph' || !C.pattern;
@@ -333,7 +333,7 @@
     // sandbox mode: the species' name goes to the species book
     $('book-species').classList.toggle('link', MODE === 'sandbox');
     $('book-species').title = MODE === 'sandbox' ? 'Choose another species (D)' : '';
-    $('book-clear').hidden = MODE === 'story' || book.mode === 'settings';
+    $('book-clear').hidden = MODE === 'story' || book.mode === 'settings' || book.mode === 'hostile';
     // the challenge book's: clears the completion (the ticks) and the best times
     // (the species book for a challenge: that challenge's, with every species)
     const recs = book.mode === 'challenge' || (book.mode === 'species' && challenge.pending);
@@ -345,6 +345,7 @@
     if (book.mode === 'bullet') return renderBullets();
     if (book.mode === 'species') return renderSpecies();
     if (book.mode === 'settings') return setTitle(['Settings']);
+    if (book.mode === 'hostile') return renderHostilePulses();
     if (book.mode === 'challenge') return renderChallenges();
     allDiscovered();
     // a click on a discovered morph does something: (challenge mode: book.retry, the retry book) restart the challenge with it
@@ -1155,7 +1156,7 @@
     if (book.fromDiscovery && book.newName) book.found.push(book.newName);
     book.fromDiscovery = false; book.newName = null;
     if (book.wasRunning) C.setRunning(true);
-    if (book.mode === 'settings') settingsClosed();
+    if (book.mode === 'settings' || book.mode === 'hostile') settingsClosed();
   }
   // "Zap in": ZAP.length frames, one every ZAP_MS, growing and firming up to the box's own size,
   // stack up over the game window, then the box shows, the window dims behind it (not before),
@@ -1199,9 +1200,10 @@
   if (MODE === 'challenge') { $('species').textContent = 'Challenges'; $('species').title = 'The challenge book: choose a challenge (D)'; }
   $('book-species').onclick = () => { if (book.mode === 'morph') openSpeciesBook(); };
   // The species book for a challenge goes back to the challenge book (its Back button, Escape); any other closes
-  const bookBack = () => book.mode === 'species' && !!challenge.pending;
+  const bookBack = () => (book.mode === 'species' && !!challenge.pending) || book.mode === 'hostile';
   function closeOrBack() {
     if (!bookBack()) return closeBook();
+    if (book.mode === 'hostile') { book.mode = 'settings'; return renderBook(); }   // (the hostile pulse book: back to the settings book)
     challenge.pending = null;
     book.mode = 'challenge';
     renderBook();
@@ -1486,16 +1488,48 @@
     else { minMorph = { n, ids: minSpec.ids, how: minSpec.how, next: 0 }; edgeQueue = []; }
     applyHostiles();
   }
-  // The Hostile slider: [min_hostile:<n>] as Objects is [min_morph:<n>] (its morphs, placing and
-  // bullet the last [min_hostile]'s; none yet: all, random, Scutium). Until first set, off.
-  const HOSTILES = [0, 1, 2, 3, 5, 10], HOST_KEY = 'cognoship-hostiles';
-  let hostSpec = { ids: [], how: 'random', bullet: 'Scutium' }, hostilesIdx = 0;
+  // The Hostile slider: [min_hostile:<n>] as Objects is [min_morph:<n>], the same counts (its morphs
+  // and placing the last [min_hostile]'s; none yet: all, random). Until first set, off. They fire the
+  // Hostile Pulses button's pattern (beside it: the hostile pulse book), whatever the script's. Both
+  // kept in the browser.
+  const HOSTILES = OBJECTS, HOST_KEY = 'cognoship-hostile-n', HOST_BULLET_KEY = 'cognoship-hostile-pulse';
+  let hostSpec = { ids: [], how: 'random', bullet: 'Scutium' }, hostilesIdx = 0, hostBullet = 'Scutium serratus';
   try { const v = parseInt(localStorage.getItem(HOST_KEY), 10); if (v >= 0 && v < HOSTILES.length) hostilesIdx = v; } catch (e) {}
+  try { const v = localStorage.getItem(HOST_BULLET_KEY); if (v && Bullets.kindOf(v)) hostBullet = Bullets.kindOf(v); } catch (e) {}
   function applyHostiles() {
     const n = HOSTILES[hostilesIdx];
-    if (!n) minHostile = null;
-    else if (minHostile) minHostile.n = n;
-    else { Hostile.set(hostSpec.bullet); minHostile = { n, ids: hostSpec.ids, how: hostSpec.how, next: 0, puts: 0 }; }
+    if (!n) { minHostile = null; return; }
+    Hostile.set(hostPulse());
+    if (minHostile) minHostile.n = n;
+    else minHostile = { n, ids: hostSpec.ids, how: hostSpec.how, next: 0, puts: 0 };
+  }
+  // The pattern the bots fire: the pick, if the player has it (created: Bullets.list), else the
+  // player's first (none: the pick anyway)
+  const hostPulse = () => Bullets.list.includes(hostBullet) ? hostBullet : Bullets.list[0] || hostBullet;
+  // The hostile pulse book (Hostile Pulses, in the settings book): as the pulse book, the patterns the
+  // player has (no world-draw types), the one in use yellow, the others' slots empty; a pick arms the
+  // bots with it and goes back to the settings book (as does Back, Escape)
+  $('hostile-pulses').onclick = () => { flash('hostile-pulses'); book.mode = 'hostile'; renderBook(); };
+  function renderHostilePulses() {
+    setTitle([['Choose', 'choose'], ' the hostile pulse type']);
+    const have = Bullets.list, cur = hostPulse();
+    $('book-grid').replaceChildren(...Object.keys(Bullets.KINDS).map((name, slot) => {
+      const el = document.createElement('div'), label = document.createElement('span'), ok = have.includes(name);
+      el.className = 'book-slot' + (ok ? ' pick' : ' empty') + (name === cur ? ' current' : '');
+      label.className = 'label';
+      if (ok) label.append(bulletPic(name), name); else label.textContent = '\u00a0';
+      el.append(label);
+      if (!ok) return el;
+      el.title = `The hostile creatures fire ${name}`;
+      el.onclick = () => {
+        hostBullet = name;
+        try { localStorage.setItem(HOST_BULLET_KEY, name); } catch (e) {}
+        if (minHostile) Hostile.set(name);   // (the bots now: their bullets in flight cleared)
+        book.mode = 'settings'; renderBook();
+      };
+      if (SLOT_KEYS.bullet[slot]) el.dataset.key = SLOT_KEYS.bullet[slot];
+      return el;
+    }));
   }
   // Autospawn (beside it): once the ship is lost (Respawn shows), Respawn by itself after
   // AUTOSPAWN_MS, as the button would (not while a book, a card or a fade is up). Kept as Objects.
@@ -1509,6 +1543,38 @@
     if (lostAt === null) lostAt = now;
     if (now - lostAt >= AUTOSPAWN_MS) { lostAt = null; doReset(); }
   }
+  // Autofire (after it): while on, with the gun on (not a world-draw type) and a ship, the ship fires
+  // by itself every [bullet_wait] a to b game s (at random), the first c after it can start (Autofire
+  // on, the ship back, a scene); at the nearest hostile object (hostileObjects), else the nearest
+  // other one, the ship's excluded; none: no shot. Not under a book, a card or a fade. Kept as Objects.
+  const AUTOFIRE_KEY = 'cognoship-autofire';
+  let autofire = false, autoNext = null;
+  try { autofire = localStorage.getItem(AUTOFIRE_KEY) === '1'; } catch (e) {}
+  function autofireFrame() {
+    const ship = C.ship();
+    if (!settingsOn || !autofire || !Bullets.on || fieldMode() || !ship || shipLost() || speciesFading || resetting || challenge.failed) { autoNext = null; return; }
+    if (book.open || chapterShowing() || !C.found) return;
+    const now = C.simSteps;
+    if (autoNext === null) { autoNext = now + Math.round(fireWait.first * C.STEPS_PER_S); return; }
+    if (now < autoNext || !canPay() || !Bullets.canFire()) return;
+    const dist = o => Math.hypot(C.wrapD(o.col - ship.col, C.BW), C.wrapD(o.row - ship.row, C.BH));
+    const nearest = list => list.reduce((a, o) => !a || dist(o) < dist(a) ? o : a, null);
+    const hostile = hostileObjects();
+    const t = nearest(hostile) || nearest(C.objects().filter(o => !o.parts.includes(C.focusIdx)));
+    if (!t) return;
+    if (Bullets.fire(Math.atan2(C.wrapD(t.row - ship.row, C.BH), C.wrapD(t.col - ship.col, C.BW)))) {
+      flash('fire'); if (bulletCost) changeEnergy(-bulletCost);
+      autoNext = now + Math.round((fireWait.min + Math.random() * (fireWait.max - fireWait.min)) * C.STEPS_PER_S);
+    }
+  }
+  // [bullet_wait]: Autofire's a to b game s between shots, and c before the first
+  const FIRE_WAIT = { min: 1.5, max: 4, first: 2 };
+  let fireWait = { ...FIRE_WAIT };
+  $('autofire').onclick = () => {
+    autofire = !autofire; autoNext = null;
+    try { localStorage.setItem(AUTOFIRE_KEY, autofire ? '1' : '0'); } catch (e) {}
+    syncObjects();
+  };
   $('autospawn').onclick = () => {
     autospawn = !autospawn;
     try { localStorage.setItem(AUTO_KEY, autospawn ? '1' : '0'); } catch (e) {}
@@ -1516,6 +1582,7 @@
   };
   function syncObjects() {
     $('autospawn').setAttribute('aria-pressed', autospawn);
+    $('autofire').setAttribute('aria-pressed', autofire);
     $('world').setAttribute('aria-pressed', worldMode !== 'normal');
     $('world').textContent = 'World: ' + worldMode[0].toUpperCase() + worldMode.slice(1);
     $('objects').value = objectsIdx;
@@ -1523,6 +1590,7 @@
     fillRange($('objects'));
     $('hostiles').value = hostilesIdx;
     $('hostiles-v').textContent = HOSTILES[hostilesIdx] || 'Off';
+    $('hostile-pulses').title = `Hostile Pulses: the pulse type the hostile creatures fire (now ${hostPulse()})`;
     fillRange($('hostiles'));
   }
   $('hostiles').oninput = e => {
@@ -1645,7 +1713,7 @@
     },
     // species:<name>:<id>: load species <id> (its rule; the world is kept), with no visible
     // morphs; the morph book names it "Species: <name>" (genus and species, e.g. Aquarium
-    // originale). ([species:<id>]: no name, the book shows the id.)
+    // originale). ([species:<id>]: no name, the book shows the id.) Resets [hide_morph] (none hidden).
     species: (name, id) => {
       if (id === undefined) [name, id] = ['', name];
       const p = PATTERNS.find(p => C.speciesOf(p) === id);
@@ -1653,6 +1721,7 @@
       C.setPattern(p.id);
       speciesName = name;
       vis.all = false; vis.allow.clear();
+      hiddenMorphs.clear();
       if (!discoveredBy.has(id)) discoveredBy.set(id, []);
       discovered = discoveredBy.get(id); cand = null;
       if (book.open && book.mode === 'morph') renderBook();
@@ -1937,6 +2006,14 @@
     },
     // hostile_bullet_wait:<a>:<b>:<c>: bots fire every a to b game s (at random), a new bot's
     // first shot after c more; default 1.5:4:2 (also with no values)
+    // bullet_wait:<a>:<b>:<c>: Autofire ([settings]) fires every a to b game s (at random), the first
+    // shot after c; default 1.5:4:2 (also with no values)
+    bullet_wait: (a, b, c) => {
+      if (a === undefined) { fireWait = { ...FIRE_WAIT }; return; }
+      const v = [a, b, c].map((x, i) => x === undefined ? Object.values(FIRE_WAIT)[i] : parseFloat(x));
+      if (!v.every(x => x >= 0) || v[1] < v[0]) return console.warn(`script.txt: bad value [bullet_wait:${[a, b, c].filter(x => x !== undefined).join(':')}], ignored`);
+      fireWait = { min: v[0], max: v[1], first: v[2] };
+    },
     hostile_bullet_wait: (a, b, c) => {
       if (a === undefined) { botWait = { ...BOT_WAIT }; return; }
       const v = [a, b, c].map((x, i) => x === undefined ? Object.values(BOT_WAIT)[i] : parseFloat(x));
@@ -3111,7 +3188,7 @@
     syncToolNames();
     Field.tick();
     autospawnFrame();
-    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === (lostPanel() || flashing('reset'))) syncButtons();
+    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); autofireFrame(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === (lostPanel() || flashing('reset'))) syncButtons();
     const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()]; };
 
   // ---- controls ---------------------------------------------------------------------------
@@ -3147,7 +3224,7 @@
     $('clone-ok').hidden = !(clone.held && clone.held.at) && !flashing('clone-ok');   // ✓ once a touch has placed it
     $('bullets').classList.toggle('new', bulletNew);
     $('bullets').textContent = bulletNew ? 'Create' : 'Pulses';   // (the UI's name for the bullets)
-    $('bullets').hidden = !Bullets.on || shipLost();   // the bullet book's button: while the gun is on, not while lost
+    $('bullets').hidden = !Bullets.on;   // the bullet book's button: while the gun is on (the ship lost too)
     $('settings').hidden = !settingsOn;   // ([settings:on])
     $('species').hidden = MODE === 'story' || (MODE === 'sandbox' && !visSpecies.length);   // sandbox mode: the species book's button; challenge mode: the challenge book's
     // world draw (fieldMode): Upward is Undo (Redo once undone), Zoom is Width

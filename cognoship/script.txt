@@ -21,7 +21,7 @@ Alone.
 Near the _Proxima Centauri_ exoplanet system, 4 light-years from Earth.
 With recursive self-improvement technology, we can travel far, far away.
 
-We can't control the ships with buttons or levers, though.
+We can't control the ship with buttons or levers, though.
 The ship is made from _Lenium_, a new type of agentic material.
 Thankfully, _Lenium_ actively senses and reacts to its surroundings.
 So we can steer the ship by blocking parts of its *cognitive field*.
@@ -61,17 +61,20 @@ Nice, you have a delicate touch.
 [allow_morph:limus,gyrans,tardus,lithos,paragyrans]
 [hide_morph:paragyrans]
 [clear_world][put_player:paragyrans]
-So what are these bizarre structures?
-Scientists have fancy ways to describe them, ...
+Why does this ship feel so bizarre and ... organic?
+Scientists have fancy words to describe these structures, ...
 ... like *self-organization*, *complex systems*, or *emergence*.
-But simply put, every bit of _Lenium_ connects only to its nearby bits.
+But simply put, every bit of _Lenium_ only connects to nearby bits.
 Together, they form a self-contained, distributed structure.
 No central control. Nothing is designed.
+But they can move, sense, react, repair, transform, learn, evolve.
+Some replicate, many die.
 Leniologists study them as if they were living organisms.
 They are *artificial life*.
 Enough talk.
-We are now leaving _Proxima Centauri_ for deeper space.
+Now we leave _Proxima Centauri_ for deep space.
 [stars:0]
+[hide_morph:none]
 
 
 [chapter:2:You Are Not Alone]
@@ -79,6 +82,7 @@ We are now leaving _Proxima Centauri_ for deeper space.
 [morph_book_action:put][retry_action:put]
 
 # dots
+[species:Aquarium originale:5N7KKM]
 [allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos,circumgyrans]
 #[discover_morph:limus,tardus]
 [clear_world][put_player:limus]
@@ -109,19 +113,18 @@ Each pulse type has unique effects.
 [allow_morph:limus,gyrans,tardus,lithos,paragyrans,paratardus,paralithos,circumgyrans]
 [clear_world][put_player:limus]
 [dot:5][put_hostile:paragyrans:far:Triscutium]
-A hostile ship suddenly appears.
+Suddenly, a hostile ship appears!
 [add_bullet:Triscutium:Triscutium]
-It fires _Triscutium_. We have it too. Prepare to fight.[need:clear_hostile]
-Thank Gaia. That was close.
-Ships don't usually turn hostile. Something is wrong.
+It uses _Triscutium_. We have it too. Prepare to fight.[need:clear_hostile]
+Thank Gaia. That was close!
 
 [new_scene]
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:limus]
-Now that it seems safe, check out the other controls in the panel.
+Now that we are safe, check out the other controls in the panel.
 {Retry:←}, {Pause:↵}, or change {Speed:Q}{:W} when needed.
 On a keyboard, hold {:Shift} to show their keys.
-Next, we embark for a stellar nursery nearby.
+Once you have learned the controls, we embark for a stellar nursery.
 
 [new_bullet:50]
 
@@ -133,7 +136,7 @@ Next, we embark for a stellar nursery nearby.
 [allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,pararectus,rectogyrans]
 [clear_world][put_player:rectus]
 [dot:3][min_morph:10:rectus,gyrans,tardus,lithos,paragyrans,antigyrans:far]
-_Orion Nebula_, where stars are born, 1,344 light-years from home.
+The _Orion Nebula_, where stars are born, 1,344 light-years from home.
 To survive the interstellar medium, our ship evolved into a new *species*.
 Evolved from _Aquarium originale_ into _Aq. novus_.
 New species, new morph possibilities.
@@ -146,7 +149,7 @@ To engineer new morphs, we developed advanced *cloning* technology.
 [clone:on]
 {Clone:S} a morph, try {↔:F} {↻:G}, and place it near your ship.[need:first_clone]
 Great! Cloning position, angle, and timing are all important.
-Clone to combine two _gyrans_ into a twin morph. {Zoom:R}{:T} may help.[need:discover_morph:paragyrans,antigyrans]
+Clone to combine two _gyrans_ into a twin morph. {Zoom:R}{:T} may help.[need:discover_morph:paragyrans,antigyrans,pararectus,rectogyrans]
 Bravo! You engineered a twin morph.
 
 Feel free to keep experimenting and find new morphs.
@@ -165,10 +168,10 @@ But to navigate the vastness of space, we need one more technology.
 [add_bullet:Antimatter:Antimatter]
 *Antimatter* is equipped. Now space is your canvas.
 In the world view, dispense antimatter to guide the ship.[need:draw:10]
-Each color affects each morph differently.
 Select a color {R}{G}{B}{:1}{:2}{:3}. Click again to select tools.
 Other controls become {Clear:Z}, {Undo:E}, and {Width:R}{:T}.
-There is a lot to experiment with in cosmic painting.
+Each color of Antimatter affects each morph differently.
+So there is a lot to experiment with in cosmic painting.
 To leave Antimatter mode, change {Pulses:X} to another type.
 [add_bullet::Orbium]
 
@@ -185,7 +188,7 @@ Here are some of our Leniologists' favorite species.
 [allow_morph:rectus,limus,virgatus]
 [clear_world:scroll][put_player:rectus]
 [dot:5][min_morph:5:rectus,limus:far]
-At _Veil Nebula_, the remains of a supernova, 2,400 light-years from home.
+The _Veil Nebula_, the remains of a supernova, 2,400 light-years from home.
 The striped species _Aquarium virgatus_.
 Find morph _virgatus_.[need:discover_morph:virgatus]
 Next species ...
@@ -195,7 +198,7 @@ Next species ...
 [allow_morph:limus,gyrans,impetus,antigyrans]
 [clear_world:scroll][put_player:limus]
 [dot:5][min_morph:3:gyrans,impetus,antigyrans]
-At _Crab Nebula_, another supernova remnant, 6,500 light-years from home.
+The _Crab Nebula_, another supernova remnant, 6,500 light-years from home.
 The dancing species _Aquarium saltans_.
 Find morph _impetus_.[need:discover_morph:impetus]
 Next species ...
@@ -269,7 +272,7 @@ You endured.
 [new_scene]
 [stars:0:3:2:2]
 [clear_world:empty]
-Escaped from the Galactic Center, we wander into unknown places.
+Having escaped the center, we wander into unknown parts of the galaxy.
 
 
 [music:4,1,2,3:4]
@@ -284,7 +287,6 @@ Escaped from the Galactic Center, we wander into unknown places.
 We have arrived at a distant, ancient part of our galaxy.
 Our ships have been over-engineering themselves.
 And finally, they have gone out of control.
-Like the hostile ship at the _Pleiades_, only far worse.
 _Aq. replicans_ relentlessly copy themselves, consume every star and planet ...
 ... and turn all matter into a massive, homogeneous, grayish sludge.
 A so-called *Gray Goo* incident.
@@ -344,7 +346,12 @@ _Lenia_, the precursor of _Lenium_ technology, ...
 ... was discovered by scientist Chan in the early 21st century.
 Shortly after, the *cognitive masking* capability of _Lenia_ ...
 ... was discovered by scientists Cool, Hartl, Levin, and Petti.
-_Lenium_ technology keeps evolving.
+
+In this story, we encountered 11 species of _Lenium_ ships.
+Technically, there can be an infinite number of species.
+We don't know where to find them, or what they look like.
+But one thing we can be certain of:
+_Lenium_ technology will continue to evolve.
 
 [new_scene]
 [stars:90:3:2:2]

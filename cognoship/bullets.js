@@ -168,13 +168,13 @@ const Bullets = (function () {
   }
   // A or the Fire button: fire a bullet from the ship (a twin or trio: the whole) if canFire(). True if a bullet was put in.
   // From the front, the way the ship moves (its arrow); while it is (near) stationary, the arrow
-  // hidden (core SPEED_MIN), at a random angle.
-  function fire() {
+  // hidden (core SPEED_MIN), at a random angle. ang (radians): that way instead (Autofire's aim).
+  function fire(ang) {
     if (!canFire()) return false;
     const ship = C.ship(), k = ship.kin;   // a twin or trio ship: from its whole (its centre, heading and reach)
     lastShot = C.simSteps;
     const moving = k && k.speed >= C.SPEED_MIN;
-    const ang0 = moving ? k.velAng : Math.random() * 2 * Math.PI;
+    const ang0 = ang ?? (moving ? k.velAng : Math.random() * 2 * Math.PI);
     BulletStamp.fire(st, ang0, ship.col, ship.row, ship.reach || C.R, SimGL.putBullets);
     return true;
   }

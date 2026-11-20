@@ -91,6 +91,7 @@ sets everything up.
 | [`[add_bullet]`](#add_bullet) | Add bullet types (pulses) to the gun. |
 | [`[new_bullet]`](#new_bullet) | Let the player create bullet types for energy. |
 | [`[bullet_limit]`](#bullet_limit) | The bullets channel's mass limit. |
+| [`[bullet_wait]`](#bullet_wait) | How often Autofire (`[settings]`) fires. |
 | [`[bullet_cost]`](#bullet_cost) | Energy per shot. |
 | [`[world_draw]`](#world_draw) | Antimatter and Nebula: painting on the world. |
 | **Challenge mode** | |
@@ -264,7 +265,7 @@ Load species `<code>`: its rule and merge saddle. The world is kept; no morph is
 
 - The morph book shows `<name>` in italic at its lower right ("Species: *Aquarium originale*"); with no name, the code.
 - Each species has its own discovered morphs (5N7KKM *tardus* is not GDNQYX *tardus*), kept for when it comes back.
-- Resets `[merge]`.
+- Resets `[merge]`, and `[hide_morph]` (none hidden, for every species). So does choosing a species in the species book (`[choose_species]`): put `[hide_morph]` after it: in sandbox mode in `[on_start]`; in challenge mode in the set-up lines or under `[challenge]` (not `[on_start]`: each attempt starts from the set-up lines' hidden morphs).
 
 Example: `[species:Aquarium originale:5N7KKM]`
 
@@ -318,7 +319,7 @@ The visible morphs are exactly these, in this order. A morph that isn't visible 
 
 These morphs (names) stay detected and named as usual, but are left out of the morph book (so they can't be picked to respawn, retry or clone, e.g. too powerful) and the species book's thumbnails, and are never discovered.
 
-- `<code>`: for that species only; none: every species. `none`: un-hide all (for `<code>`, or everywhere).
+- `<code>`: for that species only; none: every species. `none`: un-hide all (for `<code>`, or everywhere). `[species]` and a species chosen un-hide all too, so put `[hide_morph]` after them.
 - In challenge mode each challenge (and retry) starts from the hidden morphs `challenge.txt`'s set-up lines left; a challenge's species book hides the thumbnails its own `[hide_morph]` tags hide.
 
 ### `[discover_morph]`
@@ -501,8 +502,10 @@ A **Settings** button at the world view's lower right, opening the settings book
 |---|---|---|
 | **World** | A button cycling three modes. *Normal*: the world as the script makes it. *Centered*: the same ordinary world, the world view rolled round it so the ship stays in its middle, at once. *Scroll*: every `[clear_world]` makes a scrolling world; changed to or from it in the book, the current species is chosen again as the book closes. Centered and Scroll add `[stars:follow:0.1]`. | Normal |
 | **Autospawn** | Once the ship has dissolved, Respawn by itself a second later, with no "Dissolved" panel; the ship view stays where the ship was last seen. | off |
+| **Autofire** | The ship fires by itself, every `[bullet_wait]`, at the nearest hostile creature, or with none, the nearest other creature (none: no shot). Only with the gun on and a pulse type (not Antimatter or Nebula); each shot costs `[bullet_cost]` as Fire does. | off |
 | **Objects** | Off, 1, 2, 5, 10, 20 or 40: `[min_morph:<n>]`, run after every `[on_start]` block (overriding its count; its morphs and placing stay) and at once when moved. Lowering it removes nobody. | 2 |
-| **Hostile** | Off, 1, 2, 3, 5 or 10: `[min_hostile:<n>]`, as Objects (the last `[min_hostile]`'s morphs, placing and bullet; none yet: all, random, Scutium). | off |
+| **Hostile** (2nd row) | Off, 1, 2, 5, 10, 20 or 40: `[min_hostile:<n>]`, as Objects (the last `[min_hostile]`'s morphs and placing; none yet: all, random). | off |
+| **Hostile Pulses** (beside it) | Opens a book of the pulse types the player has created (as the pulse book, without Antimatter and Nebula); the pick is what the hostile creatures fire, over the script's (Back or Escape: to the settings). A pick the player doesn't have: their first. | Scutium serratus |
 
 ## Energy, dots and beacons
 
@@ -634,6 +637,14 @@ Let the player create bullet types for `n` energy each (`off`: none may be creat
 
 - While the energy is at least `n`, the **Pulses** button reads **Create** in green, with a glint as it turns so; the pulse book ("Create or use a bullet type") shows its "?" slots with a green border, and a click creates that pattern, switches to it and reveals it.
 - Types the script gives (`[add_bullet]`) cost `n` too while it is on (the energy never goes below 0).
+
+### `[bullet_wait]`
+
+```
+[bullet_wait[:<a>:<b>:<c>]]
+```
+
+With the settings book's **Autofire** on (`[settings:on]`), the ship fires every `a` to `b` game s at random, the first shot `c` after it can start (Autofire turned on, the ship back, a new scene). Default `1.5:4:2`, also with no values, as `[hostile_bullet_wait]`.
 
 ### `[bullet_limit]`
 

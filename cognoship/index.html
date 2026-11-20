@@ -58,13 +58,13 @@
           <button id="dev-do" title="Score as if the ship ate a dot, +10 energy (P)">Do</button>
         </div>
         <!-- the lower left corner of the world view, while the bullets are on ([bullet]); as X; Clear while drawing ([world_draw]) -->
-        <!-- above Fire, while the gun has two or more patterns ([bullet]): the previous / next one (C / V) -->
+        <!-- above Pulses (stacked: between Fire and Pulses), while the gun has two or more patterns ([bullet]): the previous / next one (C / V) -->
         <div id="bullet-nav" class="bullet-nav" hidden>
           <button id="bullet-prev" title="The previous pulse type (C)">&#9664;</button>
           <button id="bullet-next" title="The next pulse type (V)">&#9654;</button>
         </div>
         <button id="fire" class="fire" hidden title="Fire a pulse the way the ship moves (Z)"><span class="kt">Fire</span><span id="fire-id" class="fire-id" hidden></span></button>
-        <!-- right of Fire ([gun] on): opens the bullet book (the stacked layout: below Fire) -->
+        <!-- right of Fire ([gun] on, the ship lost too): opens the bullet book (the stacked layout: below Fire and < >) -->
         <button id="bullets" class="world-bullets" hidden title="The pulse book: choose the pulse to fire (X)">Pulses</button>
         <!-- the world view's lower right ([settings:on]): opens the settings book -->
         <button id="settings" class="world-settings" hidden title="Settings">Settings</button>
@@ -112,10 +112,16 @@
                Autospawn (Respawn by itself once dissolved), Objects (how many other creatures to keep, [min_morph:<n>]),
                Hostile (how many bots to keep, [min_hostile:<n>]) -->
           <div id="book-settings" class="book-settings" hidden>
+            <div class="set-row">
             <button id="world" aria-pressed="false" title="World: Normal (the ordinary world); Centered (the same world, rolled round so your ship stays in the middle of the world view); Scroll (a scrolling world that follows your ship; the world starts afresh as the book closes)">World: Normal</button>
             <button id="autospawn" aria-pressed="false" title="Autospawn: once your ship has dissolved, Respawn by itself after a second">Autospawn</button>
+            <button id="autofire" aria-pressed="false" title="Autofire: your ship fires by itself ([bullet_wait]) at the nearest hostile creature, or with none, the nearest other creature">Autofire</button>
             <label title="Objects: keep at least this many other creatures in the world (a species chosen, or now)">Objects <input id="objects" type="range" min="0" max="6" step="1"><output id="objects-v"></output></label>
-            <label title="Hostile: keep at least this many hostile creatures, which fire at your ship, in the world (a species chosen, or now)">Hostile <input id="hostiles" type="range" min="0" max="5" step="1"><output id="hostiles-v"></output></label>
+            </div>
+            <div class="set-row">
+            <label title="Hostile: keep at least this many hostile creatures, which fire at your ship, in the world (a species chosen, or now)">Hostile <input id="hostiles" type="range" min="0" max="6" step="1"><output id="hostiles-v"></output></label>
+            <button id="hostile-pulses" title="Hostile Pulses: the pulse type the hostile creatures fire">Hostile Pulses</button>
+            </div>
           </div>
           <button id="book-close">Close</button>
           <div id="book-species" class="book-species" hidden></div>

@@ -200,8 +200,8 @@ button,select,input{transition:background .25s,border-color .25s}
 .fire{transition:background .06s,border-color .06s}   /* the press colour comes and goes quickly */
 .fire.flash{background:color-mix(in srgb,var(--fire,#fff) 45%,#000) !important;border-color:var(--fire,#fff) !important;outline:none}   /* a bullet fired (by the button or A): the border colour (the bullets'), darker, as background; a press that fires nothing shows nothing */
 .fire[hidden]{display:none}
-/* < > above Fire (game.js), as wide as it together */
-.bullet-nav{position:absolute;left:14px;bottom:calc(14px + var(--ui-h) * 2.6 + 8px);z-index:3;width:calc(var(--ui-h) * 2.6);
+/* < > above Pulses (game.js), as wide as it together */
+.bullet-nav{position:absolute;left:calc(14px + var(--ui-h) * 2.6 + 24px);bottom:calc(14px + var(--ui-h) + 8px);z-index:3;width:calc(var(--ui-h) * 2.1);
   display:flex;gap:6px}
 .bullet-nav[hidden]{display:none}
 .game .bullet-nav button{flex:1;padding:0;font-weight:700;font-size:calc(var(--ui-font) * 1.5);background:rgba(0,0,0,.45);color:#fff;border:none;
@@ -238,7 +238,7 @@ button,select,input{transition:background .25s,border-color .25s}
 /* Game (sandbox, challenge mode): the Species / Challenges button, mirroring Morphs at the right */
 .ship-species{position:absolute;right:12px;top:calc(18.95% - 2px);transform:translateY(-50%);z-index:3}
 /* Game: the Pulses button, right of Fire, along the bottom (a row with the brush name and Settings) */
-.world-bullets{position:absolute;left:calc(14px + var(--ui-h) * 2.6 + 24px);bottom:14px;z-index:3}
+.world-bullets{position:absolute;left:calc(14px + var(--ui-h) * 2.6 + 24px);bottom:14px;z-index:3;width:calc(var(--ui-h) * 2.1);padding:0}   /* (as wide as < > above it; "Create" fits) */
 /* Game ([settings:on]): the Settings button, at the world view's lower right (a row with Pulses and the brush name) */
 .world-settings{position:absolute;right:14px;bottom:14px;z-index:3}
 .world-settings[hidden]{display:none}
@@ -257,9 +257,10 @@ button,select,input{transition:background .25s,border-color .25s}
 .book-box{position:relative}
 .book-species{position:absolute;right:calc(var(--ui-h) * .6);bottom:calc(var(--ui-h) * .45);font-size:calc(var(--ui-font) * 1.15);color:var(--muted);letter-spacing:.04em}
 .book-species[hidden]{display:none}
-/* the settings book ([settings:on]): its toggles and the Objects slider, in a row */
-.book-settings{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:16px 20px;
+/* the settings book ([settings:on]): World, Autospawn, Objects in a row; Hostile, Hostile Pulses in a second */
+.book-settings{display:flex;flex-direction:column;align-items:center;gap:16px;
   margin:calc(var(--ui-h) * .4) 0 calc(var(--ui-h) * .6);font-size:calc(var(--ui-font) * 1.15);color:var(--muted)}
+.book-settings .set-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:16px 20px}
 .book-settings label{display:flex;align-items:center;gap:6px}
 .book-settings output{color:var(--ink);min-width:1.8em;font-variant-numeric:tabular-nums}
 .book-settings[hidden],.book-grid[hidden]{display:none}
@@ -474,14 +475,14 @@ button,select,input{transition:background .25s,border-color .25s}
 :root.stacked .below .controls{order:-1;width:100%;margin-top:8px}
 :root.stacked .game .msg{width:auto;--msg-base:20px;white-space:normal;overflow:hidden;
   height:calc(2 * 1.35em + 6px);padding:6px 4px 0;margin-top:8px}
-:root.stacked .fire{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 6px);width:calc(var(--ui-h) * 2.2);height:calc(var(--ui-h) * 2.2) !important}
+:root.stacked .fire{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 14px + var(--ui-h));width:calc(var(--ui-h) * 2.2);height:calc(var(--ui-h) * 2.2) !important}
 :root.stacked .dev-col{position:absolute;left:calc(-100% / 3 + 8px);top:8px;width:calc(100% / 3 - 16px);z-index:3;
   display:flex;flex-direction:column;align-items:flex-start;gap:8px;pointer-events:none}   /* ?dev=1: left of the ship view, at its top */
 :root.stacked .dev-col>*{position:static;pointer-events:auto}
 :root.stacked .dev-col .dev{flex-wrap:wrap}
 :root.stacked .dev-col .dev-fps{white-space:pre-line;pointer-events:none}   /* a stat per row */
-:root.stacked .world-bullets{left:calc(-100% / 3 + 8px);bottom:calc(11.72% - 2px - var(--ui-h));width:calc(var(--ui-h) * 2.2)}   /* (left of the ship view: below Fire, 8 px under it) */
-:root.stacked .bullet-nav{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 12px + var(--ui-h) * 2.2);width:calc(var(--ui-h) * 2.2)}
+:root.stacked .world-bullets{left:calc(-100% / 3 + 8px);bottom:calc(11.72% - 2px - var(--ui-h));width:calc(var(--ui-h) * 2.2)}   /* (left of the ship view, from the top: Fire, < >, Pulses, 8 px apart) */
+:root.stacked .bullet-nav{left:calc(-100% / 3 + 8px);bottom:calc(11.72% + 6px);width:calc(var(--ui-h) * 2.2)}
 /* the chapter card fits a narrow window: smaller, the title's long words whole */
 :root.stacked .chapter-box{max-width:92%;box-sizing:border-box;padding:calc(var(--ui-h) * .6) min(calc(var(--ui-h) * 1.6), 5vw)}
 :root.stacked .chapter-title{font-size:min(calc(var(--ui-font) * 3.2), 8.5vw)}
