@@ -32,6 +32,9 @@ uniform int   uMaskOn;
 uniform vec2  uMaskC;
 uniform float uMaskR;
 uniform vec3  uMaskCh;
+const int XMAX = 8;          // more cognitive masks (the game's bots): uXN circles (col, row, radius, channel); apart from each other
+uniform int   uXN;
+uniform vec4  uX[XMAX];
 uniform float uReach;
 uniform int   uBulletMode;
 uniform vec3  uBulletCh;
@@ -54,6 +57,35 @@ vec2 wrapDelta(vec2 d) {
 vec3 bulletAt(ivec2 q) {
     vec4 t = texelFetch(uBullets, q, 0);
     return (uBulletVec == 1 ? t.rgb : vec3(t.r)) * uBulletCh;
+}
+
+// Take a mask circle's cells (centre mc, radius mr, hiding channel ch) out of U and N at pixel p:
+// each circle cell q takes w(q - p) of its hidden channel out of the numerator and the denominator
+void hideCircle(ivec2 p, vec2 mc, float rad, vec3 ch, bool bmask,
+                inout vec4 U0, inout vec4 U1, inout vec4 U2, inout vec4 U3,
+                inout vec4 N0, inout vec4 N1, inout vec4 N2, inout vec4 N3) {
+        int mr = int(ceil(rad)) + 1, side = 2 * uKR + 1;
+        ivec2 c0 = ivec2(floor(mod(mc, vec2(uSize)) + 0.5));   // in [0, size]: the sums below stay >= 0 (% of a negative int is undefined in GLSL)
+        float r2 = rad * rad;
+        for (int dy = -mr; dy <= mr; dy++) {
+            for (int dx = -mr; dx <= mr; dx++) {
+                ivec2 q = (c0 + ivec2(dx, dy) + 2 * uSize) % uSize;
+                vec2 dq = wrapDelta(vec2(q) - mc);
+                if (dot(dq, dq) > r2) continue;
+                ivec2 o = ivec2(wrapDelta(vec2(q - p)));   // the kernel offset of q from p
+                if (abs(o.x) > uKR || abs(o.y) > uKR) continue;
+                vec3 vb = bmask ? vec3(1.0) - bulletAt(q) : vec3(1.0);
+                vec3 hid = vb * ch;                           // what the circle hides at q
+                vec3 ah = texelFetch(uState, q, 0).rgb * hid;
+                ivec2 t = o + uKR;
+                vec4 w0 = texelFetch(uKimg, t, 0), w1 = texelFetch(uKimg, t + ivec2(side, 0), 0);
+                vec4 w2 = texelFetch(uKimg, t + ivec2(2 * side, 0), 0), w3 = texelFetch(uKimg, t + ivec2(3 * side, 0), 0);
+                U0 -= w0 * (uSrc[0] * ah); N0 -= w0 * (uSrc[0] * hid);
+                U1 -= w1 * (uSrc[1] * ah); N1 -= w1 * (uSrc[1] * hid);
+                U2 -= w2 * (uSrc[2] * ah); N2 -= w2 * (uSrc[2] * hid);
+                U3 -= w3 * (uSrc[3] * ah); N3 -= w3 * (uSrc[3] * hid);
+            }
+        }
 }
 
 vec4 growth(vec4 u, vec4 m, vec4 s) {
@@ -81,7 +113,7 @@ void main() {
         }
     }
     bool bmask = uBulletMode == 2;
-    bool masked = near || bmask;
+    bool masked = near || bmask;   // (and any extra mask within reach: below)
 
     vec4 U0 = texelFetch(uP0, p, 0), U1 = texelFetch(uP1, p, 0);
     vec4 U2 = texelFetch(uP2, p, 0), U3 = texelFetch(uP3, p, 0);
@@ -92,30 +124,14 @@ void main() {
         N2 -= texelFetch(uD2, p, 0); N3 -= texelFetch(uD3, p, 0);
     }
 
-    if (near) {
-        // the circle's cells, each hiding its channel: vis = (1 - bullets) (1 - maskCh) there
-        int mr = int(ceil(uMaskR)) + 1, side = 2 * uKR + 1;
-        ivec2 c0 = ivec2(floor(mod(mc, vec2(uSize)) + 0.5));   // in [0, size]: the sums below stay >= 0 (% of a negative int is undefined in GLSL)
-        float r2 = uMaskR * uMaskR;
-        for (int dy = -mr; dy <= mr; dy++) {
-            for (int dx = -mr; dx <= mr; dx++) {
-                ivec2 q = (c0 + ivec2(dx, dy) + 2 * uSize) % uSize;
-                vec2 dq = wrapDelta(vec2(q) - mc);
-                if (dot(dq, dq) > r2) continue;
-                ivec2 o = ivec2(wrapDelta(vec2(q - p)));   // the kernel offset of q from p
-                if (abs(o.x) > uKR || abs(o.y) > uKR) continue;
-                vec3 vb = bmask ? vec3(1.0) - bulletAt(q) : vec3(1.0);
-                vec3 hid = vb * uMaskCh;                      // what the circle hides at q
-                vec3 ah = texelFetch(uState, q, 0).rgb * hid;
-                ivec2 t = o + uKR;
-                vec4 w0 = texelFetch(uKimg, t, 0), w1 = texelFetch(uKimg, t + ivec2(side, 0), 0);
-                vec4 w2 = texelFetch(uKimg, t + ivec2(2 * side, 0), 0), w3 = texelFetch(uKimg, t + ivec2(3 * side, 0), 0);
-                U0 -= w0 * (uSrc[0] * ah); N0 -= w0 * (uSrc[0] * hid);
-                U1 -= w1 * (uSrc[1] * ah); N1 -= w1 * (uSrc[1] * hid);
-                U2 -= w2 * (uSrc[2] * ah); N2 -= w2 * (uSrc[2] * hid);
-                U3 -= w3 * (uSrc[3] * ah); N3 -= w3 * (uSrc[3] * hid);
-            }
-        }
+    if (near) hideCircle(p, mc, uMaskR, uMaskCh, bmask, U0, U1, U2, U3, N0, N1, N2, N3);
+    for (int i = 0; i < XMAX; i++) {   // the extra masks (the game's bots)
+        if (i >= uXN) break;
+        vec2 d = wrapDelta(vec2(p) - uX[i].xy);
+        float lim = uReach + uX[i].z + 1.0;
+        if (dot(d, d) > lim * lim) continue;
+        masked = true;
+        hideCircle(p, uX[i].xy, uX[i].z, vec3(equal(ivec3(int(uX[i].w)), ivec3(0, 1, 2))), bmask, U0, U1, U2, U3, N0, N1, N2, N3);
     }
 
     if (masked) {

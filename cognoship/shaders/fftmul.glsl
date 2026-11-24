@@ -52,8 +52,12 @@ void main() {
         if (uBVec == 1) split(texelFetch(uFB0, p, 0), texelFetch(uFB0, pm, 0), bR, bG, bB, unused);
     }
     vec4 k0 = texelFetch(uK0, p, 0), k1 = texelFetch(uK1, p, 0);
-    vec2 K[4] = vec2[4](k0.xy, k0.zw, k1.xy, k1.zw);
-    vec2 S[4], Dk[4];
+    // (arrays filled one by one, their precision explicit: some mobile compilers give an array
+    // constructor, vec2[4](...), no default precision: "S0032: no default precision defined for
+    // variable 'vec2[4]'")
+    highp vec2 K[4];
+    K[0] = k0.xy; K[1] = k0.zw; K[2] = k1.xy; K[3] = k1.zw;
+    highp vec2 S[4], Dk[4];
     for (int i = 0; i < 4; i++) {
         vec3 s = uSrc[i];
         vec2 a = s.x * (R - Rb) + s.y * (G - Gb) + s.z * (B - Bb);

@@ -47,6 +47,11 @@ uniform int   uMaskOn;      // 0 off, 1 cognitive mask, 2 erase mass, 3 draw mas
 uniform vec2  uMaskC;       // mask centre, board cells (col, row)
 uniform float uMaskR;       // mask radius, cells
 uniform vec3  uMaskCh;      // one-hot: which channel the mask hides
+// More cognitive masks besides the player's tool (the game's bots steering by the morph model):
+// uXN circles, each (col, row, radius, channel 0 1 2); assumed apart from each other
+const int XMAX = 8;
+uniform int   uXN;
+uniform vec4  uX[XMAX];
 uniform float uReach;       // kernel reach, cells (max tap distance)
 uniform sampler2D uBullets; // bullets channel (R)
 uniform int   uBulletMode;  // 0 none, 1 erase, 2 mask
@@ -99,7 +104,15 @@ void main() {
     }
 
     bool bmask = uBulletMode == 2;
-    bool masked = near || bmask;
+    // the extra masks within reach of this pixel's kernel (bit i: circle i)
+    int xnear = 0;
+    for (int i = 0; i < XMAX; i++) {
+        if (i >= uXN) break;
+        vec2 d = wrapDelta(vec2(p) - uX[i].xy);
+        float lim = uReach + uX[i].z + 1.0;
+        if (dot(d, d) <= lim * lim) xnear |= 1 << i;
+    }
+    bool masked = near || bmask || xnear != 0;
 
     vec4 U0 = vec4(0.0), U1 = vec4(0.0), U2 = vec4(0.0), U3 = vec4(0.0);
     vec4 N0 = vec4(0.0), N1 = vec4(0.0), N2 = vec4(0.0), N3 = vec4(0.0);
@@ -120,6 +133,12 @@ void main() {
                 if (dot(d, d) <= r2) vis = vec3(1.0) - uMaskCh;
             }
             if (bmask) vis *= vec3(1.0) - bulletAt(q);
+            for (int i = 0; i < XMAX; i++) {
+                if (i >= uXN) break;
+                if ((xnear & (1 << i)) == 0) continue;
+                vec2 d = wrapDelta(vec2(q) - uX[i].xy);
+                if (dot(d, d) <= uX[i].z * uX[i].z) vis *= vec3(1.0) - vec3(equal(ivec3(int(uX[i].w)), ivec3(0, 1, 2)));
+            }
             a *= vis;
             N0 += w0 * (uSrc[0] * vis);
             N1 += w1 * (uSrc[1] * vis);

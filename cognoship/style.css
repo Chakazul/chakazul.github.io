@@ -126,8 +126,31 @@ button,select,input{transition:background .25s,border-color .25s}
 :root.fs .controls output{min-width:1.8em}
 :root.fs .controls button{padding:6px 8px;flex:none}
 :root.fs .fs-hide{display:none}
-:root.fs .tune,.tune[hidden],:root.fs .stats,.stats[hidden],.help[hidden]{display:none}
+:root.fs .tune,.tune[hidden],:root.fs .stats,.stats[hidden],.model[hidden],.help[hidden]{display:none}
 .tune{margin-top:12px}
+.model{margin-top:12px}
+/* Model mode: the hold buttons in the ship view, just above Mask Erase Draw (canvas y 452 of 512) */
+#r-holds{position:absolute;left:66.6667%;width:33.3333%;bottom:calc(11.72% + 6px);z-index:3;display:flex;gap:5px;
+  justify-content:center;align-items:center;pointer-events:none}
+#r-holds[hidden]{display:none}
+#r-holds span{font-size:12px;color:#ccc;text-shadow:0 0 3px #000}
+#r-holds button{pointer-events:auto;height:26px;padding:0 8px;font-size:12.5px;background:rgba(40,40,46,.8);color:#eee}
+#r-holds button[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 45%,#28282e);border-color:var(--accent)}
+.canvas-box #r-graph{left:8.3333%;width:50%;background:rgba(0,0,0,.45);z-index:2}
+.canvas-box #r-graph[hidden]{display:none}
+.model .group{font-size:12px;color:var(--muted)}
+.model-info{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--muted);flex:1 1 100%}
+.omenu{position:relative;display:inline-block}
+.omenu-list{position:absolute;left:0;bottom:100%;z-index:20;min-width:260px;max-height:60vh;overflow:auto;background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:4px 0;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.omenu-list[hidden]{display:none}
+.omenu-head{font-size:11px;color:var(--faint);padding:4px 10px 2px}
+.omenu-item{font-size:13px;padding:3px 14px;cursor:pointer;white-space:nowrap}
+.omenu-item:hover{background:var(--line)}
+.model-act{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--ink);flex:1 1 100%;min-height:1.5em}
+.model-act .run, #r-comp-run{color:#2ecc40;font-weight:bold}
+#r-comp-run[hidden]{display:none}
+.model-key{font-size:12px;color:var(--muted)}
+.model-key b.pos{color:#2a8cff}.model-key b.neg{color:#ff8c00}
 .stats{margin-top:12px}
 .stats [hidden]{display:none}
 .stats .chart-controls{margin-top:0}
@@ -258,11 +281,13 @@ button,select,input{transition:background .25s,border-color .25s}
 .book-box{position:relative}
 .book-species{position:absolute;right:calc(var(--ui-h) * .6);bottom:calc(var(--ui-h) * .45);font-size:calc(var(--ui-font) * 1.15);color:var(--muted);letter-spacing:.04em}
 .book-species[hidden]{display:none}
-/* the settings book ([settings:on]): World, Autospawn, Objects in a row; Hostile, Hostile Pulses in a second */
-.book-settings{display:flex;flex-direction:column;align-items:center;gap:16px;
+/* the settings book ([settings:on]): rows World, Hostile, Player, left-aligned; the box as wide as they need */
+.book-box.settings.wide,:root.stacked .book-box.settings.wide{width:auto;max-width:96%}
+.book-settings{display:flex;flex-direction:column;align-items:flex-start;gap:16px;
   margin:calc(var(--ui-h) * .4) 0 calc(var(--ui-h) * .6);font-size:calc(var(--ui-font) * 1.15);color:var(--muted)}
-.book-settings .set-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:16px 20px}
+.book-settings .set-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:16px 20px}
 .book-settings label{display:flex;align-items:center;gap:6px}
+.book-settings .set-head{min-width:4.5em;text-align:left;color:var(--muted);font-size:.9em;text-transform:uppercase;letter-spacing:.06em}
 .book-settings output{color:var(--ink);min-width:1.8em;font-variant-numeric:tabular-nums}
 .book-settings[hidden],.book-grid[hidden]{display:none}
 .book-species.link{cursor:pointer;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}

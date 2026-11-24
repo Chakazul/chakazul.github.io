@@ -53,7 +53,10 @@ cd Cognoship && python3 -m http.server 8000     # game: http://localhost:8000/  
   - **heading up**: the view follows the direction of travel averaged over ~30 steps (steady
     through pulses and detection jitter, e.g. the *paragyrans* and *para* forms), predicted
     forward by the measured turn rate so a circling ship is followed with no lag. The arrow therefore points about up, swinging a little with each pulse.
-    Near stationary, when the arrow is hidden, the view holds the last heading.
+    Still (slow on a ~1.3 s average, where a morph spinning in place wobbles to and fro), the view follows the body axis instead (B's CoM
+    to G's, the morph models' frame for still morphs), so a still or spinning morph (*antigyrans*,
+    *lithos*) stays upright; one channel, or B and G centred together: the last heading is held.
+    A change between the two turns the view quickly (at most ~430°/s), not at a jump.
   - A third mode, **body axis up**, is hidden from the button and only reachable with
     `?headup=axis`: the view follows the line from the B channel's CoM to the G channel's, which
     exists at any speed but is not exactly the direction of travel (about 56° off for *gyrans*
@@ -474,7 +477,7 @@ off with the music.
 ## Stats mode
 
 Page modes, cycled by the **Mode** button or key `A` (`Shift`+`A` backwards): Action, Stats,
-Action+Stats, Tuning; the page always starts in Action. Tuning and stats show their controls
+Action+Stats, Model (the morph model on the ship: README-LAB.md), Tuning; the page always starts in Action. Tuning and stats show their controls
 between the screen and the help text. **Stats** shows a phase-space chart of the focused creature (`statschart.js`)
 in place of the ship view (the right third of the screen; its controls go below the screen). In
 **action+stats** mode the chart sits left of the ship view instead, over the right half of the world
@@ -662,3 +665,14 @@ except 0.95 for A. virgatus (KZ2BLD) and 0.9 for Cilium (G6G6CR), chosen by eye 
 merge from 1.0 up). The readout adds **in objects**: the share of the board's mass inside detected objects (the
 rest is in blocks under the threshold or in dropped small basins). Also
 settable as `?saddle=`, `?thr=`, `?area=`.
+
+## Morph models (maneuver experiments)
+
+`tools/models.py` finds, by repeated headless experiments on the GPU, which action in which
+condition gives which outcome: which mask spot, channel and hold turns a morph left or right,
+shifts it or changes it into another morph, and which clone (distance, bearing, turn, flip)
+placed beside a ship makes a twin. It writes a readable book per species, with data for the game
+(bots steering at the player, autopilot, transforming at will) and a map per morph:
+`models/<code>.md`, `.json`, `-<morph>.png`. See [models/README.md](models/README.md). The lab's
+Model mode draws the book on the followed ship and does an action on a click (core.js `pressFor`:
+a mask held at a spot in the ship's frame for a number of steps, as the player would).

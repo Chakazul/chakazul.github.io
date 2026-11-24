@@ -108,20 +108,29 @@
         <div class="book-box" role="dialog" aria-label="Morph book">
           <h2 id="book-title">Dissolve to respawn</h2>
           <div class="book-grid" id="book-grid"></div>
-          <!-- the settings book (above Close) ([settings:on], the Settings button): World (Normal; Centered, the
-               ordinary world rolled to keep the ship in the middle; Scroll, a scrolling world, [clear_world:scroll]),
-               Autospawn (Respawn by itself once dissolved), Objects (how many other creatures to keep, [min_morph:<n>]),
-               Hostile (how many bots to keep, [min_hostile:<n>]) -->
+          <!-- the settings book (above Close) ([settings:on], the Settings button), three rows:
+               World: Normal / Centered (the ordinary world rolled to keep the ship in the middle) / Infinite (a
+               scrolling world, [clear_world:scroll]); Objects (how many other creatures to keep, [min_morph:<n>]).
+               Hostile: Behavior (None: still; Auto: fire at you; Balanced, Aggressive: steer and fire by the morph model); Morphs
+               (how many bots to keep, [min_hostile:<n>]); Pulses (the pulse type they fire).
+               Player: Behavior (None: you steer; Auto: fires by itself; Balanced, Aggressive: steers and fires by itself, by the
+               morph model, behaviors.js); Autospawn (Respawn by itself once dissolved). -->
           <div id="book-settings" class="book-settings" hidden>
             <div class="set-row">
-            <button id="world" aria-pressed="false" title="World: Normal (the ordinary world); Centered (the same world, rolled round so your ship stays in the middle of the world view); Scroll (a scrolling world that follows your ship; the world starts afresh as the book closes)">World: Normal</button>
-            <button id="autospawn" aria-pressed="false" title="Autospawn: once your ship has dissolved, Respawn by itself after a second">Autospawn</button>
-            <button id="autofire" aria-pressed="false" title="Autofire: your ship fires by itself ([bullet_wait]) at the nearest hostile creature, or with none, the nearest other creature">Autofire</button>
-            <label title="Objects: keep at least this many other creatures in the world (a species chosen, or now)">Objects <input id="objects" type="range" min="0" max="6" step="1"><output id="objects-v"></output></label>
+            <span class="set-head">World</span>
+            <button id="world" aria-pressed="false" title="World: Normal (the ordinary world); Centered (the same world, rolled round so your ship stays in the middle of the world view); Infinite (a scrolling world that follows your ship; the world starts afresh as the book closes)">Normal</button>
+            <label title="Objects: keep at least this many other (not hostile) creatures in the world (a species chosen, or now)">Objects <input id="objects" type="range" min="0" max="6" step="1"><output id="objects-v"></output></label>
             </div>
             <div class="set-row">
-            <label title="Hostile: keep at least this many hostile creatures, which fire at your ship, in the world (a species chosen, or now)">Hostile <input id="hostiles" type="range" min="0" max="6" step="1"><output id="hostiles-v"></output></label>
-            <button id="hostile-pulses" title="Hostile Pulses: the pulse type the hostile creatures fire">Hostile Pulses</button>
+            <span class="set-head">Hostile</span>
+            <button id="hostile-behavior" aria-pressed="false" title="The hostile creatures' behavior: None (they drift and never fire); Auto (they drift and fire at your ship); by the morph model, steering and firing along their motion when lined up: Balanced (as limus or gyrans of Aquarium originale: attacks within reach, turns and escapes when too near, rests as gyrans once safely away, then attacks again); Aggressive (as limus or gyrans of Aquarium originale: attacks from anywhere, turns away only when very near and briefly, never rests). As other morphs they drift and never fire (no direct shots)">Behavior: Auto</button>
+            <label title="Morphs: keep at least this many hostile creatures in the world (a species chosen, or now)">Morphs <input id="hostiles" type="range" min="0" max="6" step="1"><output id="hostiles-v"></output></label>
+            <button id="hostile-pulses" title="Pulses: the pulse type the hostile creatures fire">Pulses</button>
+            </div>
+            <div class="set-row">
+            <span class="set-head">Player</span>
+            <button id="player-behavior" aria-pressed="false" title="Your ship's behavior: None (you steer and fire); Auto (it fires by itself at the nearest hostile creature, or with none, the nearest other creature); an autopilot by the morph model going for the nearest hostile creature, steering and firing along its motion when lined up: Balanced (as limus or gyrans of Aquarium originale: attacks within reach, turns and escapes when too near, rests as gyrans once safely away, then attacks again); Aggressive (as limus or gyrans of Aquarium originale: attacks from anywhere, turns away only when very near and briefly, never rests). As other morphs or ???, nothing">Behavior: None</button>
+            <button id="autospawn" aria-pressed="false" title="Autospawn: once your ship has dissolved, Respawn by itself after a second">Autospawn</button>
             </div>
           </div>
           <button id="book-close">Close</button>
@@ -168,6 +177,8 @@
 <script src="bullets.js"></script>
 <script src="field.js"></script>
 <script src="clone.js"></script>
+<script src="models.js"></script>
+<script src="behaviors.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

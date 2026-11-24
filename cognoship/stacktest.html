@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Stack test</title></head>
+<body>
+<!-- Stack pilot (dev): replays output/stacktest's cases (start boards and every step's mask circle,
+     from torch: output/stacktest/make.py) in the game's own engine (glsim.js, fftsim.js; ?fft=0 the
+     direct convolution) and posts each case's checkpoint boards to the page's server
+     (output/stacktest/serve.py): POST /result?b=<browser>&id=<case>. ?b= names the run. -->
+<canvas id="c" width="128" height="128"></canvas>
+<pre id="log"></pre>
+<script src="rule.js"></script>
+<script src="aquarium233.js"></script>
+<script src="species.js"></script>
+<script src="glsim.js"></script>
+<script src="fftsim.js"></script>
+<script>
+"use strict";
+const q = new URLSearchParams(location.search), B = q.get('b') || 'browser';
+// (a post retried: the WSL port forward drops one now and then)
+const post = async (url, body) => {
+  for (let k = 0; ; k++) {
+    try { const r = await fetch(url, { method: 'POST', body, signal: AbortSignal.timeout(20000) }); if (r.ok) return; if (k >= 5) throw new Error(`${url}: ${r.status}`); }
+    catch (e) { if (k >= 5) throw e; }
+    await new Promise(r => setTimeout(r, 500));
+  }
+};
+const log = s => { document.getElementById('log').textContent += s + '\n'; post(`/log?b=${B}`, s).catch(() => {}); };
+window.onerror = (m, src, l) => log(`ERROR ${m} ${src}:${l}`);
+(async function () {
+  try {
+    // (one board size a page: ?size=, default the first case's; the engine is set up once)
+    const all = await (await fetch('output/stacktest/cases.json')).json();
+    const cases = all.filter(c => c.size === +(q.get('size') || all[0].size));
+    const gl = document.createElement('canvas').getContext('webgl2'), ext = gl.getExtension('WEBGL_debug_renderer_info');
+    log(`renderer: ${ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '?'} · fft ${q.get('fft') !== '0'}`);
+    const N = cases[0].size;
+    const rule0 = patternRule({ rule: cases[0].code, logic: 'leniaF' });
+    await SimGL.init(document.getElementById('c'), { W: N, H: N, R: cases[0].R, kernels: rule0.kernels });
+    let code = null;
+    const t0 = performance.now();
+    for (const c of cases) {
+      if (c.code !== code) {
+        code = c.code;
+        const r = patternRule({ rule: code, logic: 'leniaF' });
+        SimGL.setRule(r.kernels, c.R, r.kn); SimGL.setUpdate(r.norm, r.dt, r.gn);
+      }
+      const raw = new Float32Array(await (await fetch(`output/stacktest/cases/${c.id}.bin`)).arrayBuffer());
+      const cells = [0, 1, 2].map(ch => Array.from({ length: N }, (_, y) => Array.from(raw.subarray(ch * N * N + y * N, ch * N * N + (y + 1) * N))));
+      SimGL.seed({ h: N, w: N, cells }, 0, 0);
+      const out = [];
+      const grab = () => {
+        const s = SimGL.readState(), a = new Float32Array(3 * N * N);
+        for (let i = 0; i < N * N; i++) for (let ch = 0; ch < 3; ch++) a[ch * N * N + i] = s[i * 4 + ch];
+        out.push(a);
+      };
+      if (c.check.includes(0)) grab();
+      for (let s = 0; s < c.steps; s++) {
+        const m = c.masks[s];
+        SimGL.step(m ? { col: m[0], row: m[1], r: m[2], ch: m[3], action: 0 } : null);
+        if (c.check.includes(s + 1)) grab();
+      }
+      const body = new Float32Array(out.length * 3 * N * N);
+      out.forEach((a, k) => body.set(a, k * 3 * N * N));
+      await post(`/result?b=${B}&id=${c.id}`, body);
+      log(`${c.id} done`);
+    }
+    log(`all done in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+    await post(`/done?b=${B}`, 'ok');
+  } catch (e) { log(`ERROR ${e.stack || e}`); await post(`/done?b=${B}`, 'error').catch(() => {}); }
+})();
+</script>
+</body></html>

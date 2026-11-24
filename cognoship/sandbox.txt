@@ -3,7 +3,7 @@
 [morph_book_action:put][retry_action:put]
 [gun:on,mask,color_now,wear_color][hostile_gun:on,mask,rgb,wear_all]
 [new_bullet:50]
-[bullet_limit:8][bullet_wait:2:3:0]
+[bullet_limit:8][bullet_wait:1:1:0]
 [hostile_bullet_limit:8][hostile_bullet_wait:5:10:2]
 [bullet_mutual:wear:2]
 [erase:on][draw:on][world_draw:antimatter,nebula][settings:on]
@@ -18,7 +18,7 @@
 [add_allow_species:Aq. virgatus:KZ2BLD:rectus,limus,virgatus]
 [add_allow_species:Aq. saltans:KH97WU:limus,gyrans,impetus,antigyrans]
 [add_allow_species:Aq. sinuosus:HAESRE:zigzag,lithos,antigyrans,paragyrans,circumgyrans]
-[add_allow_species:Aq. metamorpha:HGMLH8:metamorpha,paratardus,paratachus]
+[add_allow_species:Aq. metamorpha:HGMLH8:metamorpha,paratardus,paratachus,tachotardus]
 [add_allow_species:Ci. immunitatis:G6G6CR:rectus,limus,tardus,lithos,munitus]
 
 [on_start]

@@ -316,7 +316,8 @@
     $('book-grid').classList.toggle('bullets', book.mode === 'bullet' || book.mode === 'hostile');
     $('book-grid').classList.toggle('species', book.mode === 'species' || book.mode === 'challenge');
     document.querySelector('.book-box').classList.toggle('wide', book.mode !== 'morph');   // the bullet and species books: wider
-    document.querySelector('.book-box').classList.toggle('challenges', book.mode === 'challenge');   // the challenge book: a little wider still (the ticks)
+    document.querySelector('.book-box').classList.toggle('challenges', book.mode === 'challenge');
+    document.querySelector('.book-box').classList.toggle('settings', book.mode === 'settings');   // the settings book: as wide as its rows   // the challenge book: a little wider still (the ticks)
     $('book-close').textContent = bookBack() ? 'Back' : 'Close';   // the species book for a challenge: back to the challenge book
     $('book-close').title = !bookBack() ? '' : book.mode === 'hostile' ? 'Back to the settings (Esc)' : 'Back to the challenge book (Esc)';
     $('book-close').dataset.key = 'Esc';   // only Escape closes a book (its letters pick slots)   // its key badge: the key that closes this book
@@ -1082,7 +1083,7 @@
     const h = target.size / 2;
     return Math.abs(C.wrapD(sh.col - target.col, C.BW)) <= h && Math.abs(C.wrapD(sh.row - target.row, C.BH)) <= h;
   }
-  C.opt.marks = () => (target && !target.off ? [{ col: target.col, row: target.row, w: target.size, h: target.size, color: TARGET_COLOR, dash: TARGET_DASH }] : []).concat(botMarks());
+  C.opt.marks = () => (target && !target.off ? [{ col: target.col, row: target.row, w: target.size, h: target.size, color: TARGET_COLOR, dash: TARGET_DASH }] : []).concat(botMarks(), botActMarks(), playerModeMarks());
 
   function openBulletBook() {
     if (!Bullets.on) return;
@@ -1543,26 +1544,50 @@
     if (lostAt === null) lostAt = now;
     if (now - lostAt >= AUTOSPAWN_MS) { lostAt = null; doReset(); }
   }
-  // Autofire (after it): while on, with the gun on (not a world-draw type) and a ship, the ship fires
-  // by itself every [bullet_wait] a to b game s (at random), the first c after it can start (Autofire
-  // on, the ship back, a scene); at the nearest hostile object (hostileObjects), else the nearest
-  // other one, the ship's excluded; none: no shot. Not under a book, a card or a fade. Kept as Objects.
-  const AUTOFIRE_KEY = 'cognoship-autofire';
-  let autofire = false, autoNext = null;
-  try { autofire = localStorage.getItem(AUTOFIRE_KEY) === '1'; } catch (e) {}
+  // The player's Behavior (after it): None (the player steers and fires); Auto (Autofire): with the
+  // gun on (not a world-draw type) and a ship, the ship fires by itself every [bullet_wait] a to b
+  // game s (at random), the first c after it can start (Auto on, the ship back, a scene); at the
+  // nearest hostile object (hostileObjects), else the nearest other one, the ship's excluded; none: no
+  // shot; Balanced, Aggressive: an autopilot by the morph model (playerSteer: behaviors.js's of that name, the ship as
+  // a bot whose target is the nearest hostile object, else the nearest other one), firing as it
+  // says (when lined up; the shot kept till then); as a morph it does not cover (or ???), nothing. Not under
+  // a book, a card or a fade. Kept as Objects.
+  // (the settings' modes: none, auto, or a behavior's name, behaviors.js; the old 'balanced' read as that behavior)
+  const PLAYER_KEY = 'cognoship-player-behavior', PLAYER_MODES = ['none', 'auto', 'balanced', 'aggressive'], HOSTILE_MODES = PLAYER_MODES;
+  const OLD_MODES = { 'attack-rest': 'balanced', 'attack-escape': 'aggressive' };   // (earlier names, as kept in the browser)
+  const isBehavior = m => m !== 'none' && m !== 'auto';
+  let playerMode = 'none', autoNext = null;
+  try {
+    const v = localStorage.getItem(PLAYER_KEY);
+    playerMode = PLAYER_MODES.includes(v) ? v : OLD_MODES[v] || (localStorage.getItem('cognoship-autofire') === '1' ? 'auto' : 'none');   // (the old Autofire toggle's)
+  } catch (e) {}
+  const modeName = m => m.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('-');   // (e.g. hit-and-run -> Hit-And-Run)
+  // the object the ship goes for: the nearest hostile, else the nearest other; null if none
+  const nearestOf = (ship, list) => {
+    const dist = o => Math.hypot(C.wrapD(o.col - ship.col, C.BW), C.wrapD(o.row - ship.row, C.BH));
+    return list.reduce((a, o) => !a || dist(o) < dist(a) ? o : a, null);
+  };
+  function shipTarget(ship) { return nearestOf(ship, hostileObjects()) || nearestOf(ship, C.objects().filter(o => !o.parts.includes(C.focusIdx))); }
+  // the autopilot's opponent: the nearest hostile only (none: it rests)
+  const nearestHostile = ship => nearestOf(ship, hostileObjects());
   function autofireFrame() {
     const ship = C.ship();
-    if (!settingsOn || !autofire || !Bullets.on || fieldMode() || !ship || shipLost() || speciesFading || resetting || challenge.failed) { autoNext = null; return; }
+    if (!settingsOn || playerMode === 'none' || !Bullets.on || fieldMode() || !ship || shipLost() || speciesFading || resetting || challenge.failed) { autoNext = null; return; }
     if (book.open || chapterShowing() || !C.found) return;
     const now = C.simSteps;
     if (autoNext === null) { autoNext = now + Math.round(fireWait.first * C.STEPS_PER_S); return; }
     if (now < autoNext || !canPay() || !Bullets.canFire()) return;
-    const dist = o => Math.hypot(C.wrapD(o.col - ship.col, C.BW), C.wrapD(o.row - ship.row, C.BH));
-    const nearest = list => list.reduce((a, o) => !a || dist(o) < dist(a) ? o : a, null);
-    const hostile = hostileObjects();
-    const t = nearest(hostile) || nearest(C.objects().filter(o => !o.parts.includes(C.focusIdx)));
-    if (!t) return;
-    if (Bullets.fire(Math.atan2(C.wrapD(t.row - ship.row, C.BH), C.wrapD(t.col - ship.col, C.BW)))) {
+    let ang;
+    if (isBehavior(playerMode)) {   // the autopilot: where it says (null: not now, the shot kept); not driving (???, another morph): no shot
+      const pc = playerContext();
+      ang = pc ? pc.beh.aim(pc.ctx) : null;
+      if (ang === null) return;
+    } else {
+      const t = shipTarget(ship);
+      if (!t) return;
+      ang = Math.atan2(C.wrapD(t.row - ship.row, C.BH), C.wrapD(t.col - ship.col, C.BW));
+    }
+    if (Bullets.fire(ang)) {
       flash('fire'); if (bulletCost) changeEnergy(-bulletCost);
       autoNext = now + Math.round((fireWait.min + Math.random() * (fireWait.max - fireWait.min)) * C.STEPS_PER_S);
     }
@@ -1570,9 +1595,27 @@
   // [bullet_wait]: Autofire's a to b game s between shots, and c before the first
   const FIRE_WAIT = { min: 1.5, max: 4, first: 2 };
   let fireWait = { ...FIRE_WAIT };
-  $('autofire').onclick = () => {
-    autofire = !autofire; autoNext = null;
-    try { localStorage.setItem(AUTOFIRE_KEY, autofire ? '1' : '0'); } catch (e) {}
+  $('player-behavior').onclick = () => {
+    flash('player-behavior');
+    playerMode = PLAYER_MODES[(PLAYER_MODES.indexOf(playerMode) + 1) % PLAYER_MODES.length]; autoNext = null;
+    playerAi.mem = {}; playerAi.next = 0;   // (the autopilot starts afresh)
+    if (!isBehavior(playerMode) && C.auto) C.pressFor(null);   // (the autopilot's action stops)
+    if (isBehavior(playerMode)) Models.load(C.speciesOf(C.pattern));
+    try { localStorage.setItem(PLAYER_KEY, playerMode); } catch (e) {}
+    syncObjects();
+  };
+  // The hostile creatures' Behavior (the settings book; it overrides the script's [hostile_behavior]
+  // while the settings are on): None (they drift and never fire); Auto (they drift and fire at the
+  // ship, as with no behavior); Balanced, Aggressive (behaviors.js's of that name for the morphs it covers, the others,
+  // None: as [hostile_behavior:all:off] first). Kept as Objects; until first set, Auto.
+  const HOST_BEH_KEY = 'cognoship-hostile-behavior';
+  let hostileMode = 'auto';
+  try { const v = localStorage.getItem(HOST_BEH_KEY); if (HOSTILE_MODES.includes(v)) hostileMode = v; else if (OLD_MODES[v]) hostileMode = OLD_MODES[v]; } catch (e) {}
+  $('hostile-behavior').onclick = () => {
+    flash('hostile-behavior');
+    hostileMode = HOSTILE_MODES[(HOSTILE_MODES.indexOf(hostileMode) + 1) % HOSTILE_MODES.length];
+    if (isBehavior(hostileMode)) Models.load(C.speciesOf(C.pattern));
+    try { localStorage.setItem(HOST_BEH_KEY, hostileMode); } catch (e) {}
     syncObjects();
   };
   $('autospawn').onclick = () => {
@@ -1582,15 +1625,18 @@
   };
   function syncObjects() {
     $('autospawn').setAttribute('aria-pressed', autospawn);
-    $('autofire').setAttribute('aria-pressed', autofire);
+    $('player-behavior').setAttribute('aria-pressed', playerMode !== 'none');
+    $('player-behavior').textContent = 'Behavior: ' + modeName(playerMode);
+    $('hostile-behavior').setAttribute('aria-pressed', hostileMode !== 'auto');
+    $('hostile-behavior').textContent = 'Behavior: ' + modeName(hostileMode);
     $('world').setAttribute('aria-pressed', worldMode !== 'normal');
-    $('world').textContent = 'World: ' + worldMode[0].toUpperCase() + worldMode.slice(1);
+    $('world').textContent = { normal: 'Normal', centered: 'Centered', scroll: 'Infinite' }[worldMode];
     $('objects').value = objectsIdx;
     $('objects-v').textContent = OBJECTS[objectsIdx] || 'Off';
     fillRange($('objects'));
     $('hostiles').value = hostilesIdx;
     $('hostiles-v').textContent = HOSTILES[hostilesIdx] || 'Off';
-    $('hostile-pulses').title = `Hostile Pulses: the pulse type the hostile creatures fire (now ${hostPulse()})`;
+    $('hostile-pulses').title = `Pulses: the pulse type the hostile creatures fire (now ${hostPulse()})`;
     fillRange($('hostiles'));
   }
   $('hostiles').oninput = e => {
@@ -1722,6 +1768,7 @@
       speciesName = name;
       vis.all = false; vis.allow.clear();
       hiddenMorphs.clear();
+      botBehaviors.clear();   // ([hostile_behavior] is the species': back to all:auto)
       if (!discoveredBy.has(id)) discoveredBy.set(id, []);
       discovered = discoveredBy.get(id); cand = null;
       if (book.open && book.mode === 'morph') renderBook();
@@ -1884,40 +1931,34 @@
       if (!(v >= 0)) return console.warn(`script.txt: bad value [view_damping:${s}], ignored`);
       camDamp = v;
     },
-    // put_hostile:[<n>:]<morphs>[:center|random|far][:<bullet>]: put n bots (default 1) into the
-    // world, each a morph picked at random from <morphs> (names, ',' between) of the current
+    // put_hostile:[<n>:]<morphs>[:center|random|far][:<bullet>]: put n bots (default 1)
+    // into the world, each a morph picked at random from <morphs> (names, ',' between) of the current
     // species (those it lacks are left out), placed as put_morph's (default random; center: the
     // first only, the rest random), never followed. Bots fire <bullet> (a bullet pattern, default
     // Scutium; one for all bots: the last [put_hostile]'s) now and then at the ship, in their own
     // bullets field: white, masking the G channel of whatever it hits, bots included (Hostile).
-    // What they split into or merge with stays hostile (trackBots); [clear_world] removes them.
+    // How they steer and fire: [hostile_behavior] (default all:auto: they drift and fire at the ship). What they split into or merge with stays hostile (trackBots); [clear_world]
+    // removes them.
     put_hostile: (...args) => {
       const n = /^\d+$/.test(args[0] ?? '') ? parseInt(args.shift(), 10) : 1;
-      let [ids = '', how = 'random', bullet = 'Scutium'] = args;
-      if (!PUT_HOW.includes(how)) {
-        if (args.length === 2 && Bullets.kindOf(how)) { bullet = how; how = 'random'; }   // [put_hostile:<morphs>:<bullet>]
-        else { console.warn(`script.txt: unknown option [put_hostile:...:${how}], using random`); how = 'random'; }
-      }
-      if (!Hostile.set(bullet)) { console.warn(`script.txt: unknown bullet [put_hostile:...:${bullet}], using Scutium`); Hostile.set('Scutium'); }
+      const [ids = '', ...rest] = args, o = hostileOptions('put_hostile', rest);
+      if (!Hostile.set(o.bullet)) { console.warn(`script.txt: unknown bullet [put_hostile:...:${o.bullet}], using Scutium`); Hostile.set('Scutium'); }
       const pool = morphIds([ids]).filter(id => findMorph(id));
       if (!pool.length) return console.warn(`script.txt: [put_hostile:${ids}]: none of these morphs is in the species`);
-      for (let k = 0; k < n; k++) putBot(pool[Math.floor(Math.random() * pool.length)], k > 0 && how === 'center' ? 'random' : creatureHow(how));
+      for (let k = 0; k < n; k++) putBot(pool[Math.floor(Math.random() * pool.length)], k > 0 && o.how === 'center' ? 'random' : creatureHow(o.how));
     },
-    // min_hostile:<n>[:<morphs>[:center|random|far]][:<bullet>]: keep at least n bots on the board, as
-    // [min_morph] keeps creatures: whenever there are fewer (bots dissolved, shot, or dropped), put in
-    // one more, as [put_hostile] (a morph picked at random from <morphs>, names with ',' between,
-    // default or all: the visible list; placed by how, default random; at most one every half game
-    // second), firing <bullet> (default Scutium; one for all bots, as [put_hostile]'s). n = 0 or off:
-    // stop. [clear_world] turns it off too.
+    // min_hostile:<n>[:<morphs>[:center|random|far]][:<bullet>]: keep at least n bots on
+    // the board, as [min_morph] keeps creatures: whenever there are fewer (bots dissolved, shot, or
+    // dropped), put in one more, as [put_hostile] (a morph picked at random from <morphs>, names with
+    // ',' between, default or all: the visible list; placed by how, default random; at most one every
+    // half game second), firing <bullet> (default Scutium; one for all bots, as [put_hostile]'s),
+    // steering as [hostile_behavior] says. n = 0 or off: stop. [clear_world]
+    // turns it off too.
     min_hostile: (n, ...args) => {
       const k = parseInt(n, 10);
       if (n === 'off' || k === 0) { minHostile = null; return; }
       if (!(k > 0)) return console.warn(`script.txt: bad value [min_hostile:${n}], ignored`);
-      let [ids = '', how = 'random', bullet = 'Scutium'] = args;
-      if (!PUT_HOW.includes(how)) {
-        if (args.length === 2 && Bullets.kindOf(how)) { bullet = how; how = 'random'; }   // [min_hostile:<n>:<morphs>:<bullet>]
-        else { console.warn(`script.txt: unknown option [min_hostile:...:${how}], using random`); how = 'random'; }
-      }
+      const [ids = '', ...rest] = args, o = hostileOptions('min_hostile', rest), { how, bullet } = o;
       if (!Hostile.set(bullet)) { console.warn(`script.txt: unknown bullet [min_hostile:...:${bullet}], using Scutium`); Hostile.set('Scutium'); }
       const ids2 = ids === 'all' || !ids ? [] : morphIds([ids]);
       if (ids2.length && !ids2.some(id => findMorph(id))) console.warn(`script.txt: [min_hostile:${n}:${ids}]: none of these morphs is in the species`);
@@ -2013,6 +2054,28 @@
       const v = [a, b, c].map((x, i) => x === undefined ? Object.values(FIRE_WAIT)[i] : parseFloat(x));
       if (!v.every(x => x >= 0) || v[1] < v[0]) return console.warn(`script.txt: bad value [bullet_wait:${[a, b, c].filter(x => x !== undefined).join(':')}], ignored`);
       fireWait = { min: v[0], max: v[1], first: v[2] };
+    },
+    // hostile_behavior:<morphs>:<behavior>: bots named as these (morphs of the current species, ','
+    // between; all: every bot; unknown: ??? ones) do <behavior>: none / off (nothing: they drift
+    // and never fire), auto (they drift and fire at the ship), or a behaviors.js one (steering and
+    // firing by the species' morph model; for a morph it doesn't cover: auto). all also clears
+    // the morphs' own. [hostile_behavior:<behavior>]: all. No arguments, or [species]: all:auto.
+    hostile_behavior: (ids, name) => {
+      if (ids === undefined) { botBehaviors.clear(); return; }
+      if (name === undefined) { name = ids; ids = 'all'; }
+      if (name === 'off') name = 'none';
+      const sp = C.speciesOf(C.pattern), tag = `[hostile_behavior:${ids}:${name}]`;
+      const beh = isBehavior(name) ? Behaviors.get(name) : null;
+      if (isBehavior(name)) {
+        if (!beh) return console.warn(`script.txt: unknown behavior ${tag} (known: none, auto, ${Behaviors.names().join(', ')})`);
+        if (!beh.species.includes(sp)) return console.warn(`script.txt: ${tag}: ${name} is not for species ${sp}, ignored`);
+        Models.load(sp);
+      }
+      for (const id of ids.split(',').map(x => x.trim()).filter(Boolean)) {
+        if (id === 'all') { botBehaviors.clear(); botBehaviors.set('all', name); continue; }
+        if (beh && !beh.morphs.includes(id)) { console.warn(`script.txt: ${tag}: ${name} is for ${beh.morphs.join(', ')} only, ${id} ignored`); continue; }
+        botBehaviors.set(id, name);
+      }
     },
     hostile_bullet_wait: (a, b, c) => {
       if (a === undefined) { botWait = { ...BOT_WAIT }; return; }
@@ -2663,8 +2726,21 @@
   function putBot(id, how) {
     C.selectMorph(findMorph(id).id);
     const at = C.putPattern(how, 'never');
-    bots.push({ col: at[0], row: at[1], radius: C.R, next: C.simSteps + Math.round(botWait.first * C.STEPS_PER_S) + botDelay(), seen: C.simSteps, live: true });
+    bots.push({ col: at[0], row: at[1], radius: C.R, next: C.simSteps + Math.round(botWait.first * C.STEPS_PER_S) + botDelay(), seen: C.simSteps, live: true,
+                ai: newAi() });
     botsFound = null;
+  }
+  // [put_hostile] / [min_hostile]'s options after the morphs, in any order: how (center, random,
+  // far), a bullet pattern
+  function hostileOptions(tag, rest) {
+    const o = { how: 'random', bullet: 'Scutium' };
+    for (const t of rest) {
+      if (!t) continue;
+      if (PUT_HOW.includes(t)) o.how = t;
+      else if (Bullets.kindOf(t)) o.bullet = t;
+      else console.warn(`script.txt: unknown option [${tag}:...:${t}], ignored`);
+    }
+    return o;
   }
   // ---- [min_hostile] ------------------------------------------------------------------------
   // Each frame: fewer bots than minHostile.n -> put one more in (as checkMinMorph, at most one every
@@ -2977,7 +3053,9 @@
         if (d <= Math.max(b.radius, r) + gap && d < bd) { best = b; bd = d; }
       }
       if (!best) return;
-      out.push({ col: c.col, row: c.row, radius: r, next: used.has(best) ? now + botDelay() : best.next, seen: now, live: true, k: i });   // a second half: its own timing
+      const half = used.has(best);   // a second half: its own timing and memory
+      out.push({ col: c.col, row: c.row, radius: r, next: half ? now + botDelay() : best.next, seen: now, live: true, k: i,
+                 ai: half ? newAi() : best.ai });
       used.add(best);
     });
     for (const b of bots) if (!used.has(b) && now - b.seen < BOT_GRACE * C.STEPS_PER_S) { b.live = false; out.push(b); }
@@ -3010,16 +3088,192 @@
     const now = C.simSteps, ship = C.ship();
     for (const o of hostileObjects()) {
       if (now < Math.min(...o.bots.map(b => b.next))) continue;
+      // a bot with a behavior, as one of its morphs: where it says; null: not now, the shot kept
+      // (ready) until it says
+      const hb = hostileBehavior(o.label);
+      if (hb === 'none') continue;   // (none: it never fires)
+      const bc = botContext(o), ang0 = bc ? bc.beh.aim(bc.ctx) : undefined;
+      if (ang0 === null || (isBehavior(hb) && !bc)) continue;   // (a behavior's, not ready to aim yet: no direct shot either)
       const next = now + botDelay();
       for (const b of o.bots) b.next = next;
+      if (bc) { Hostile.fire(o.col, o.row, o.reach, ang0); continue; }
       const ang = ship ? Math.atan2(C.wrapD(ship.row - o.row, C.BH), C.wrapD(ship.col - o.col, C.BW)) + (2 * Math.random() - 1) * BOT_SPREAD
                        : Math.random() * 2 * Math.PI;
       Hostile.fire(o.col, o.row, o.reach, ang);
     }
   }
+
+  // ---- bots steering by the morph model ([put_hostile:...:<behavior>], behaviors.js) -----------
+  // The behaviors by morph ([hostile_behavior], the species'; [species] clears them): every bot,
+  // while it is one creature named as a morph with a behavior (not ???, not a twin) and the
+  // species' model is loaded, decides now and then (behaviors.js decide), and
+  // holds the action it picks as the player would: a G mask (the model's disc) at a spot in its
+  // frame (its heading, as the model's), for the hold, drawn into the step as an extra mask
+  // (core opt.extraMasks). After an action it waits BOT_SETTLE game s (the name box catches up)
+  // before the next decision; with nothing to do, it looks again after BOT_LOOK.
+  const BOT_SETTLE = 2, BOT_LOOK = 0.5;
+  // Upward turns as the ship's morph model's frame (heading, or body axis for a still morph), as the
+  // lab's Model mode draws its action spots: they would stay put on screen
+  C.opt.upFrame = () => {
+    const sp = C.speciesOf(C.pattern);
+    Models.load(sp);
+    const b = Models.get(sp), det = C.focus ? C.shipDet() : null, m = b && det && det.name ? b.morphs[det.name] : null;
+    return !m ? null : m.lithos_type === 'dihedral' ? 'long' : m.lithos_type ? 'board' : m.frame;   // (a lithos-type: its spots' frame)
+  };
+  const botBehaviors = new Map();   // morph name, 'unknown' or 'all' -> 'none' / 'auto' / a behavior name ([hostile_behavior]; none set: all auto)
+  // What a bot named label (null: ???) does: 'none', 'auto' or a behavior. While the settings are on,
+  // their Hostile Behavior: a model one (Balanced, Aggressive) as [hostile_behavior:all:off] then
+  // that one for the morphs it covers (an intelligent bot: no direct shots). Else the script's
+  // [hostile_behavior] for its name (unknown: ???), else for all, else auto; a model behavior for a
+  // morph it doesn't cover (all:balanced): auto.
+  const covers = (name, label) => { const beh = Behaviors.get(name); return !!(beh && label && beh.morphs.includes(label) && beh.species.includes(C.speciesOf(C.pattern))); };
+  function hostileBehavior(label) {
+    if (settingsOn) return !isBehavior(hostileMode) ? hostileMode : covers(hostileMode, label) ? hostileMode : 'none';
+    const b = botBehaviors.get(label || 'unknown') ?? botBehaviors.get('all') ?? 'auto';
+    return isBehavior(b) && !covers(b, label) ? 'auto' : b;
+  }
+  const newAi = () => ({ act: null, next: 0, sg: 1, mem: {} });
+  // the core track (heading, turn rate) of the creature at a bot's place
+  const trackAt = (col, row) => C.tracks.find(t => Math.abs(C.wrapD(t.col - col, C.BW)) < 0.5 && Math.abs(C.wrapD(t.row - row, C.BH)) < 0.5) || null;
+  // The behavior a creature named `label` follows now, or null: as a bot, the settings book's
+  // Hostile Behavior while the settings are on (Balanced, Aggressive: behaviors.js's, if it covers the
+  // morph), else the script's [hostile_behavior]; as the player's ship (player), the settings'
+  // Player Behavior (Balanced, Aggressive). Only one for the current species.
+  function behaviorFor(label, player = false) {
+    const sp = C.speciesOf(C.pattern);
+    let name = null;
+    if (player) name = settingsOn && isBehavior(playerMode) ? playerMode : null;
+    else { name = hostileBehavior(label); if (!isBehavior(name)) name = null; }
+    const beh = name && Behaviors.get(name);
+    return beh && beh.morphs.includes(label) && beh.species.includes(sp) ? beh : null;
+  }
+  // What a behavior decides from (behaviors.js ctx), for a creature named name with motion kin at
+  // (col, row), its memory ai, going for target ({ col, row, vel } or null)
+  function behaviorCtx(book, name, ai, kin, col, row, target) {
+    ai.sg = Models.sign(kin.omega, ai.sg);
+    const dx = target ? C.wrapD(target.col - col, C.BW) : 0, dy = target ? C.wrapD(target.row - row, C.BH) : 0;
+    // rel(t): the target's place from the creature's t time units ahead, both going on as now (velocities)
+    const tv = target ? target.vel : [0, 0], v = kin.vel;
+    const rel = t => [dx + (tv[0] - v[0]) * t, dy + (tv[1] - v[1]) * t];
+    // an oscillator, chaotic or short-lived morph whose phase matters (the model's phase_useful): its
+    // recent turn rates and speeds (as named this morph), its phase from them, its actions as they
+    // work in it (m); mAll: its actions in every phase (behaviors.js waits for one)
+    const mAll = book.morphs[name], tn = C.simSteps * C.dt;
+    if (ai.histName !== name) { ai.hist = []; ai.histName = name; }
+    if (mAll.phase_useful && (!ai.hist.length || tn > ai.hist[ai.hist.length - 1][0])) {
+      ai.hist.push([tn, kin.omega, kin.speed / C.R]);
+      if (mAll.phase_kind !== 'age') while (ai.hist[0][0] < tn - 2 * (mAll.swing_period || 30) * C.dt) ai.hist.shift();
+    }
+    const m = mAll.phase_useful ? Models.phased(mAll, Models.swingBin(mAll, ai.hist, C.dt)) : mAll;
+    // a dihedral lithos-type: its long axis (its pushes are by their angle to it), measured round it
+    if (mAll.lithos_type === 'dihedral') ai.longAxis = C.longAxisAt(col, row, 2 * C.R, ai.longAxis ?? null);
+    return { book, name, m, mAll, longAxis: ai.longAxis ?? null, sg: mAll.chirality ? ai.sg : 0, heading: kin.slowHeading,
+             omega: kin.omega, moveAng: kin.speed >= C.SPEED_MIN ? kin.velAng : null, dist: target ? Math.hypot(dx, dy) : Infinity,
+             bearing: Math.atan2(dy, dx), rel: target ? rel : null, dt: C.dt, tu: C.STEPS_PER_S * C.dt, R: C.R, now: C.simSteps / C.STEPS_PER_S, mem: ai.mem };
+  }
+  // the species' model, loading it if not yet (null until loaded)
+  const modelNow = () => { const sp = C.speciesOf(C.pattern), b = Models.get(sp); if (b === undefined && !Models.get(sp)) Models.load(sp); return b || null; };
+  // { beh, b, tr, ctx } for a hostile object that steers by a behavior now, or null (its target: the ship)
+  function botContext(o) {
+    if (o.parts.length !== 1 || o.bots.length !== 1) return null;
+    const b = o.bots[0], beh = o.label ? behaviorFor(o.label) : null;
+    if (!beh) return null;
+    const book = modelNow(), tr = trackAt(o.col, o.row);
+    if (!book || !book.morphs[o.label] || !tr || tr.kin.slowHeading === null) return null;
+    const ship = shipLost() ? null : C.ship();   // (dissolved: no opponent, it calms down: behaviors.js)
+    const ctx = behaviorCtx(book, o.label, b.ai, tr.kin, o.col, o.row, ship ? { col: ship.col, row: ship.row, vel: ship.kin.vel } : null);
+    return { beh, b, tr, ctx };
+  }
+  // { beh, ctx } for the player's ship on autopilot now (Player Behavior: Balanced or Aggressive, the ship one creature
+  // named as a morph it covers), or null; its target: shipTarget's (with its track's velocity)
+  const playerAi = newAi();
+  function playerContext() {
+    const ship = C.ship(), det = ship && !ship.whole ? C.shipDet() : null, name = det && det.name && !det.fuzzy ? det.name : null;
+    const beh = name ? behaviorFor(name, true) : null;
+    if (!beh) return null;
+    const book = modelNow();
+    if (!book || !book.morphs[name] || ship.kin.slowHeading === null) return null;
+    const t = nearestHostile(ship), tr = t && (t.whole || trackAt(t.col, t.row));   // (none left: no opponent, it rests)
+    const target = t ? { col: t.col, row: t.row, vel: tr ? tr.kin.vel : [0, 0] } : null;
+    return { beh, ctx: behaviorCtx(book, name, playerAi, ship.kin, ship.col, ship.row, target) };
+  }
+  // Each frame: the autopilot, not busy, decides, and holds its action as the player's own tool (core
+  // pressFor: the mask drawn as the player's); waits as a bot does (not under a book, a card or a fade)
+  function playerSteer() {
+    if (!settingsOn || !isBehavior(playerMode) || C.auto || shipLost() || book.open || chapterShowing() || speciesFading || resetting || challenge.failed) return;
+    const now = C.simSteps;
+    if (now < playerAi.next) return;
+    const pc = playerContext();
+    if (!pc) { playerAi.next = now + Math.round(BOT_LOOK * C.STEPS_PER_S); return; }
+    const a = pc.beh.decide(pc.ctx);
+    if (a === Behaviors.WAIT) { playerAi.next = now + 2; return; }   // (its action's phase not yet: look again soon)
+    if (!a) { playerAi.next = now + Math.round(BOT_LOOK * C.STEPS_PER_S); return; }
+    C.pressFor({ fs: a.fs, frame: a.frame || 'vel', steps: a.e.hold, ch: C.CH_NAMES.indexOf(a.e.ch), r: pc.ctx.book.mask_r });
+    playerAi.next = now + a.e.hold + Math.round(BOT_SETTLE * C.STEPS_PER_S);
+  }
+  // Each frame: the bots not busy decide (not under a card, in a species fade, or after a failure)
+  function botsSteer() {   // (after a failure too: with the ship gone they calm down; they don't fire)
+    if (!bots.length || chapterShowing() || speciesFading) return;
+    const now = C.simSteps;
+    for (const o of hostileObjects()) {
+      const bc = botContext(o);
+      if (!bc || bc.b.ai.act || now < bc.b.ai.next) continue;
+      const { b, tr, ctx } = bc, a = bc.beh.decide(ctx);
+      if (a === Behaviors.WAIT) { b.ai.next = now + 2; continue; }   // (its action's phase not yet: look again soon)
+      if (!a) { b.ai.next = now + Math.round(BOT_LOOK * C.STEPS_PER_S); continue; }
+      b.ai.act = { fs: a.fs, left: a.e.hold, ch: C.CH_NAMES.indexOf(a.e.ch), r: ctx.book.mask_r, tr, what: a, frame: a.frame || 'vel' };
+      b.ai.next = now + a.e.hold + Math.round(BOT_SETTLE * C.STEPS_PER_S);
+    }
+  }
+  // Each bot's action while it holds it (so the player sees it decide): its mask disc, as the player's
+  // held one (dashed in the channel's colour, filled)
+  const botActMarks = () => {
+    const out = [];
+    for (const b of bots) {
+      const act = b.ai && b.ai.act;
+      if (!act || !C.tracks.includes(act.tr) || act.tr.kin.slowHeading === null) continue;
+      const h = act.frame === 'board' ? 0 : act.tr.kin.slowHeading, c = Math.cos(h), s = Math.sin(h);   // (a push: the board's frame)
+      out.push({ col: act.tr.col + act.fs[0] * c - act.fs[1] * s, row: act.tr.row + act.fs[0] * s + act.fs[1] * c, r: act.r,
+                 color: C.CH_COLORS[act.ch], dash: [4, 3], fill: C.CH_FILLS[act.ch] });
+    }
+    return out;
+  };
+  // The masks the bots hold for the next n steps (core opt.extraMasks), each at its spot in the
+  // bot's frame now (the heading of its track; the bot's place, as last found)
+  C.opt.extraMasks = n => {
+    let out = null;
+    for (const b of bots) {
+      const act = b.ai && b.ai.act;
+      if (!act) continue;
+      if (!b.live || !C.tracks.includes(act.tr) || act.tr.kin.slowHeading === null) { b.ai.act = null; continue; }   // lost: dropped
+      const h = act.frame === 'board' ? 0 : act.tr.kin.slowHeading, c = Math.cos(h), s = Math.sin(h);
+      (out || (out = [])).push({ col: act.tr.col + act.fs[0] * c - act.fs[1] * s, row: act.tr.row + act.fs[0] * s + act.fs[1] * c, r: act.r, ch: act.ch });
+      act.left -= n;
+      if (act.left <= 0) b.ai.act = null;
+    }
+    return out;
+  };
   // a red circle round each hostile object, its morph's name above it (??? if unknown)
   // (its name in white; an unknown morph: none)
-  const botMarks = () => hostileObjects().map(o => ({ col: o.col, row: o.row, r: o.radius + 2, color: BOT_COLOR, label: o.label || null, labelColor: '#fff' }));
+  // (steering by a behavior: its mode's face before the name, MODE_FACE)
+  const botMarks = () => hostileObjects().map(o => ({ col: o.col, row: o.row, r: o.radius + 2, color: BOT_COLOR, labelColor: '#fff',
+                                                      label: o.label || null, pre: o.label ? face(botMode(o)) : null }));
+  // a behavior's mode as a face before a name: attack angry, turn and escape worried, rest asleep
+  const MODE_FACE = { attack: '\u{1F621}', turn: '\u{1F630}', escape: '\u{1F630}', rest: '\u{1F634}' };
+  const face = mode => (mode && MODE_FACE[mode]) || null;   // (drawn upright before the italic name: core marks' pre)
+  // the autopilot (Player Behavior: Balanced or Aggressive), while it drives: the ship's morph name
+  // with its mode's face above its yellow circle, as the bots' (an unseen circle as big as it)
+  function playerModeMarks() {
+    const pc = settingsOn && isBehavior(playerMode) && C.found ? playerContext() : null;
+    if (!pc) return [];
+    const sh = C.ship();   // (its circle: the ship's place and radius, as core's)
+    return [{ col: sh.col, row: sh.row, r: sh.radius, color: 'rgba(0,0,0,0)', labelColor: '#fff', label: pc.ctx.name, pre: face(playerAi.mem.mode) }];
+  }
+  // a hostile object's behavior mode while it steers by one (before its first decision: none), else null
+  function botMode(o) {
+    const bc = botContext(o);
+    return bc ? bc.b.ai.mem.mode || null : null;
+  }
   C.opt.detectNear = () => bots.map(b => [b.col, b.row]);   // the bots' morphs are named (Detect: Focused names the ship's only)
 
   // ---- groups ([min_morph:<n>:<morph>=<k>], [put_morph:<morph>=<k>], [put_player:<morph>=<k>]) --
@@ -3267,7 +3521,7 @@
     syncToolNames();
     Field.tick();
     autospawnFrame();
-    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsFire(); autofireFrame(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === (lostPanel() || flashing('reset'))) syncButtons();
+    scrollFrame(); centerFrame(); Dots.frame(); Bullets.frame(); Hostile.frame(); trackBots(); botsSteer(); botsFire(); playerSteer(); autofireFrame(); checkMinMorph(); checkMinHostile(); checkDiscovery(); challengeFrame(); checkScript(); if ($('reset').hidden === (lostPanel() || flashing('reset'))) syncButtons();
     const sh = C.ship(); if (sh) lastShip = [sh.col, sh.row, C.viewAngle()];
     devRecFrame(hookT0); };
 

@@ -67,6 +67,8 @@ const Core = (function () {
   const OMEGA_TAU = 5;           // turn-rate smoothing, unit time
   const JUMP_MAX = Math.PI / 4;  // heading residuals are capped at this (detection jumps)
   const LAG_MAX = Math.PI / 3;   // cap on the turn-lag correction (60 degrees)
+  const DRIFT_TAU = 20;          // still or not, for Upward: v averaged as a vector over this (unit time)
+  const UP_RATE = 0.5;           // heading up: turns at most this fast (rad per unit time, ~430 deg/s) to a new frame
   const ARROW_T = 12;            // arrow = displacement over this much time, at zoom scale
 
   // Creatures (creatures.js): basins of the potential K * A above 0.05, merged across saddles
@@ -178,11 +180,28 @@ const Core = (function () {
                 // zoomDrag(off, e): the pointer of a press zoomPress took moves (off as zoomPress's)
                 zoomDrag: () => {},
                 drawGhost: () => false,
+                // drawShip(ctx, centre, cellPx, phi, ship): the page's own drawing over the ship view
+                // (clipped to it; centre: the ship's CoM in canvas px; phi: viewAngle), under the tool
+                // circle and the velocity arrow (the lab's Model mode)
+                drawShip: () => {},
+                // extraMasks(n): more cognitive masks for the next n steps, [{ col, row, r, ch }] (board
+                // cells; the game's bots steering by the morph model, bots.js), at most 8, apart
+                extraMasks: () => null,
+                // wantAxis: keep the focus's body axis (kin.axisHeading) measured, also outside the
+                // body-axis view (the lab's Model mode, for still morphs)
+                wantAxis: () => false,
+                // upFrame: the frame of the ship's morph model ('vel' / 'axis', null: none): Heading up
+                // then turns with it exactly, so the model's action spots stay put on screen
+                upFrame: () => null,
+                // wantLongAxis: keep the focus's long axis (kin.longAxis: the direction its mass is
+                // longest along, a dihedral lithos-type's frame 'long') measured
+                wantLongAxis: () => false,
                 // marks: the page's areas in the world, [{ col, row, w, h, color, dash }]: a rectangle
                 // (board-aligned, w x h cells, centred on cell col, row) outlined in both views, the
                 // world view's copies wrapping round its edges, the ship view's turned with the view;
-                // or { col, row, r, color, dash, label, labelColor }: a circle of radius r cells, label (if any)
-                // above it, as the lab's names
+                // or { col, row, r, color, dash, label, labelColor, pre, under, fill }: a circle of radius r cells,
+                // label (if any) above it, as the lab's names (pre: upright text before it, e.g. an emoji), under (if any) a smaller line below it, fill
+                // (if any) its inside's colour
                 marks: () => [],
                 // viewShift: the world view's top-left board cell [col, row] (the game's scrolling world
                 // follows the ship), or null: [0, 0]
@@ -241,6 +260,8 @@ const Core = (function () {
   //   axis: heading = the B->G body axis (stable at any speed, but not the travel direction:
   //         ~56 degrees off for the circling gyrans form, a few degrees of wobble for the Aquarium).
   // 'axis' (body axis up) is kept only for ?headup=axis; the button toggles board / heading up.
+  // Heading up ('vel') is the morph models' frame: the heading while the ship moves, its body axis
+  // while it is still (a spinning or still morph: antigyrans, lithos), see kin.up.
   const VIEW_LABELS = { board: 'View: board up', vel: 'View: heading up', axis: 'View: body axis up' };
   let viewMode = { '1': 'vel', vel: 'vel', axis: 'axis' }[q.get('headup')] || 'board';
 
@@ -257,6 +278,9 @@ const Core = (function () {
   let kin = null;
   let lastPtr = null;   // the mouse's last canvas point (null: off the canvas; syncCursor)
   let masking = null;        // { id, view: [x, y] } while the pointer holds a tool
+  // A press made for the player (the lab's Model mode: pressFor): a mask held at a spot in the
+  // ship's frame for a number of steps, as if the player held it there. While it runs, it is the tool.
+  let auto = null;           // { fs: [fwd, side] cells, frame: 'vel' | 'axis', left, steps, ch, r, action }
   let hover = null;          // [x, y] view offset of a mouse hovering over the ship view
   let msPerStep = 0, msRead = 0, msCpu = 0;   // (?debug=1) a step's GPU time; analysis: the blocks' readback, the CPU's part
   // The last frame's times, ms (game.js's dev recorder: prof.on): steps run; the step loop, and in it
@@ -276,7 +300,8 @@ const Core = (function () {
   // predict the focus position. slowHeading: the heading-up view's angle. omega: turn rate
   // (rad per unit time). age: time measured since the focus was set. See updateKinematics.
   const newKinematics = () => ({ vel: [0, 0], speed: 0, velAng: 0, fast: [0, 0], fastAng: null, omega: 0, omegaAge: 0,
-                                 slowHeading: null, age: 0, moving: false, heading: null, axisHeading: null });
+                                 slowHeading: null, age: 0, moving: false, heading: null, axisHeading: null, longAxis: null, up: null,
+                                 drift: [0, 0], still: false });
   function resetKinematics() { kin = newKinematics(); }
 
   // ---- helpers --------------------------------------------------------------------------
@@ -285,8 +310,10 @@ const Core = (function () {
 
   // Rotation taking view (right, down) to board (col, row). Heading-up puts heading at "up".
   function viewAngle() {
-    const sw = shipWhole(), k = sw ? sw.kin : kin;   // a twin ship: its heading (no axis of its own)
-    const h = viewMode === 'vel' || (viewMode === 'axis' && sw) ? k.heading : viewMode === 'axis' ? kin.axisHeading : null;
+    // a whole ship (a twin, or a morph of several parts): its heading; its body axis is the focus
+    // part's (as the models' frame, frameAngle)
+    const sw = shipWhole(), k = sw ? sw.kin : kin;
+    const h = viewMode === 'vel' ? kin.up ?? k.heading : viewMode === 'axis' ? kin.axisHeading ?? k.heading : null;
     return h === null ? 0 : h + Math.PI / 2;
   }
   function rot(v, phi = viewAngle()) {
@@ -297,8 +324,50 @@ const Core = (function () {
 
   // The tool circle's offset from the focus CoM (board frame), or null if no tool is held.
   function toolOffset() {
+    if (auto && focus) return frameOffset(auto.fs, auto.frame, auto.angle0);
     if (!masking || !focus) return null;
     return rot(masking.view);
+  }
+  // The direction the mass round (col, row) is longest along (its principal axis, within half a
+  // window of `half` cells; tools/models.py long_axis), rad; kept on the end nearer `prev` (either
+  // end will do); prev if nothing there
+  function longAxisAt(col, row, half, prev = null) {
+    const n = Math.min(128, 2 * Math.ceil(half)), w = SimGL.readWindow(col, row, n);
+    let s = 0, mx = 0, my = 0;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) { const v = w[r * n + c]; s += v; mx += v * c; my += v * r; }
+    if (!(s > 0)) return prev;
+    mx /= s; my /= s;
+    let ixx = 0, iyy = 0, ixy = 0;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) { const v = w[r * n + c], dx = c - mx, dy = r - my; ixx += v * dx * dx; iyy += v * dy * dy; ixy += v * dx * dy; }
+    let a = 0.5 * Math.atan2(2 * ixy, ixx - iyy);
+    if (prev !== null) { const d = a - prev; if (Math.abs(d - 2 * Math.PI * Math.round(d / (2 * Math.PI))) > Math.PI / 2) a += Math.PI; }
+    return a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+  }
+  // The ship's frame (the morph models' frame, tools/models.py): 'vel' its heading (as Heading up
+  // shows it), 'axis' its body axis (B's CoM to G's; opt.wantAxis keeps it measured); the board
+  // angle, or null if not known yet
+  function frameAngle(frame) {
+    const sh = ship();
+    if (!sh) return null;
+    return frame === 'board' ? 0 : frame === 'long' ? kin.longAxis : frame === 'axis' ? kin.axisHeading : sh.kin.heading;   // (board: a push, fixed on the board; long: a dihedral lithos's long axis)
+  }
+  // [fwd, side] cells in that frame (+ side: to the right as seen) -> a board offset
+  function frameOffset(fs, frame, angle = null) {   // (angle: the frame's, kept from a hold's start)
+    const a = angle ?? frameAngle(frame) ?? 0, c = Math.cos(a), s = Math.sin(a);
+    return [fs[0] * c - fs[1] * s, fs[0] * s + fs[1] * c];
+  }
+  // The selected tool, or the press made for the player while it runs
+  const tool = () => auto ? { ch: auto.ch, r: auto.r, action: auto.action } : { ch: channel, r: maskR, action };
+  // Hold a tool at [fwd, side] cells in the ship's frame for steps steps (counted as they run),
+  // as the player would; null stops it. done() is called when it ends (or is stopped).
+  function pressFor(p) {
+    if (auto && auto.done) auto.done();
+    auto = p ? { action: 0, r: maskR, ...p, left: p.steps } : null;
+    // a still morph's spot (the body-axis frame) stays where it was when the hold began, as the morph
+    // models' sweeps hold it (a spinner turns under it): the frame's angle now, kept
+    if (auto && (auto.frame === 'axis' || auto.frame === 'long')) auto.angle0 = frameAngle(auto.frame);
+    masking = null;
+    hooks.change();
   }
 
   // ---- species and morphs ---------------------------------------------------------------
@@ -312,13 +381,30 @@ const Core = (function () {
   // Picker order, as sandbox.txt lists them; others go last
   const SPECIES_ORDER = ['5N7KKM', 'GDNQYX', 'VT049W', 'Z18A9R', 'PJ1EF7', 'XEH4YR', 'KZ2BLD', 'KH97WU', 'HAESRE',
     'HGMLH8', 'G6G6CR'];
+  // Each species' morphs as sandbox.txt's (and challenge.txt's) [add_allow_species] lists them, the
+  // ones the game detects: the picker's order within a species (others last); the morph graph dims
+  // the others (lab)
+  const ALLOWED_MORPHS = {
+    '5N7KKM': ['limus', 'gyrans', 'tardus', 'lithos', 'paragyrans', 'paratardus', 'paralithos', 'circumgyrans'],
+    'GDNQYX': ['rectus', 'gyrans', 'tardus', 'lithos', 'paragyrans', 'antigyrans', 'pararectus', 'rectogyrans'],
+    'VT049W': ['rectus', 'gyrans', 'tachus', 'lithos', 'paragyrans', 'pararectus', 'rectogyrans', 'sequerectus'],
+    'Z18A9R': ['gyrans', 'tardus', 'lithos', 'paragyrans', 'antigyrans', 'transgyrans', 'trigyrans', 'trias'],
+    'PJ1EF7': ['rectus', 'tachus', 'lithos'],
+    'XEH4YR': ['rectus', 'tachus', 'cor'],
+    'KZ2BLD': ['rectus', 'limus', 'virgatus'],
+    'KH97WU': ['limus', 'gyrans', 'impetus', 'antigyrans'],
+    'HAESRE': ['zigzag', 'lithos', 'antigyrans', 'paragyrans', 'circumgyrans'],
+    'HGMLH8': ['metamorpha', 'paratardus', 'paratachus', 'tachotardus'],
+    'G6G6CR': ['rectus', 'limus', 'tardus', 'lithos', 'munitus'] };
+  const allowedMorphs = code => ALLOWED_MORPHS[code] || null;
   const speciesName = p => p.logic === 'legacy' ? p.name : `${SPECIES_NAMES[p.rule] || p.rule} (${p.rule})`;
   const morphName = p => p.logic === 'legacy' ? 'rectus' : p.name.replace(p.rule + ' ', '');
   const BOOM = / \u{1F4A5}$/u;   // the self-replicating morphs' emoji: shown in the picker, not recorded
   const listed = () => {   // hidden: only via ?form=
     const l = PATTERNS.filter(p => !p.hidden || p === pattern);
     const rank = p => { const i = SPECIES_ORDER.indexOf(p.rule); return i < 0 ? SPECIES_ORDER.length : i; };
-    return l.sort((a, b) => rank(a) - rank(b));   // stable: morphs keep their order within a species
+    const mRank = p => { const al = ALLOWED_MORPHS[p.rule], i = al ? al.indexOf(morphName(p).replace(BOOM, '')) : -1; return i < 0 ? 99 : i; };
+    return l.sort((a, b) => rank(a) - rank(b) || mRank(a) - mRank(b));   // stable: the others keep their order, last
   };
   const morphs = () => listed().filter(p => speciesOf(p) === speciesOf(pattern));
   // A new morph of the same species only changes what Add puts in; the world is kept.
@@ -412,7 +498,7 @@ const Core = (function () {
     SimGL.seed({ w: 0, h: 0, cells: [[], [], []] }, 0, 0);
     stopRecord();
     steps = 0; spawnMass = null; status = 'alive'; stepAcc = 0;
-    focus = null; focusIdx = -1; autoFocus = true; masking = null;
+    focus = null; focusIdx = -1; autoFocus = true; masking = null; if (auto) pressFor(null);
     resetKinematics(); tracks = []; wholeTracks = []; stats.short.clear();
     hooks.change();
   }
@@ -421,17 +507,19 @@ const Core = (function () {
   // since the focus CoM is only measured once per frame.
   function advance(n) {
     const t0 = timing() ? performance.now() : 0;
-    const off = toolOffset();
+    const off = toolOffset(), tl = tool(), extra = opt.extraMasks(n);
     for (let i = 0; i < n; i++) {
-      let tool = null;
-      if (off) {
+      let t = null;
+      if (off && (!auto || auto.left > 0)) {
         const sh = ship();
         const col = sh.col + sh.kin.vel[0] * dt * i + off[0];
         const row = sh.row + sh.kin.vel[1] * dt * i + off[1];
-        tool = { col, row, r: maskR, ch: channel, action };
+        t = { col, row, r: tl.r, ch: tl.ch, action: tl.action };
+        if (auto) auto.left--;
       }
-      SimGL.step(tool);
+      SimGL.step(t, extra);
     }
+    if (auto && auto.left <= 0) pressFor(null);
     steps += n; simSteps += n;
     if (timing()) { SimGL.finish(); const ms = performance.now() - t0; prof.gpu += ms; msPerStep = 0.9 * msPerStep + 0.1 * ms / n; }
   }
@@ -464,7 +552,7 @@ const Core = (function () {
       const pc = focus.col + kin.vel[0] * T, pr = focus.row + kin.vel[1] * T;
       const i = Creatures.pick(found, pc, pr, TRACK_GATE, SimGL.BW, SimGL.BH, SimGL.BLOCK, BW, BH);
       focusIdx = i;
-      if (i < 0) { focus = null; resetKinematics(); masking = null; stopRecord(); }
+      if (i < 0) { focus = null; resetKinematics(); masking = null; if (auto) pressFor(null); stopRecord(); }
       else {
         const c = found.comps[i];
         if (T > 0) updateKinematics([wrapD(c.col - focus.col, BW) / T, wrapD(c.row - focus.row, BH) / T], T);
@@ -480,7 +568,7 @@ const Core = (function () {
 
     // 'axis' heading: from the B channel's CoM to the G channel's within the focus (G leads B
     // by ~5 cells in the Aquarium). Falls back to the velocity heading if the axis is lost.
-    if (viewMode === 'axis') {
+    if (viewMode !== 'board' || opt.wantAxis() || opt.upFrame() === 'axis') {
       const c = SimGL.readChannelComs(focus.col, focus.row, 2 * focus.radius + 4);
       const g = { row: c[4], col: c[5], m: c[6] }, b = { row: c[8], col: c[9], m: c[10] };
       const ax = [wrapD(g.col - b.col, BW), wrapD(g.row - b.row, BH)];
@@ -488,6 +576,28 @@ const Core = (function () {
                     g.m > 0.05 * focus.mass && b.m > 0.05 * focus.mass;
       if (valid) kin.axisHeading = Math.atan2(ax[1], ax[0]);
       else if (kin.axisHeading === null || kin.moving) kin.axisHeading = kin.heading;
+    }
+
+    // 'long' heading: the direction the focus's mass is longest along (its principal axis, from a
+    // window read back round it), either end, kept on the end nearer the last (a dihedral lithos-type)
+    if (opt.wantLongAxis() || opt.upFrame() === 'long') {
+      const sh = ship();   // (the ship: a twin's whole, e.g. paralithos)
+      kin.longAxis = longAxisAt(sh.col, sh.row, sh.radius + 6, kin.longAxis);
+    }
+
+    // Heading up's angle (kin.up): the models' frame, the heading while the ship moves, its body
+    // axis while still (kin.still: slow on a long average) (none, e.g. one channel: the heading). Turning at most UP_RATE, so a change
+    // of frame (gyrans -> lithos) is a quick turn, not a jump; a spinning still morph is followed.
+    if (viewMode === 'vel') {
+      const sw = shipWhole(), k = sw ? sw.kin : kin;   // (a whole's motion: its own; its axis: the focus part's)
+      const fr = opt.upFrame(), fa = fr ? frameAngle(fr) : null;   // (the model's frame, as its action spots)
+      const want = fa !== null ? fa : k.still && kin.axisHeading !== null ? kin.axisHeading : k.heading;
+      if (want === null) {}
+      else if (kin.up == null) kin.up = want;   // (also a track's kinematics, taken over by the focus)
+      else if (T > 0) {
+        const wrap = a => a - 2 * Math.PI * Math.round(a / (2 * Math.PI)), m = UP_RATE * T;
+        kin.up = wrap(kin.up + Math.max(-m, Math.min(m, wrap(want - kin.up))));
+      }
     }
 
     if (n > 0) recordStats();
@@ -781,6 +891,15 @@ const Core = (function () {
     if (k.speed > SPEED_HI) k.moving = true;
     else if (k.speed < SPEED_MIN) k.moving = false;
 
+    // still (Upward's body axis): v averaged as a vector over DRIFT_TAU is slow. Unlike the
+    // arrow's speed, the wobble of a morph spinning in place (antigyrans, lithos) averages out.
+    if (!k.drift) { k.drift = [0, 0]; k.still = false; }   // (a track's kinematics)
+    const ad = ease(DRIFT_TAU);
+    k.drift = [k.drift[0] + ad * (v[0] - k.drift[0]), k.drift[1] + ad * (v[1] - k.drift[1])];
+    const ds = Math.hypot(k.drift[0], k.drift[1]);
+    if (ds < SPEED_MIN) k.still = true;
+    else if (ds > SPEED_HI) k.still = false;
+
     // heading-up: predict by the turn rate, then pull (capped) towards v's direction
     const ang = Math.hypot(v[0], v[1]) > SPEED_MIN / 2 ? Math.atan2(v[1], v[0]) : null;
     if (k.slowHeading === null) k.slowHeading = ang;
@@ -794,7 +913,7 @@ const Core = (function () {
   }
 
   function setFocus(i) {
-    masking = null;
+    masking = null; if (auto) pressFor(null);
     md.dirty = true;   // re-detect the new focus's morph, even while paused
     if (tracking() && focus && i === focusIdx) return;   // the same creature again: keep its line
     stopRecord();   // a recording is of one creature: a new focus ends it (kept)
@@ -1250,18 +1369,32 @@ const Core = (function () {
     for (const mk of opt.marks()) {
       if (mk.r) {   // a circle, its label above it (as the lab's names), in both views
         const label = (x, y, r, px) => {
-          if (!mk.label) return;
           ctx.setLineDash([]);
-          ctx.font = ital() + `600 ${px}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(mk.label, x, y - r - 2);
-          ctx.fillStyle = mk.labelColor || mk.color; ctx.fillText(mk.label, x, y - r - 2);
+          if (mk.label) {
+            const upright = `600 ${px}px system-ui, sans-serif`, font = ital() + upright;
+            const pre = mk.pre ? mk.pre + ' ' : '';
+            ctx.font = upright; const pw = pre ? ctx.measureText(pre).width : 0;
+            ctx.font = font; const lw = ctx.measureText(mk.label).width;
+            const x0 = x - (pw + lw) / 2, yb = y - r - 2;   // the whole line centred
+            ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+            ctx.fillStyle = mk.labelColor || mk.color;
+            if (pre) { ctx.font = upright; ctx.strokeText(pre, x0, yb); ctx.fillText(pre, x0, yb); }
+            ctx.font = font; ctx.strokeText(mk.label, x0 + pw, yb); ctx.fillText(mk.label, x0 + pw, yb);
+          }
+          if (mk.under) {
+            ctx.font = `${Math.round(px * 0.8)}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.strokeText(mk.under, x, y + r + 2);
+            ctx.fillStyle = mk.labelColor || mk.color; ctx.fillText(mk.under, x, y + r + 2);
+          }
         };
         ctx.save();
         worldClip();
         const rw = Math.max(3, mk.r * WS);
         for (const [x, y] of wrapCopies(wxp(mk.col), wyp(mk.row), rw + 20)) {
           ctx.strokeStyle = mk.color; ctx.lineWidth = 2; ctx.setLineDash(mk.dash || []);
-          ctx.beginPath(); ctx.arc(x, y, rw, 0, 2 * Math.PI); ctx.stroke();
+          ctx.beginPath(); ctx.arc(x, y, rw, 0, 2 * Math.PI);
+          if (mk.fill) { ctx.fillStyle = mk.fill; ctx.fill(); }
+          ctx.stroke();
           label(x, y, rw, 14);
         }
         ctx.restore();
@@ -1271,7 +1404,9 @@ const Core = (function () {
         ctx.save();
         ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
         ctx.strokeStyle = mk.color; ctx.lineWidth = 2.5; ctx.setLineDash((mk.dash || []).map(d => d * 2));
-        ctx.beginPath(); ctx.arc(x, y, rz, 0, 2 * Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, rz, 0, 2 * Math.PI);
+        if (mk.fill) { ctx.fillStyle = mk.fill; ctx.fill(); }
+        ctx.stroke();
         label(x, y, rz, 18);
         ctx.restore();
         continue;
@@ -1323,12 +1458,12 @@ const Core = (function () {
 
     // tool outline, in both views (dashed = mask, solid = erase, dotted = draw)
     // (in the world view only, wrapping round its edges)
-    const off = toolOffset();
+    const off = toolOffset(), tl = tool();
     if (off) {
       ctx.save();
       worldClip();
-      ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2; ctx.setLineDash(ACTION_DASH[action].map(x => x * 2 / 3));
-      const r = Math.max(2, maskR * WS);
+      ctx.strokeStyle = CH_COLORS[tl.ch]; ctx.lineWidth = 2; ctx.setLineDash(ACTION_DASH[tl.action].map(x => x * 2 / 3));
+      const r = Math.max(2, tl.r * WS);
       for (const [x, y] of wrapCopies(wxp(sh.col + off[0]), wyp(sh.row + off[1]), r)) {
         ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.stroke();
       }
@@ -1343,9 +1478,16 @@ const Core = (function () {
       ctx.restore();
     }
     // ship view: the tool circle follows the pointer while it hovers, filled while pressed
-    const ring = masking ? masking.view : hover;
+    const held = masking || (auto && focus);   // pressed: the player's, or the press made for them
+    const ring = auto && focus ? unrot(toolOffset()) : masking ? masking.view : hover;
     let ghost = false;
-    if (focus && !masking) {
+    if (focus) {   // the page's drawing (opt.drawShip)
+      ctx.save();
+      ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
+      opt.drawShip(ctx, [cx, cy], CELL_PX, viewAngle(), sh);
+      ctx.restore();
+    }
+    if (focus && !held) {
       ctx.save();
       ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
       ghost = opt.drawGhost(ctx, ring ? [cx + ring[0] * CELL_PX, cy + ring[1] * CELL_PX] : null,
@@ -1355,10 +1497,10 @@ const Core = (function () {
     if (ring && focus && !ghost) {
       ctx.save();
       ctx.beginPath(); ctx.rect(ZOOM.x, ZOOM.y, ZOOM.edge, ZOOM.edge); ctx.clip();
-      ctx.strokeStyle = CH_COLORS[channel]; ctx.lineWidth = 2.5; ctx.setLineDash(ACTION_DASH[action]);
+      ctx.strokeStyle = CH_COLORS[tl.ch]; ctx.lineWidth = 2.5; ctx.setLineDash(ACTION_DASH[tl.action]);
       ctx.beginPath();
-      ctx.arc(cx + ring[0] * CELL_PX, cy + ring[1] * CELL_PX, maskR * CELL_PX, 0, 2 * Math.PI);
-      if (masking) { ctx.fillStyle = CH_FILLS[channel]; ctx.fill(); }
+      ctx.arc(cx + ring[0] * CELL_PX, cy + ring[1] * CELL_PX, tl.r * CELL_PX, 0, 2 * Math.PI);
+      if (held) { ctx.fillStyle = CH_FILLS[tl.ch]; ctx.fill(); }
       ctx.stroke();
       ctx.restore();
     }
@@ -1610,7 +1752,7 @@ const Core = (function () {
   function changeSpeed(d) { setSpeed(speedIdx + d); }
   function setSpeed(i) { speedIdx = Math.max(0, Math.min(SPEEDS.length - 1, i)); hooks.change(); }
   function stepOnce() { if (status !== 'alive') return; wantRun = running = false; advance(1); analyze(1); hooks.change(); }
-  function toggleHeadUp() { viewMode = viewMode === 'board' ? 'vel' : 'board'; hooks.change(); }
+  function toggleHeadUp() { viewMode = viewMode === 'board' ? 'vel' : 'board'; kin.up = null; hooks.change(); }
   function setZoom(i) { zoomIdx = i; CELL_PX = ZOOMS[zoomIdx]; ZOOM_CELLS = ZOOM.edge / CELL_PX; hooks.change(); }
   function setMaskR(r) { maskR = r; hooks.change(); }
 
@@ -1729,13 +1871,13 @@ const Core = (function () {
     prof,   // (the dev recorder's frame times: see prof)
     // constants
     q, R, DEBUG, BATCH, BW, BH, WS, PX, CW, ZOOM, SPEEDS, ZOOMS, MIN_AREA_UNIT, DETECT, DETECT_MODES, DETECT_NAMES,
-    CH_NAMES, CH_COLORS, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
+    CH_NAMES, CH_COLORS, CH_FILLS, ACTIONS, SPEED_MIN, REC_STEPS, STEPS_PER_S, VIEW_LABELS, SPECIES_NAMES, BOOM,
     // live objects (mutated in place)
     stats, md, opt, hooks,
     // the end-of-run banner's second line
     banner: 'Reset or Add to try again',
     // helpers
-    deg, wrapD, viewAngle, objects, wxp, wyp, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass, focusWhole, ship, shipDet,
+    deg, wrapD, viewAngle, allowedMorphs, longAxisAt, frameAngle, frameOffset, pressFor, unrot, objects, wxp, wyp, nearestIdx, findPattern, speciesOf, speciesName, morphName, listed, morphs, hovered, tracking, worldMass, focusWhole, ship, shipDet,
     // actions
     start, setPattern, selectMorph, spawn, addPattern, putPattern, clearWorld, analyze, setFocus, stopRecord, clearPointer, hoverAt, pointerCell,
     pickChannel, setLayout, logicalPerCss,
@@ -1747,7 +1889,7 @@ const Core = (function () {
                fieldTool: [() => fieldTool, v => { fieldTool = v; }] };
   const ro = { running: () => running, status: () => status, steps: () => steps, dt: () => dt, pattern: () => pattern,
                focus: () => focus, focusIdx: () => focusIdx, kin: () => kin, spawnMass: () => spawnMass,
-               found: () => found, masking: () => masking, tracks: () => tracks, wholeTracks: () => wholeTracks, speedIdx: () => speedIdx,
+               found: () => found, masking: () => masking, auto: () => auto, tracks: () => tracks, wholeTracks: () => wholeTracks, speedIdx: () => speedIdx,
                maskR: () => maskR, viewMode: () => viewMode, zoomIdx: () => zoomIdx, CELL_PX: () => CELL_PX,
                ZOOM_CELLS: () => ZOOM_CELLS, detectMode: () => detectMode, everyObject: () => everyObject,
                msPerStep: () => msPerStep, msRead: () => msRead, msCpu: () => msCpu, simSteps: () => simSteps, driftSec: () => driftSec, stepMs: () => stepMs };

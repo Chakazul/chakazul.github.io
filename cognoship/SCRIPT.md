@@ -91,7 +91,7 @@ sets everything up.
 | [`[add_bullet]`](#add_bullet) | Add bullet types (pulses) to the gun. |
 | [`[new_bullet]`](#new_bullet) | Let the player create bullet types for energy. |
 | [`[bullet_limit]`](#bullet_limit) | The bullets channel's mass limit. |
-| [`[bullet_wait]`](#bullet_wait) | How often Autofire (`[settings]`) fires. |
+| [`[bullet_wait]`](#bullet_wait) | How often the ship fires by itself (`[settings]`: Player Behavior other than None). |
 | [`[bullet_cost]`](#bullet_cost) | Energy per shot. |
 | [`[world_draw]`](#world_draw) | Antimatter and Nebula: painting on the world. |
 | **Challenge mode** | |
@@ -108,6 +108,7 @@ sets everything up.
 | [`[put_hostile]`](#put_hostile) | Put bots (hostile creatures). |
 | [`[min_hostile]`](#min_hostile) | Keep at least `n` bots. |
 | [`[hostile_gun]`](#hostile_gun) | The bots' bullets' settings. |
+| [`[hostile_behavior]`](#hostile_behavior) | What hostile bots do, by morph: nothing, fire at the ship (auto, the default), or steer and fire by the morph model. |
 | [`[hostile_bullet_wait]`](#hostile_bullet_wait) | How often bots fire. |
 | [`[hostile_bullet_limit]`](#hostile_bullet_limit) | The bots' bullets channel's mass limit. |
 | [`[bullet_mutual]`](#bullet_mutual) | The player's and the bots' bullets wearing each other down. |
@@ -265,6 +266,7 @@ Load species `<code>`: its rule and merge saddle. The world is kept; no morph is
 
 - The morph book shows `<name>` in italic at its lower right ("Species: *Aquarium originale*"); with no name, the code.
 - Each species has its own discovered morphs (5N7KKM *tardus* is not GDNQYX *tardus*), kept for when it comes back.
+- Resets `[hostile_behavior]` to `all:auto`.
 - Resets `[merge]`, and `[hide_morph]` (none hidden, for every species). So does choosing a species in the species book (`[choose_species]`): put `[hide_morph]` after it: in sandbox mode in `[on_start]`; in challenge mode in the set-up lines or under `[challenge]` (not `[on_start]`: each attempt starts from the set-up lines' hidden morphs).
 
 Example: `[species:Aquarium originale:5N7KKM]`
@@ -498,14 +500,17 @@ Allow the draw tool (add mass: the selected R G B patch clicked again after eras
 
 A **Settings** button at the world view's lower right, opening the settings book. Default `off`. Each setting is remembered in the browser.
 
+Three rows: World, Hostile and Player.
+
 | Setting | Meaning | Until first set |
 |---|---|---|
-| **World** | A button cycling three modes. *Normal*: the world as the script makes it. *Centered*: the same ordinary world, the world view rolled round it so the ship stays in its middle, at once. *Scroll*: every `[clear_world]` makes a scrolling world; changed to or from it in the book, the current species is chosen again as the book closes. Centered and Scroll add `[stars:follow:0.1]`. | Normal |
-| **Autospawn** | Once the ship has dissolved, Respawn by itself a second later, with no "Dissolved" panel; the ship view stays where the ship was last seen. | off |
-| **Autofire** | The ship fires by itself, every `[bullet_wait]`, at the nearest hostile creature, or with none, the nearest other creature (none: no shot). Only with the gun on and a pulse type (not Antimatter or Nebula); each shot costs `[bullet_cost]` as Fire does. | off |
-| **Objects** | Off, 1, 2, 5, 10, 20 or 40: `[min_morph:<n>]`, run after every `[on_start]` block (overriding its count; its morphs and placing stay) and at once when moved. Lowering it removes nobody. | 2 |
-| **Hostile** (2nd row) | Off, 1, 2, 5, 10, 20 or 40: `[min_hostile:<n>]`, as Objects (the last `[min_hostile]`'s morphs and placing; none yet: all, random). | off |
-| **Hostile Pulses** (beside it) | Opens a book of the pulse types the player has created (as the pulse book, without Antimatter and Nebula); the pick is what the hostile creatures fire, over the script's (Back or Escape: to the settings). A pick the player doesn't have: their first. | Scutium serratus |
+| **World** row: the world button | A button cycling three modes. *Normal*: the world as the script makes it. *Centered*: the same ordinary world, the world view rolled round it so the ship stays in its middle, at once. *Infinite*: every `[clear_world]` makes a scrolling world; changed to or from it in the book, the current species is chosen again as the book closes. Centered and Infinite add `[stars:follow:0.1]`. | Normal |
+| **World** row: **Objects** | Off, 1, 2, 5, 10, 20 or 40: `[min_morph:<n>]`, run after every `[on_start]` block (overriding its count; its morphs and placing stay) and at once when moved. Lowering it removes nobody. | 2 |
+| **Hostile** row: **Behavior** | Over the script's `[hostile_behavior]`. *None*: the hostile creatures drift and never fire. *Auto*: they drift and fire at the ship (as with no behavior). *Balanced*, *Aggressive*: as `[hostile_behavior:all:off]` then `[hostile_behavior:limus,gyrans:balanced]` or `:aggressive` (5N7KKM): those bots steer and fire by it (aiming along their motion only, no direct shots, also while ??? or a twin), the other morphs drift and never fire. | Auto |
+| **Hostile** row: **Morphs** | Off, 1, 2, 5, 10, 20 or 40: `[min_hostile:<n>]`, as Objects (the last `[min_hostile]`'s morphs and placing; none yet: all, random). | off |
+| **Hostile** row: **Pulses** | Opens a book of the pulse types the player has created (as the pulse book, without Antimatter and Nebula); the pick is what the hostile creatures fire, over the script's (Back or Escape: to the settings). A pick the player doesn't have: their first. | Scutium serratus |
+| **Player** row: **Behavior** | *None*: the player steers and fires. *Auto*: the ship fires by itself, every `[bullet_wait]`, at the nearest hostile creature, or with none, the nearest other creature (none: no shot). *Balanced*, *Aggressive*: an autopilot by the morph model, the `[hostile_behavior]` of that name with that same creature as its opponent: as 5N7KKM limus or gyrans it steers holding its masks as the player's tool, and fires along its motion when lined up; as other morphs (or ???, e.g. just after a respawn), it neither steers nor fires. Firing only with the gun on and a pulse type (not Antimatter or Nebula); each shot costs `[bullet_cost]` as Fire does. | None |
+| **Player** row: **Autospawn** | Once the ship has dissolved, Respawn by itself a second later, with no "Dissolved" panel; the ship view stays where the ship was last seen. | off |
 
 ## Energy, dots and beacons
 
@@ -644,7 +649,7 @@ Let the player create bullet types for `n` energy each (`off`: none may be creat
 [bullet_wait[:<a>:<b>:<c>]]
 ```
 
-With the settings book's **Autofire** on (`[settings:on]`), the ship fires every `a` to `b` game s at random, the first shot `c` after it can start (Autofire turned on, the ship back, a new scene). Default `1.5:4:2`, also with no values, as `[hostile_bullet_wait]`.
+With the settings book's Player **Behavior** other than None (`[settings:on]`), the ship fires every `a` to `b` game s at random (Balanced, Aggressive: when lined up, the shot kept till then), the first shot `c` after it can start (turned on, the ship back, a new scene). Default `1.5:4:2`, also with no values, as `[hostile_bullet_wait]`.
 
 ### `[bullet_limit]`
 
@@ -829,6 +834,8 @@ Put `n` bots into the world: hostile creatures that fire at the ship.
 | `<how>` | Placement, as `[put_morph]`; `center`: the first only, the rest random. | `random` |
 | `<bullet>` | The bullet pattern the bots fire (one for all the bots: the last `[put_hostile]` or `[min_hostile]`'s). | `Scutium` |
 
+The options after `<morphs>` may come in any order. How the bots steer and fire: `[hostile_behavior]`.
+
 - Each is marked by a red circle with its morph's name above it (a twin or trio named as one shows as one). Never followed.
 - **Firing:** every `[hostile_bullet_wait]` seconds a bot fires at the ship, give or take 20° (no ship: anywhere); a named twin or trio fires as one. Their bullets have their own field, drawn white, acting on whatever they hit, bots included, with `[hostile_gun]`'s settings (by default the player's `[gun]`'s).
 - **Tracking:** bots are tracked by place: whatever a bot turns into, both halves when it splits, and what it merges with all stay bots; a bot the ship hijacks (merging, then followed) is the player's; one missing from detection is kept 1 game s.
@@ -877,6 +884,48 @@ The bots' bullets' own settings, instead of following the player's `[gun]` (the 
 - While both the player's and the bots' bullets fly, the creatures' step takes them as one field: the same settings, added; both masking on different channels, one per-channel mask (each channel the stronger; the FFT path then transforms it every step); otherwise (testing only) both act as the player's, with a console warning.
 
 Example: `[hostile_gun:on,mask,rgb,wear_all]`
+
+### `[hostile_behavior]`
+
+```
+[hostile_behavior:<morphs>:<behavior>]
+[hostile_behavior:<behavior>]
+[hostile_behavior]
+```
+
+What the bots named as `<morphs>` do: names of the current species' morphs, `,` between, plus `all` (every bot) and `unknown` (bots shown as ???). `<behavior>`:
+
+- `none` or `off`: nothing: they drift and never fire.
+- `auto`: they drift and fire at the ship, every `[hostile_bullet_wait]`.
+- a model-based behavior (`balanced`, `aggressive`, the table below): they steer and fire by it whenever their name is one it covers: a bot put in as another morph that turns into one follows it too, and while it is another morph, ??? or part of a twin it does `auto`. Only for morphs it covers (an unknown or other morph named is ignored, with a warning), and `all` gives it to those it covers, `auto` to the rest.
+
+A bot follows the line for its own name, else `unknown`'s (if ???), else `all`'s. `all` also clears the morphs' own lines (set them after it). `[hostile_behavior:<behavior>]` is `all:<behavior>`; no arguments resets to the default, `[hostile_behavior:all:auto]`. A species-level setting: `[species]` (also choosing one in the species book) resets it too. The settings book's Hostile Behavior overrides it while the settings are on.
+
+Example: `[hostile_behavior:all:none]` `[hostile_behavior:limus,gyrans:balanced]`: limus and gyrans bots play balanced, all others (??? too) just drift.
+
+A behavior steers by the species' morph model (`models/<code>.json`, see [models/README.md](models/README.md)): the bot masks itself as the player would (a G disc held at a spot for a while, the model's actions), deciding only for the moment. Each behavior is a few rules at the bottom of `behaviors.js` (its composite maneuvers, maneuvers and actions below it: action → maneuver → composite maneuver → behavior) (its header lists what a rule can ask and do), e.g. `balanced`:
+
+```js
+start: s => s.near(7) ? 'attack' : 'rest',
+states: {
+  attack: { as: 'limus',  rule: s => s.near(4) ? 'turn' : s.far(8) && !s.hunting ? 'rest' : s.approach() },
+  turn:   { as: 'limus',  rule: s => s.once(s.turnRound(90), 'escape') },
+  escape: { as: 'limus',  rule: s => s.far(8) ? 'rest' : s.flee() },
+  rest:   { as: 'gyrans', rule: s => s.near(7) ? 'attack' : s.turns() >= 2 ? s.hunt(7, 'attack') : null },
+},
+fire: s => s.is('limus') && s.near(8) && s.facing(15),
+```
+
+With no opponent (the player's ship dissolved, or for the autopilot no hostile left), every behavior waits a moment (1.5 game s), then rests (as gyrans, not firing) until one is back; then `balanced` rests on by its rule (attacking once the opponent is within 7 R, or after two turns), `aggressive` attacks at once.
+
+| Behavior | Species | Morphs | What it does |
+|---|---|---|---|
+| `balanced` | 5N7KKM | limus, gyrans (give it both) | A cycle of four modes, by the distance to its opponent (the ship, for a bot). **Attack** (limus): steer towards where the opponent will be. When it comes nearer than 4 R, **turn**: one big turn as limus (of the model's turns of 90° or more, the one ending nearest to away from it), then **escape**: steer away until farther than 8 R, then **rest** as gyrans (spinning in place, not firing) until an opponent comes within 7 R again, or once it has spun two turns (about 8 s: two resting ones don't wait for each other for ever), then back into limus to attack (or escape, if already within 4 R); woken by that timer, it hunts the opponent however far away until within 7 R. An attack that loses its opponent beyond 8 R rests too; at first it attacks within 7 R, else rests. Each turn is the model's action that ends nearest the heading wanted once it has taken effect, counting where the ship will be by then and the limus's own turning meanwhile (about 23° a game second): a small error gets a small turn, or none (under 12°). It fires along its own motion as limus, not at the ship, and only when the ship is within 8 R and within 15° of ahead: the shot is kept till then. |
+| `aggressive` | 5N7KKM | limus, gyrans | No rest, little escape: **attack** the opponent from anywhere; only nearer than 2.5 R, **turn** (one big turn) and **escape** briefly (until farther than 5 R, or 3 s), then attack again. Fires a little more readily: within 9 R and 20° of ahead. A gyrans turns into limus first. |
+
+While a bot holds an action, its mask disc shows (dashed and filled, as the player's held mask), so the player sees it decide. Its mode shows as a face before its name above its red circle: 😡 attack, 😰 turn or escape, 😴 rest. So does the player's ship's, above its yellow circle, with its morph name, while the settings' Player Behavior Balanced or Aggressive drives it.
+
+Examples: `[hostile_behavior:limus,gyrans:balanced]`, `[hostile_behavior:limus,gyrans:aggressive]`
 
 ### `[hostile_bullet_wait]`
 

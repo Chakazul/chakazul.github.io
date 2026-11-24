@@ -119,6 +119,7 @@ It uses _Triscutium_. We have it too. Prepare to fight.[need:clear_hostile]
 Thank Gaia. That was close!
 
 [new_scene]
+[stars:0:3:2:2]
 [allow_morph:limus,gyrans,tardus,lithos]
 [clear_world][put_player:limus]
 Now that we are safe, check out the other controls in the panel.
@@ -132,6 +133,7 @@ Once you have learned the controls, we embark for a stellar nursery.
 [chapter:3:Brave New World]
 
 # species
+[stars:0]
 [species:Aquarium novus:GDNQYX]
 [allow_morph:rectus,gyrans,tardus,lithos,paragyrans,antigyrans,pararectus,rectogyrans]
 [clear_world][put_player:rectus]
@@ -217,12 +219,12 @@ Next species ...
 
 [new_scene]
 [species:Aquarium metamorpha:HGMLH8]
-[allow_morph:metamorpha,paratardus,paratachus]
+[allow_morph:metamorpha,paratardus,paratachus,tachotardus]
 [clear_world:scroll][put_player:metamorpha]
-[dot:5][min_morph:4:paratardus,paratachus]
+[dot:5][min_morph:4:paratardus,paratachus,tachotardus]
 At the _Pistol Star_, a violent hypergiant, 25,000 light-years from home.
 The shapeshifting species _Aquarium metamorpha_.
-Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus]
+Engineer twin morph _paratachus_ or _paratardus_.[need:discover_morph:paratardus,paratachus,tachotardus]
 
 The journey continues.
 We are heading to the center of our galaxy.

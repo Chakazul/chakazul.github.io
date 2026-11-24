@@ -296,6 +296,28 @@ const SimGL = (function () {
     return buf;
   }
 
+  // A window of the board, n x n cells centred near (col, row), wrapping round the torus: the total
+  // mass (R + G + B) of each cell, row by row (Float32Array n * n). Reads up to 4 rectangles back.
+  function readWindow(col, row, n) {
+    const out = new Float32Array(n * n), x0 = Math.round(col) - (n >> 1), y0 = Math.round(row) - (n >> 1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, stateFbo[cur]);
+    const mod = (a, m) => ((a % m) + m) % m;
+    for (let oy = 0; oy < n;) {
+      const ys = mod(y0 + oy, H), hh = Math.min(n - oy, H - ys);
+      for (let ox = 0; ox < n;) {
+        const xs = mod(x0 + ox, W), ww = Math.min(n - ox, W - xs), buf = new Float32Array(ww * hh * 4);
+        gl.readPixels(xs, ys, ww, hh, gl.RGBA, gl.FLOAT, buf);
+        for (let r = 0; r < hh; r++) for (let c = 0; c < ww; c++) {
+          const k = (r * ww + c) * 4;
+          out[(oy + r) * n + ox + c] = buf[k] + buf[k + 1] + buf[k + 2];
+        }
+        ox += ww;
+      }
+      oy += hh;
+    }
+    return out;
+  }
+
   // Add a form onto the current board (cell-wise max with what is there), top-left at
   // (row0, col0), wrapping round the torus. Reads the board back once, so only for clicks.
   function add(form, row0, col0) {
@@ -725,11 +747,24 @@ const SimGL = (function () {
 
   // tool: null, or { col, row, r, ch, action }: absolute circle centre in board cells;
   // action 0 = occlude (mask), 1 = erase (set to 0), 2 = draw (set to 1) inside the circle.
-  function step(tool) {
+  // extra: more cognitive masks (the game's bots), [{ col, row, r, ch }], at most XMAX (the rest
+  // dropped), apart from each other
+  const XMAX = 8, xBuf = new Float32Array(4 * XMAX);
+  function packExtra(extra) {
+    const n = extra ? Math.min(extra.length, XMAX) : 0;
+    for (let i = 0; i < n; i++) xBuf.set([extra[i].col, extra[i].row, extra[i].r, extra[i].ch], 4 * i);
+    return n;
+  }
+  function setExtra(p, extra) {
+    const n = packExtra(extra);
+    gl.uniform1i(loc(p, 'uXN'), n);
+    if (n) gl.uniform4fv(loc(p, 'uX'), xBuf);
+  }
+  function step(tool, extra = null) {
     blocksValid = false;
     eff = effBullets();
     if (ext.step) {   // a plug-in's sim pass (fftsim.js)
-      ext.step(tool);
+      ext.step(tool, extra);
       cur = 1 - cur;
       stepOthers();
       return;
@@ -757,6 +792,7 @@ const SimGL = (function () {
     gl.uniform2f(loc(p, 'uMaskC'), tool ? tool.col : 0, tool ? tool.row : 0);
     gl.uniform1f(loc(p, 'uMaskR'), tool ? tool.r : 0);
     gl.uniform3f(loc(p, 'uMaskCh'), tool && tool.ch === 0 ? 1 : 0, tool && tool.ch === 1 ? 1 : 0, tool && tool.ch === 2 ? 1 : 0);
+    setExtra(p, extra);
     gl.uniform1f(loc(p, 'uReach'), reach);
     bindTex(2, eff ? eff.tex : bulTex[bcur], p, 'uBullets');
     gl.uniform1i(loc(p, 'uBulletMode'), eff ? eff.mode : 0);
@@ -918,7 +954,7 @@ const SimGL = (function () {
   // For plug-ins (fftsim.js): the engine's context, helpers and live state. Read the getters each
   // time: the values change (cur, the rule, the bullets).
   const internals = {
-    ext, makeTex, makeFbo, loc, bindTex, draw4,
+    ext, makeTex, makeFbo, loc, bindTex, draw4, setExtra,
     // a fragment shader linked with the engine's vertex shader
     link: fsSrc => { const vs = compile(gl.VERTEX_SHADER, VERTEX_SRC, 'vertex'), p = link(vs, fsSrc, 'plugin'); p.__id = 'x' + (++pluginIds); return p; },
     get gl() { return gl; }, get W() { return W; }, get H() { return H; },
@@ -935,7 +971,7 @@ const SimGL = (function () {
   };
   let VERTEX_SRC = '', pluginIds = 0;
 
-  return { init, setRule, setUpdate, seed, add, readState, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
+  return { init, setRule, setUpdate, seed, add, readState, readWindow, paint, step, clearSeam, readBlocks, readChannelComs, render, finish, BLOCK,
            setDotRule, setDots, putDots, readDotSites, setDotColor, setDotOffset, setBackground, setSky, MAX_SITES,
            setBulletRule, setBullets, putBullets, clearBullets, readBulletBlocks, refreshBlocks, frameBlocks, setBulletColor, BUL_BLOCK,
            setHostileRule, setHostile, putHostile, clearHostile, readHostileBlocks, readDotBlocks, setBulletMutual,

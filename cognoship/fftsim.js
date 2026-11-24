@@ -165,7 +165,7 @@ const FFTSim = (function () {
   }
 
   // The creatures' step, into stateFbo[1 - cur] (glsim.js flips cur after)
-  function step(tool) {
+  function step(tool, extra = null) {
     const params = I.params, bul = I.bul, bActive = I.bulletsActive;
     const bmode = bActive ? bul.mode : 0, bmask = bmode === 2, bvec = bActive && I.bulletVec;
     const state = I.state[I.cur];
@@ -239,6 +239,7 @@ const FFTSim = (function () {
     gl.uniform2f(I.loc(p, 'uMaskC'), tool ? tool.col : 0, tool ? tool.row : 0);
     gl.uniform1f(I.loc(p, 'uMaskR'), tool ? tool.r : 0);
     gl.uniform3f(I.loc(p, 'uMaskCh'), tool && tool.ch === 0 ? 1 : 0, tool && tool.ch === 1 ? 1 : 0, tool && tool.ch === 2 ? 1 : 0);
+    I.setExtra(p, extra);   // the bots' masks
     gl.uniform1f(I.loc(p, 'uReach'), I.reach);
     gl.uniform1i(I.loc(p, 'uBulletMode'), bmode);
     gl.uniform1i(I.loc(p, 'uBulletVec'), bvec ? 1 : 0);

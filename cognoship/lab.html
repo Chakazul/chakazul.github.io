@@ -41,6 +41,16 @@
       <!-- action+stats: moves the chart to the far left of the world view and back -->
       <button id="c-move" class="icon" hidden title="Move the chart to the left edge" aria-label="Move the chart left">&#9664;</button>
       <div id="error" class="error" hidden></div>
+      <!-- Model mode: the morph graph (over the middle of the world view), and the hold of the actions
+           drawn on the ship (just above Mask Erase Draw) -->
+      <canvas id="r-graph" hidden></canvas>
+      <div id="r-holds" hidden>
+        <span>Hold</span>
+        <button data-hold="15" title="Show the actions held for 0.5 s (15 steps)">0.5 s</button>
+        <button data-hold="30" title="Show the actions held for 1 s (30 steps)">1 s</button>
+        <button data-hold="60" title="Show the actions held for 2 s (60 steps)">2 s</button>
+        <button data-hold="90" title="Show the actions held for 3 s (90 steps)">3 s</button>
+      </div>
       <!-- while a morph is held to add (Add, B): at the top left of the world view, turn it 45 degrees
            clockwise (N), flip it (M), paste it where a touch placed it (Enter; only then shown), cancel (Esc) -->
       <div id="clone-tools" class="clone-tools lab-clone" hidden>
@@ -71,7 +81,7 @@
       <button id="detect" class="fs-hide" aria-pressed="true" title="Morph detection, from the stats compared with the species' long history: None; Focused (the focused creature's morph, at the top of the ship view); Every (the default: also every creature's in the world view)">Detect: Every</button>
       <span class="sep fs-hide" aria-hidden="true"></span>
       <button id="sound" class="fs-hide" aria-pressed="false" title="Star field and background music on / off">Stars: OFF</button>
-      <button id="mode" class="fs-hide" title="Cycle the modes: Action, Stats (chart in place of the ship view), Action+Stats (chart beside it), Tuning (detection sliders) (A; Shift+A backwards)">Mode: Action</button>
+      <button id="mode" class="fs-hide" title="Cycle the modes: Action, Stats (chart in place of the ship view), Action+Stats (chart beside it), Model (the morph model's actions on the ship: click one to do it), Tuning (detection sliders) (A; Shift+A backwards)">Mode: Action</button>
     </div>
     <div class="readout" id="readout"></div>
   </div>
@@ -83,6 +93,17 @@
     <label title="Blocks whose potential K*A is below this are background. Higher = thin bridges between creatures are cut, objects shrink.">Threshold <input id="t-thr" type="range" min="0.02" max="0.3" step="0.01"><output id="t-thr-v"></output></label>
     <label title="Objects smaller than this fraction of R/4-radius disc area are dropped.">Min area <input id="t-area" type="range" min="0" max="4" step="0.25"><output id="t-area-v"></output></label>
     <label title="Twins and trios: the objects merged again across saddles at least this fraction of the lower peak make a whole (dashed circles here), named against the morphs recorded as wholes (Stats: Record Whole). Below Merge saddle; lower = parts further apart still count as one creature.">Twin saddle <input id="t-whole" type="range" min="0.2" max="1.2" step="0.05"><output id="t-whole-v"></output></label>
+  </div>
+  <!-- Model mode (A): the morph model's actions drawn on the ship (tools/models.py, models/<code>.json) -->
+  <div class="controls model" id="model" hidden>
+    <span class="group">Model</span>
+    <button id="r-graph-btn" aria-pressed="true" title="The morph graph of the species: what each morph can become, by which action (the best: most reliable, then the shortest hold); blue keeps the turning direction, orange turns the other way, faded under 3 of 4 trials, dashed under 3 of 4 but at least half. Hover an arrow for its action; a click on an arrow of the followed ship's morph (thick) does it; a click on a morph resets the world with it; a click on a mask channel in its key (all · G · R · B) shows that channel's graph: the same arrows, dimmed where another channel does better, faint where that channel can't">Graph</button>
+    <label><span title="Maneuvers: pick an outcome the followed ship can reach now; the best action for it (the most reliable, the name box kept, the shortest hold; any colour, place, hold and phase) is done, as the player would (models.js maneuvers, as the game will)">Maneuver</span> <span class="omenu"><button id="r-outcome" type="button">none now</button><div id="r-outcome-menu" class="omenu-list" hidden></div></span></label>
+    <label><span title="Composite maneuvers (tools/models.py composite): sequences of maneuvers, e.g. rectus > gyrans > rectus to turn; each with its success rate, steps and net turn; a click runs it on the ship, step by step. + composite (several maneuvers) · ↻ repeating (a step retried until it works) · ⏱ a long hold no maneuver does; a single maneuver done once is left to the Maneuver menu; a turn's long list of waits shows only the most reliable small and big turn each way">Composite</span> <span class="omenu"><button id="r-comp" type="button">none</button><div id="r-comp-menu" class="omenu-list" hidden></div></span> <span class="run" id="r-comp-run" hidden>▶</span></label>
+    <!-- the details of what is hovered (an action, maneuver, composite, arrow, morph), or the composite running: a line of its own, under the menus -->
+    <span class="model-act" id="r-outcome-act"></span>
+    <span class="model-key">Ship view (its actions): arrow = stays, pointing to its new heading · square = becomes the lettered morph · faded = p&lt;0.75. Graph: thick = actionable (click to do it) · dashed arrow = p&lt;0.75 · ↻ ↺ = rotating · ∿ = oscillating · ≋ = chaotic · ! = unstable; click a morph to reset with it. Both: <b class="pos">blue</b> = same turning · <b class="neg">orange</b> = opposite turning · <b style="color:#2ecc40">green</b> = clone / multiply (twin; T+: replicates) · <b style="color:#ff3df2">magenta</b> = split / reduce (LL: limus + limus) · grey = dissolves. Levels: action (a mask: colour, place, hold, phase) → maneuver (the best action for an outcome) → composite maneuver (maneuvers in sequence) → behavior (settings, behaviors.js). Hover an action, arrow, morph, Maneuver or Composite item for its details here.</span>
+    <span class="model-info" id="r-info"></span>
   </div>
   <!-- Stats mode (A): controls of the phase-space chart (statschart.js), which
        replaces the ship view -->
@@ -120,8 +141,9 @@
     <b>mask</b>, <b>erase</b> or <b>draw</b> mass (<kbd>4</kbd> <kbd>5</kbd> <kbd>6</kbd>).
     In the world view (left) <b>click one ship</b> to follow it in the ship view.
     <b>Detect</b> names the morph of the followed ship (Focused) or of every ship (Every, the default), by comparing its recent stats with the recorded ones of each morph; <b>???</b> when it is not sure.
+    <b>Model</b> mode draws on the ship what each spot does when masked for the chosen hold, as found by experiment (the morph model, <code>models/</code>): click one to do it.
     <br/>
-    <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off · <kbd>A</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> next / previous mode (Action / Stats / Action+Stats / Tuning) · <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> record 300 steps of stats (the focus / its whole / as a fuzzy morph) · <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> next stat on the x / y / z / colour axis (<kbd>Shift</kbd>: previous) ·
+    <kbd>Enter</kbd> pause · <kbd>Space</kbd> step · <kbd>Q</kbd> <kbd>W</kbd> faster / slower · <kbd>E</kbd> heading up on / off · <kbd>A</kbd> <kbd>Shift</kbd>+<kbd>A</kbd> next / previous mode (Action / Stats / Action+Stats / Model / Tuning) · <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> record 300 steps of stats (the focus / its whole / as a fuzzy morph) · <kbd>G</kbd> <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> next stat on the x / y / z / colour axis (<kbd>Shift</kbd>: previous) ·
     <kbd>Z</kbd> reset world · <kbd>X</kbd> spray the morph (at random) · <kbd>B</kbd> add the morph where you click (<kbd>N</kbd> turn, <kbd>M</kbd> flip, <kbd>Enter</kbd> paste, <kbd>Esc</kbd> cancel) · <kbd>C</kbd> <kbd>V</kbd> previous / next morph (<kbd>Shift</kbd>: species).
     <br/>
     Music: <i>Long Way</i> by Rexlambo, <i>A Few Jumps Away</i> by Arthur Vyncke, <i>Out of the Skies, Under the Earth</i> by Chris Zabriskie, <i>Billions and Billions</i> by Stellardrone.
@@ -142,6 +164,7 @@
 <script src="page.js"></script>
 <script src="core.js"></script>
 <script src="clone.js"></script>
+<script src="models.js"></script>
 <script src="lab.js"></script>
 </body>
 </html>
